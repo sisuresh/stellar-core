@@ -23,10 +23,6 @@ enum class SyncingLedgerChainAddResult
 class SyncingLedgerChain final
 {
   public:
-    SyncingLedgerChain();
-    SyncingLedgerChain(SyncingLedgerChain const&);
-    ~SyncingLedgerChain();
-
     LedgerCloseData const& front() const;
     LedgerCloseData const& back() const;
     void pop();
@@ -37,5 +33,6 @@ class SyncingLedgerChain final
 
   private:
     std::queue<LedgerCloseData, std::list<LedgerCloseData>> mChain;
+    std::unique_ptr<uint32_t> mLastContiguousLedgerSeen;
 };
 }

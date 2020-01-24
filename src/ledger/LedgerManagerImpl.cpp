@@ -531,6 +531,9 @@ LedgerManagerImpl::initializeCatchup(LedgerCloseData const& ledgerData)
     assert(mCatchupState == CatchupState::NONE);
     assert(mSyncingLedgers.empty());
 
+    // reset state
+    mSyncingLedgers = {};
+
     setState(LM_CATCHING_UP_STATE);
     mCatchupTriggerLedger = mApp.getHistoryManager().nextCheckpointLedger(
                                 ledgerData.getLedgerSeq()) +

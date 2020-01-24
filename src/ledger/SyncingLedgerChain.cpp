@@ -8,10 +8,6 @@
 namespace stellar
 {
 
-SyncingLedgerChain::SyncingLedgerChain() = default;
-SyncingLedgerChain::SyncingLedgerChain(SyncingLedgerChain const&) = default;
-SyncingLedgerChain::~SyncingLedgerChain() = default;
-
 LedgerCloseData const&
 SyncingLedgerChain::front() const
 {
@@ -33,14 +29,22 @@ SyncingLedgerChain::pop()
 SyncingLedgerChainAddResult
 SyncingLedgerChain::push(LedgerCloseData const& lcd)
 {
-    if (mChain.empty() ||
-        mChain.back().getLedgerSeq() + 1 == lcd.getLedgerSeq())
+    if (!mLastContiguousLedgerSeen)
     {
+        mLastContiguousLedgerSeen =
+            std::make_unique<uint32_t>(lcd.getLedgerSeq());
         mChain.emplace(lcd);
         return SyncingLedgerChainAddResult::CONTIGUOUS;
     }
 
-    if (lcd.getLedgerSeq() <= mChain.back().getLedgerSeq())
+    if (*mLastContiguousLedgerSeen + 1 == lcd.getLedgerSeq())
+    {
+        *mLastContiguousLedgerSeen = lcd.getLedgerSeq();
+        mChain.emplace(lcd);
+        return SyncingLedgerChainAddResult::CONTIGUOUS;
+    }
+
+    if (lcd.getLedgerSeq() <= *mLastContiguousLedgerSeen)
     {
         return SyncingLedgerChainAddResult::TOO_OLD;
     }
