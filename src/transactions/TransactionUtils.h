@@ -131,6 +131,7 @@ bool isAuthRequired(ConstLedgerTxnEntry const& entry);
 bool isImmutableAuth(LedgerTxnEntry const& entry);
 
 void normalizeSigners(LedgerTxnEntry& entry);
+void normalizeSigners(AccountEntry& acc);
 
 void releaseLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                         LedgerTxnEntry const& offer);
