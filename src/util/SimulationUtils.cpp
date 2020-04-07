@@ -168,7 +168,6 @@ generateDeadEntries(std::vector<LedgerKey>& dead,
 void
 replaceIssuer(Asset& asset, uint32_t n)
 {
-    AccountID issuer;
     switch (asset.type())
     {
     case ASSET_TYPE_CREDIT_ALPHANUM4:
@@ -235,13 +234,10 @@ updateOperation(Operation& op, uint32_t n)
     case SET_OPTIONS:
         if (op.body.setOptionsOp().signer)
         {
-            PublicKey signerKey;
-            Signer signer;
-            signer = *op.body.setOptionsOp().signer;
+            Signer& signer = *op.body.setOptionsOp().signer;
             if (signer.key.type() == SIGNER_KEY_TYPE_ED25519)
             {
-                op.body.setOptionsOp().signer.activate() =
-                    Signer{getNewEd25519Signer(signer, n), signer.weight};
+                signer = Signer{getNewEd25519Signer(signer, n), signer.weight};
             }
         }
         break;
