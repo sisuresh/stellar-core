@@ -40,12 +40,10 @@ class ApplyTransactionsWork : public BasicWork
                          std::vector<TransactionResultPair>& results,
                          std::vector<UpgradeType>& upgrades, uint32_t n);
 
-    bool hasSig(PublicKey const& account,
-                TransactionEnvelope const& oldEnvelope, Hash const& hash);
-
     void addSignerKeys(AccountID const& acc, AbstractLedgerTxn& ltx,
                        std::set<SecretKey>& keys,
-                       TransactionEnvelope const& oldEnvelope, uint32_t n);
+                       xdr::xvector<DecoratedSignature, 20> const& sigs,
+                       uint32_t n);
 
     void mutateTxSourceAccounts(TransactionEnvelope& env,
                                 AbstractLedgerTxn& ltx,
