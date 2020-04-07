@@ -10,7 +10,6 @@ namespace stellar
 class SimulationFeeBumpTransactionFrame : public FeeBumpTransactionFrame
 {
     TransactionResult mSimulationResult;
-    std::shared_ptr<SimulationTransactionFrame> mSimulationInnerTx;
 
   public:
     SimulationFeeBumpTransactionFrame(Hash const& networkID,
@@ -26,7 +25,5 @@ class SimulationFeeBumpTransactionFrame : public FeeBumpTransactionFrame
 
     int64_t getFee(LedgerHeader const& header, int64_t baseFee) const override;
     void processFeeSeqNum(AbstractLedgerTxn& ltx, int64_t baseFee) override;
-
-    TransactionFramePtr getInnerTx() const override;
 };
 }

@@ -47,11 +47,15 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
   protected:
     void resetResults(LedgerHeader const& header, int64_t baseFee);
-    virtual TransactionFramePtr getInnerTx() const;
 
   public:
     FeeBumpTransactionFrame(Hash const& networkID,
                             TransactionEnvelope const& envelope);
+#ifdef BUILD_TESTS
+    FeeBumpTransactionFrame(Hash const& networkID,
+                            TransactionEnvelope const& envelope,
+                            TransactionFramePtr innerTx);
+#endif
 
     virtual ~FeeBumpTransactionFrame(){};
 

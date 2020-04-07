@@ -12,11 +12,12 @@ namespace stellar
 SimulationFeeBumpTransactionFrame::SimulationFeeBumpTransactionFrame(
     Hash const& networkID, TransactionEnvelope const& envelope,
     TransactionResult simulationResult, uint32_t count)
-    : FeeBumpTransactionFrame(networkID, envelope)
+    : FeeBumpTransactionFrame(
+          networkID, envelope,
+          std::make_shared<SimulationTransactionFrame>(
+              networkID, FeeBumpTransactionFrame::convertInnerTxToV1(envelope),
+              simulationResult, count))
     , mSimulationResult(simulationResult)
-    , mSimulationInnerTx(std::make_shared<SimulationTransactionFrame>(
-          networkID, FeeBumpTransactionFrame::convertInnerTxToV1(envelope),
-          simulationResult, count))
 {
 }
 
@@ -51,11 +52,5 @@ SimulationFeeBumpTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
         stellar::addBalance(acc.balance, -fee);
         header.current().feePool += fee;
     }
-}
-
-TransactionFramePtr
-SimulationFeeBumpTransactionFrame::getInnerTx() const
-{
-    return mSimulationInnerTx;
 }
 }

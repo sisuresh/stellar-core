@@ -39,6 +39,15 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 {
 }
 
+#ifdef BUILD_TESTS
+FeeBumpTransactionFrame::FeeBumpTransactionFrame(
+    Hash const& networkID, TransactionEnvelope const& envelope,
+    TransactionFramePtr innerTx)
+    : mEnvelope(envelope), mInnerTx(innerTx), mNetworkID(networkID)
+{
+}
+#endif
+
 static void
 updateResult(TransactionResult& outerRes, TransactionFrameBasePtr innerTx)
 {
@@ -96,10 +105,10 @@ FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 
     try
     {
-        bool res = getInnerTx()->apply(app, ltx, meta, false);
+        bool res = mInnerTx->apply(app, ltx, meta, false);
         // If this throws, then we may not have the correct TransactionResult so
         // we must crash.
-        updateResult(getResult(), getInnerTx());
+        updateResult(getResult(), mInnerTx);
         return res;
     }
     catch (std::exception& e)
@@ -154,8 +163,8 @@ FeeBumpTransactionFrame::checkValid(AbstractLedgerTxn& ltxOuter,
         return false;
     }
 
-    bool res = getInnerTx()->checkValid(ltx, current, false);
-    updateResult(getResult(), getInnerTx());
+    bool res = mInnerTx->checkValid(ltx, current, false);
+    updateResult(getResult(), mInnerTx);
     return res;
 }
 
@@ -179,8 +188,8 @@ FeeBumpTransactionFrame::commonValidPreSeqNum(AbstractLedgerTxn& ltx)
     }
 
     auto const& lh = header.current();
-    auto v1 = bigMultiply(getFeeBid(), getInnerTx()->getMinFee(lh));
-    auto v2 = bigMultiply(getInnerTx()->getFeeBid(), getMinFee(lh));
+    auto v1 = bigMultiply(getFeeBid(), mInnerTx->getMinFee(lh));
+    auto v2 = bigMultiply(mInnerTx->getFeeBid(), getMinFee(lh));
     if (v1 < v2)
     {
         getResult().result.code(txINSUFFICIENT_FEE);
@@ -285,13 +294,13 @@ FeeBumpTransactionFrame::getFullHash() const
 Hash const&
 FeeBumpTransactionFrame::getInnerFullHash() const
 {
-    return getInnerTx()->getFullHash();
+    return mInnerTx->getFullHash();
 }
 
 uint32_t
 FeeBumpTransactionFrame::getNumOperations() const
 {
-    return getInnerTx()->getNumOperations() + 1;
+    return mInnerTx->getNumOperations() + 1;
 }
 
 TransactionResult&
@@ -309,7 +318,7 @@ FeeBumpTransactionFrame::getResultCode() const
 SequenceNumber
 FeeBumpTransactionFrame::getSeqNum() const
 {
-    return getInnerTx()->getSeqNum();
+    return mInnerTx->getSeqNum();
 }
 
 AccountID
@@ -321,7 +330,7 @@ FeeBumpTransactionFrame::getFeeSourceID() const
 AccountID
 FeeBumpTransactionFrame::getSourceID() const
 {
-    return getInnerTx()->getSourceID();
+    return mInnerTx->getSourceID();
 }
 
 void
@@ -329,14 +338,14 @@ FeeBumpTransactionFrame::insertKeysForFeeProcessing(
     std::unordered_set<LedgerKey>& keys) const
 {
     keys.emplace(accountKey(getFeeSourceID()));
-    getInnerTx()->insertKeysForFeeProcessing(keys);
+    mInnerTx->insertKeysForFeeProcessing(keys);
 }
 
 void
 FeeBumpTransactionFrame::insertKeysForTxApply(
     std::unordered_set<LedgerKey>& keys) const
 {
-    getInnerTx()->insertKeysForTxApply(keys);
+    mInnerTx->insertKeysForTxApply(keys);
 }
 
 void
@@ -407,7 +416,7 @@ void
 FeeBumpTransactionFrame::resetResults(LedgerHeader const& header,
                                       int64_t baseFee)
 {
-    getInnerTx()->resetResults(header, baseFee);
+    mInnerTx->resetResults(header, baseFee);
     mResult.result.code(txFEE_BUMP_INNER_SUCCESS);
 
     // feeCharged is updated accordingly to represent the cost of the
@@ -422,11 +431,5 @@ FeeBumpTransactionFrame::toStellarMessage() const
     msg.type(TRANSACTION);
     msg.transaction() = mEnvelope;
     return msg;
-}
-
-TransactionFramePtr
-FeeBumpTransactionFrame::getInnerTx() const
-{
-    return mInnerTx;
 }
 }
