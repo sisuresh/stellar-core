@@ -44,8 +44,8 @@ getNewOfferID(OperationResult const& result, uint32_t n)
 {
     if (result.code() != opINNER)
     {
-        // offerID should not matter here, as the op failed anyway
-        return 0;
+        // This will set internal error during apply
+        throw std::runtime_error("getNewOfferID: invalid OperationResult");
     }
 
     int64_t offerID;
