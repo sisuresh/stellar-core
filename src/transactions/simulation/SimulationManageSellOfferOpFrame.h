@@ -19,6 +19,6 @@ class SimulationManageSellOfferOpFrame : public ManageSellOfferOpFrame
                                      OperationResult const& simulationResult,
                                      uint32_t count);
 
-    int64_t getOfferID(LedgerTxnHeader& header) override;
+    int64_t generateNewOfferID(LedgerTxnHeader& header) override;
 };
 }

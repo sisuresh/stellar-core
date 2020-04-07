@@ -29,7 +29,7 @@ class ManageOfferOpFrameBase : public OperationFrame
 
     LedgerEntry buildOffer(int64_t amount, uint32_t flags) const;
 
-    virtual int64_t getOfferID(LedgerTxnHeader& header);
+    virtual int64_t generateNewOfferID(LedgerTxnHeader& header);
 
   public:
     ManageOfferOpFrameBase(Operation const& op, OperationResult& res,

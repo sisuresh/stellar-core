@@ -19,7 +19,7 @@ SimulationManageBuyOfferOpFrame::SimulationManageBuyOfferOpFrame(
 }
 
 int64_t
-SimulationManageBuyOfferOpFrame::getOfferID(LedgerTxnHeader& header)
+SimulationManageBuyOfferOpFrame::generateNewOfferID(LedgerTxnHeader& header)
 {
     return SimulationUtils::getNewOfferID(mSimulationResult, mCount);
 }
