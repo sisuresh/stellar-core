@@ -73,11 +73,6 @@ ApplyTransactionsWork::hasSig(PublicKey const& account,
 {
     // Is the signature of this account present in the envelope we're
     // simulating?
-    if (!mUsedPubKeys.insert(account).second)
-    {
-        return false;
-    }
-
     auto env = oldEnvelope;
     for (auto& sig : txbridge::getSignatures(env))
     {
@@ -92,16 +87,15 @@ ApplyTransactionsWork::hasSig(PublicKey const& account,
 void
 ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
                                      AbstractLedgerTxn& ltx,
-                                     std::vector<SecretKey>& keys,
+                                     std::set<SecretKey>& keys,
                                      TransactionEnvelope const& oldEnvelope,
                                      uint32_t n)
 {
-    auto opKey = SimulationUtils::getNewSecret(acc, n);
     auto const& txHash = mResultIter->transactionHash;
 
     if (hasSig(acc, oldEnvelope, txHash))
     {
-        keys.emplace_back(opKey);
+        keys.emplace(SimulationUtils::getNewSecret(acc, n));
     }
 
     auto account = stellar::loadAccount(ltx, acc);
@@ -117,7 +111,7 @@ ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
             auto pubKey = KeyUtils::convertKey<PublicKey>(signer.key);
             if (hasSig(pubKey, oldEnvelope, txHash))
             {
-                keys.emplace_back(SimulationUtils::getNewSecret(pubKey, n));
+                keys.emplace(SimulationUtils::getNewSecret(pubKey, n));
             }
         }
     }
@@ -126,7 +120,7 @@ ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
 void
 ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
                                               AbstractLedgerTxn& ltx,
-                                              std::vector<SecretKey>& keys,
+                                              std::set<SecretKey>& keys,
                                               uint32_t n)
 {
     auto addSignerAndReplaceID = [&](AccountID& acc) {
@@ -162,8 +156,7 @@ ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
 void
 ApplyTransactionsWork::mutateOperations(TransactionEnvelope& env,
                                         AbstractLedgerTxn& ltx,
-                                        std::vector<SecretKey>& keys,
-                                        uint32_t n)
+                                        std::set<SecretKey>& keys, uint32_t n)
 {
     auto& ops = txbridge::getOperations(env);
     for (auto& op : ops)
@@ -184,8 +177,7 @@ ApplyTransactionsWork::mutateOperations(TransactionEnvelope& env,
                 auto signerKey = KeyUtils::convertKey<PublicKey>(signer.key);
                 if (hasSig(signerKey, env, mResultIter->transactionHash))
                 {
-                    keys.emplace_back(
-                        SimulationUtils::getNewSecret(signerKey, n));
+                    keys.emplace(SimulationUtils::getNewSecret(signerKey, n));
                 }
             }
         }
@@ -215,7 +207,7 @@ ApplyTransactionsWork::scaleLedger(
     }
 
     // Keep track of accounts that need to sign
-    std::vector<SecretKey> keys;
+    std::set<SecretKey> keys;
 
     // First, update transaction source accounts
     mutateTxSourceAccounts(newEnv, ltx, keys, n);
@@ -237,9 +229,6 @@ ApplyTransactionsWork::scaleLedger(
 
     results.emplace_back(newRes);
     transactions.emplace_back(newEnv);
-
-    // Reset pubkeys we remembered as the transaction has been processed
-    mUsedPubKeys.clear();
 
     return txbridge::getOperations(newEnv).size();
 }
@@ -379,7 +368,6 @@ ApplyTransactionsWork::onReset()
     // Prepare the HistoryArchiveStream
     mStream = std::make_unique<HistoryArchiveStream>(mDownloadDir, mRange,
                                                      mApp.getHistoryManager());
-    mUsedPubKeys.clear();
 }
 
 BasicWork::State
