@@ -745,8 +745,6 @@ void
 LedgerManagerImpl::setLastClosedLedger(
     LedgerHeaderHistoryEntry const& lastClosed)
 {
-    assert(mState == LM_CATCHING_UP_STATE);
-
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
     auto header = ltx.loadHeader();
     header.current() = lastClosed.header;
@@ -910,7 +908,7 @@ LedgerManagerImpl::applyTransactions(
         auto txTime = mTransactionApply.TimeScope();
         TransactionMeta tm(2);
         CLOG(DEBUG, "Tx") << " tx#" << index << " = "
-                          << hexAbbrev(tx->getFullHash())
+                          << hexAbbrev(tx->getContentsHash())
                           << " ops=" << tx->getNumOperations()
                           << " txseq=" << tx->getSeqNum() << " (@ "
                           << mApp.getConfig().toShortString(tx->getSourceID())

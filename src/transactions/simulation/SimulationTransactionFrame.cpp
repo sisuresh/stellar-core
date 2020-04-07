@@ -6,6 +6,8 @@
 #include "ledger/LedgerTxn.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/simulation/SimulationManageBuyOfferOpFrame.h"
+#include "transactions/simulation/SimulationManageSellOfferOpFrame.h"
 #include "transactions/simulation/SimulationMergeOpFrame.h"
 
 namespace stellar
@@ -14,17 +16,19 @@ namespace stellar
 TransactionFramePtr
 SimulationTransactionFrame::makeTransactionFromWire(
     Hash const& networkID, TransactionEnvelope const& envelope,
-    TransactionResult simulationResult)
+    TransactionResult simulationResult, uint32_t count)
 {
     TransactionFramePtr res = std::make_shared<SimulationTransactionFrame>(
-        networkID, envelope, simulationResult);
+        networkID, envelope, simulationResult, count);
     return res;
 }
 
 SimulationTransactionFrame::SimulationTransactionFrame(
     Hash const& networkID, TransactionEnvelope const& envelope,
-    TransactionResult simulationResult)
-    : TransactionFrame(networkID, envelope), mSimulationResult(simulationResult)
+    TransactionResult simulationResult, uint32_t count)
+    : TransactionFrame(networkID, envelope)
+    , mSimulationResult(simulationResult)
+    , mCount(count)
 {
 }
 
@@ -32,14 +36,27 @@ std::shared_ptr<OperationFrame>
 SimulationTransactionFrame::makeOperation(Operation const& op,
                                           OperationResult& res, size_t index)
 {
-    if (mEnvelope.v0().tx.operations[index].body.type() != ACCOUNT_MERGE)
+    assert(index < mEnvelope.v0().tx.operations.size());
+    OperationResult resultFromArchive;
+    if (mSimulationResult.result.code() == txSUCCESS ||
+        mSimulationResult.result.code() == txFAILED)
     {
-        return OperationFrame::makeHelper(op, res, *this);
+        resultFromArchive = mSimulationResult.result.results()[index];
     }
-    else
+
+    switch (mEnvelope.tx.operations[index].body.type())
     {
-        return std::make_shared<SimulationMergeOpFrame>(
-            op, res, *this, mSimulationResult.result.results()[index]);
+    case ACCOUNT_MERGE:
+        return std::make_shared<SimulationMergeOpFrame>(op, res, *this,
+                                                        resultFromArchive);
+    case MANAGE_BUY_OFFER:
+        return std::make_shared<SimulationManageBuyOfferOpFrame>(
+            op, res, *this, resultFromArchive, mCount);
+    case MANAGE_SELL_OFFER:
+        return std::make_shared<SimulationManageSellOfferOpFrame>(
+            op, res, *this, resultFromArchive, mCount);
+    default:
+        return OperationFrame::makeHelper(op, res, *this);
     }
 }
 

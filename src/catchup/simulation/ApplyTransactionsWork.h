@@ -5,6 +5,7 @@
 #pragma once
 
 #include "catchup/simulation/HistoryArchiveStream.h"
+#include "ledger/LedgerTxn.h"
 #include "work/Work.h"
 #include "xdr/Stellar-ledger.h"
 
@@ -26,6 +27,10 @@ class ApplyTransactionsWork : public BasicWork
     std::vector<TransactionResultPair>::const_iterator mResultIter;
 
     uint32_t const mMaxOperations;
+    uint32_t const mMultiplier;
+    bool const mVerifyResults;
+
+    std::unordered_set<PublicKey> mUsedPubKeys;
 
     bool getNextLedgerFromHistoryArchive();
 
@@ -33,17 +38,27 @@ class ApplyTransactionsWork : public BasicWork
                        std::vector<TransactionResultPair>& results,
                        std::vector<UpgradeType>& upgrades);
 
+    uint32_t scaleLedger(std::vector<TransactionEnvelope>& transactions,
+                         std::vector<TransactionResultPair>& results,
+                         std::vector<UpgradeType>& upgrades, uint32_t n);
+
+    bool hasSig(PublicKey const& account,
+                TransactionEnvelope const& oldEnvelope, Hash const& hash);
+
+    void addSignerKeys(AccountID const& acc, AbstractLedgerTxn& ltx,
+                       std::vector<SecretKey>& keys,
+                       TransactionEnvelope const& oldEnvelope, uint32_t n);
+
   public:
     ApplyTransactionsWork(Application& app, TmpDir const& downloadDir,
                           LedgerRange const& range,
                           std::string const& networkPassphrase,
-                          uint32_t desiredOperations);
+                          uint32_t desiredOperations, uint32_t multiplier,
+                          bool verifyResults);
 
   protected:
     void onReset() override;
-
     State onRun() override;
-
     bool onAbort() override;
 };
 }
