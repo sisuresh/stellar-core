@@ -19,6 +19,7 @@
 #include "util/types.h"
 
 #include "catchup/simulation/ApplyTransactionsWork.h"
+#include "catchup/simulation/SimulateApplyBucketsWork.h"
 #include "historywork/BatchDownloadWork.h"
 #include "work/WorkScheduler.h"
 
@@ -902,14 +903,47 @@ runRebuildLedgerFromBuckets(CommandLineArgs const& args)
     });
 }
 
+// Transaction replay simulation that allows several modes:
+// - transactions from the archives replayed at a sustained ops-per-ledger
+// rate
+// - real and simulated transactions replayed at a sustained ops-per-ledger rate
+// - real and simulated transactions replayed with real ledger sizes scaled by
+// the multiplier
+
+// There are a few steps involved in prepping the state before we can simulate
+// transactions without state generation overhead. Typically, the sequence of
+// commands is as follows:
+// simulate-bucketlist --simulate-bucketlist <L> --multiplier <M>
+//                     --conf <config that includes readable archives
+//                                          to get buckets from>
+//
+// generate-transactions --first-ledger-inclusive <F>
+//                       --last-ledger-inclusive <L>
+//                       --conf <config that must have a writebale `simulate`
+//                               archive to publish simulated transactions>
+//                       --multiplier <M must be same as the command above>
+//                       --verify
+//
+// simulate-transactions --first-ledger-inclusive <F must match the above>
+//                       --last-ledger-inclusive <L must match the above>
+//                       --conf <config must include a readable `simulate`
+//                               archive ONLY>
+//                       --verify
+// Note: running `simulate-transactions` assumes correctly set ledger state
+// (i.e., simulated bucketlist)
 int
-runSimulate(CommandLineArgs const& args)
+runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
 {
     CommandLine::ConfigOption configOption;
+    // If >0, packs mMaxOperations into a ledger maintaining a sustained load
+    // If 0, scale the existing ledgers with multiplier
     uint32_t opsPerLedger = 0;
     uint32_t firstLedgerInclusive = 0;
     uint32_t lastLedgerInclusive = 0;
     std::string historyArchiveGet;
+    // Default to no simulated transactions, just real data
+    uint32_t multiplier = 1;
+    bool verifyResults = false;
 
     auto validateFirstLedger = [&] {
         if (firstLedgerInclusive == 0)
@@ -927,44 +961,182 @@ runSimulate(CommandLineArgs const& args)
             "first ledger to read from history archive"),
         validateFirstLedger};
 
+    auto opsPerLedgerParser = [](uint32_t& opsPerLedger) {
+        return clara::Opt{opsPerLedger, "OPS-PER-LEDGER"}["--ops-per-ledger"](
+            "desired number of operations per ledger, will never be less but "
+            "could be up to 100 * multiplier more. If 0, real ledger sizes "
+            "from the archive stream are used");
+    };
+
+    auto multiplierParser = [](uint32_t& multiplier) {
+        return clara::Opt{multiplier,
+                          "N"}["--multiplier"]("aplification factor, "
+                                               "must be consistent with "
+                                               "simulated bucketlist");
+    };
+
+    std::vector<ParserWithValidation> parsers = {
+        configurationParser(configOption), firstLedgerParser,
+        clara::Opt{verifyResults}["--verify"](
+            "check results after application and log inconsistencies"),
+        clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
+            "last ledger to read from history archive")};
+
+    // Allow passing multiplier during transaction generation, ops-per-ledger
+    // during simulation
+    parsers.emplace_back((generate ? multiplierParser(multiplier)
+                                   : opsPerLedgerParser(opsPerLedger)));
+
+    return runWithHelp(args, parsers, [&] {
+        auto config = configOption.getConfig();
+        config.setNoListen();
+
+        if (!generate)
+        {
+            // Check if special `simulate` archive is present in the config
+            // If so, ensure we're getting historical data from it exclusively
+            auto found = config.HISTORY.find("simulate");
+            if (found != config.HISTORY.end())
+            {
+                auto simArchive = *found;
+                config.HISTORY.clear();
+                config.HISTORY[simArchive.first] = simArchive.second;
+            }
+
+            LOG(INFO) << "Publishing is disabled in `simulate` mode";
+            config.setNoPublish();
+        }
+
+        VirtualClock clock(VirtualClock::REAL_TIME);
+        auto app = Application::create(clock, config, false);
+        app->start();
+
+        if (generate && app->getHistoryManager().checkpointContainingLedger(
+                            lastLedgerInclusive) == lastLedgerInclusive)
+        {
+            // Bump last ledger to unblock publish
+            ++lastLedgerInclusive;
+        }
+
+        auto lr =
+            LedgerRange::inclusive(firstLedgerInclusive, lastLedgerInclusive);
+        CheckpointRange cr(lr, app->getHistoryManager());
+        TmpDir dir(app->getTmpDirManager().tmpDir("simulate"));
+
+        auto downloadLedgers = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_LEDGER, dir);
+        auto downloadTransactions = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
+        auto downloadResults = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
+        auto apply = std::make_shared<ApplyTransactionsWork>(
+            *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE, opsPerLedger,
+            multiplier, verifyResults);
+        std::vector<std::shared_ptr<BasicWork>> seq{
+            downloadLedgers, downloadTransactions, downloadResults, apply};
+
+        app->getWorkScheduler().executeWork<WorkSequence>(
+            "download-simulate-seq", seq);
+
+        // Publish all simulated transactions to a simulated archive to avoid
+        // re-generating and signing them
+        if (generate)
+        {
+            publish(app);
+        }
+
+        return 0;
+    });
+}
+
+int
+runSimulateTxs(CommandLineArgs const& args)
+{
+    return runGenerateOrSimulateTxs(args, false);
+}
+
+int
+runGenerateTxs(CommandLineArgs const& args)
+{
+    return runGenerateOrSimulateTxs(args, true);
+}
+
+int
+runSimulateBuckets(CommandLineArgs const& args)
+{
+    CommandLine::ConfigOption configOption;
+    uint32_t ledger = 0;
+    uint32_t n = 2;
+    std::string hasStr = "";
+
+    ParserWithValidation ledgerParser{
+        clara::Arg(ledger, "LEDGER").required(),
+        [&] { return ledger > 0 ? "" : "Ledger must be non-zero"; }};
+
     return runWithHelp(
         args,
-        {configurationParser(configOption),
-         clara::Opt{opsPerLedger, "OPS-PER-LEDGER"}["--ops-per-ledger"](
-             "desired number of operations per ledger, will never be less but "
-             "could be up to 100 more"),
-         firstLedgerParser,
-         clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
-             "last ledger to read from history archive")},
+        {configurationParser(configOption), ledgerParser,
+         clara::Opt{n, "N"}["--multiplier"]("amplification factor"),
+         clara::Opt{hasStr, "FILENAME"}["--history-archive-state"](
+             "skip directly to application if buckets already generated")},
         [&] {
             auto config = configOption.getConfig();
             config.setNoListen();
-            LOG(INFO) << "Publishing is disabled in `simulate` mode";
-            config.setNoPublish();
+            // Redirect all the bucket adoption to special directory to not mess
+            // up our current buckets
+
+            std::shared_ptr<HistoryArchiveState> has;
+            if (!hasStr.empty())
+            {
+                LOG(INFO) << "Loading state from " << hasStr;
+                has = std::make_shared<HistoryArchiveState>();
+                has->load(hasStr);
+            }
 
             VirtualClock clock(VirtualClock::REAL_TIME);
-            auto app = Application::create(clock, config, false);
+            // Note: users expect to run new-db separately if they want to
+            // utilize "skip generation, apply buckets from HAS" functionality
+            auto app = Application::create(clock, config, !has);
             app->start();
+            TmpDir dir(app->getTmpDirManager().tmpDir("simulate-buckets-tmp"));
 
-            auto lr = LedgerRange::inclusive(firstLedgerInclusive,
-                                             lastLedgerInclusive);
-            CheckpointRange cr(lr, app->getHistoryManager());
-            TmpDir dir(app->getTmpDirManager().tmpDir("simulate"));
+            auto checkpoint =
+                app->getHistoryManager().checkpointContainingLedger(ledger);
 
-            auto downloadLedgers = std::make_shared<BatchDownloadWork>(
+            auto simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
+                *app, n, checkpoint, dir, has);
+
+            // Once simulated bucketlist is good to go, download ledgers headers
+            // to convince LedgerManager that we have succesfully restored
+            // ledger state
+            LedgerRange lr{checkpoint, checkpoint};
+            CheckpointRange cr{lr, app->getHistoryManager()};
+            auto downloadHeaders = std::make_shared<BatchDownloadWork>(
                 *app, cr, HISTORY_FILE_TYPE_LEDGER, dir);
-            auto downloadTransactions = std::make_shared<BatchDownloadWork>(
-                *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
-            auto downloadResults = std::make_shared<BatchDownloadWork>(
-                *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
-            auto apply = std::make_shared<ApplyTransactionsWork>(
-                *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
-                opsPerLedger);
-            std::vector<std::shared_ptr<BasicWork>> seq{
-                downloadLedgers, downloadTransactions, downloadResults, apply};
 
-            app->getWorkScheduler().executeWork<WorkSequence>(
-                "download-simulate-seq", seq);
+            std::vector<std::shared_ptr<BasicWork>> seq{simulateBuckets,
+                                                        downloadHeaders};
+
+            auto w = app->getWorkScheduler().executeWork<WorkSequence>(
+                "simulate-bucketlist-application", seq);
+
+            if (w->getState() == BasicWork::State::WORK_SUCCESS)
+            {
+                // Ensure that LedgerManager's view of LCL is consistent with
+                // the bucketlist
+                FileTransferInfo ft(dir, HISTORY_FILE_TYPE_LEDGER, checkpoint);
+                XDRInputFileStream hdrIn;
+                hdrIn.open(ft.localPath_nogz());
+                LedgerHeaderHistoryEntry curr;
+                // Read the last LedgerHeaderHistoryEntry to use as LCL
+                while (hdrIn && hdrIn.readOne(curr))
+                    ;
+
+                LOG(INFO) << "Assuming state for ledger "
+                          << curr.header.ledgerSeq;
+                app->getLedgerManager().setLastClosedLedger(curr);
+            }
+
             return 0;
         });
 }
@@ -1085,7 +1257,15 @@ handleCommandLine(int argc, char* const* argv)
           runRebuildLedgerFromBuckets},
          {"fuzz", "run a single fuzz input and exit", runFuzz},
          {"gen-fuzz", "generate a random fuzzer input file", runGenFuzz},
-         {"simulate", "simulate applying ledgers", runSimulate},
+         {"generate-transactions",
+          "generate simulated transactions based on a multiplier. Ensure a "
+          "proper writeable test archive is configured",
+          runGenerateTxs},
+         {"simulate-transactions",
+          "simulate applying ledgers from a real or simulated archive (must be "
+          "caught up)",
+          runSimulateTxs},
+         {"simulate-bucketlist", "simulate bucketlist", runSimulateBuckets},
          {"test", "execute test suite", runTest},
 #endif
          {"write-quorum", "print a quorum set graph from history",
