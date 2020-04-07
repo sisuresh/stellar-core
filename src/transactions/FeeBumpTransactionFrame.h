@@ -45,7 +45,9 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     void removeOneTimeSignerKeyFromFeeSource(AbstractLedgerTxn& ltx) const;
 
+  protected:
     void resetResults(LedgerHeader const& header, int64_t baseFee);
+    virtual TransactionFramePtr getInnerTx() const;
 
   public:
     FeeBumpTransactionFrame(Hash const& networkID,
@@ -86,5 +88,8 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     void processFeeSeqNum(AbstractLedgerTxn& ltx, int64_t baseFee) override;
 
     StellarMessage toStellarMessage() const override;
+
+    static TransactionEnvelope
+    convertInnerTxToV1(TransactionEnvelope const& envelope);
 };
 }

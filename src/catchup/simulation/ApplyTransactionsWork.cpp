@@ -11,6 +11,8 @@
 #include "ledger/LedgerRange.h"
 #include "ledger/LedgerTxn.h"
 #include "transactions/SignatureUtils.h"
+#include "transactions/TransactionBridge.h"
+#include "transactions/TransactionSQL.h"
 #include "transactions/TransactionUtils.h"
 #include "util/SimulationUtils.h"
 #include "util/format.h"
@@ -44,8 +46,7 @@ static void
 checkResults(Application& app, uint32_t ledger,
              std::vector<TransactionResultPair> const& results)
 {
-    auto resSet = TransactionFrame::getTransactionHistoryResults(
-        app.getDatabase(), ledger);
+    auto resSet = getTransactionHistoryResults(app.getDatabase(), ledger);
 
     assert(resSet.results.size() == results.size());
     for (size_t i = 0; i < results.size(); i++)
@@ -77,7 +78,8 @@ ApplyTransactionsWork::hasSig(PublicKey const& account,
         return false;
     }
 
-    for (auto const& sig : oldEnvelope.signatures)
+    auto env = oldEnvelope;
+    for (auto& sig : txbridge::getSignatures(env))
     {
         if (PubKeyUtils::verifySig(account, sig.signature, hash))
         {
@@ -121,37 +123,50 @@ ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
     }
 }
 
-uint32_t
-ApplyTransactionsWork::scaleLedger(
-    std::vector<TransactionEnvelope>& transactions,
-    std::vector<TransactionResultPair>& results,
-    std::vector<UpgradeType>& upgrades, uint32_t n)
+void
+ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
+                                              AbstractLedgerTxn& ltx,
+                                              std::vector<SecretKey>& keys,
+                                              uint32_t n)
 {
-    assert(mTransactionIter != mTransactionHistory.txSet.txs.cend());
-    assert(mResultIter != mResultHistory.txResultSet.results.cend());
+    auto addSignerAndReplaceID = [&](AccountID& acc) {
+        addSignerKeys(acc, ltx, keys, env, n);
+        SimulationUtils::updateAccountID(acc, n);
+    };
 
-    LedgerTxn ltx(mApp.getLedgerTxnRoot());
-
-    // No amplification needed, simply return existing transactions and results
-    if (n == 0)
+    // Depending on the envelope type, update sourceAccount and maybe feeSource
+    AccountID acc;
+    switch (env.type())
     {
-        transactions.emplace_back(*mTransactionIter);
-        results.emplace_back(*mResultIter);
-        return mTransactionIter->v0().tx.operations.size();
+    case ENVELOPE_TYPE_TX_V0:
+        // Wrap raw Ed25519 key in an AccountID
+        acc.type(PUBLIC_KEY_TYPE_ED25519);
+        acc.ed25519() = env.v0().tx.sourceAccountEd25519;
+        addSignerKeys(acc, ltx, keys, env, n);
+        env.v0().tx.sourceAccountEd25519 =
+            SimulationUtils::getNewSecret(acc, n).getPublicKey().ed25519();
+        break;
+    case ENVELOPE_TYPE_TX:
+        addSignerAndReplaceID(env.v1().tx.sourceAccount);
+        break;
+    case ENVELOPE_TYPE_TX_FEE_BUMP:
+        assert(env.feeBump().tx.innerTx.type() == ENVELOPE_TYPE_TX);
+        addSignerAndReplaceID(env.feeBump().tx.innerTx.v1().tx.sourceAccount);
+        addSignerAndReplaceID(env.feeBump().tx.feeSource);
+        break;
+    default:
+        throw std::runtime_error("Unknown envelope type");
     }
+}
 
-    auto const& env = *mTransactionIter;
-    TransactionEnvelope newEnv = env;
-    Transaction& newTx = newEnv.tx;
-
-    // Keep track of accounts that need to sign
-    std::vector<SecretKey> keys;
-    newEnv.signatures.clear();
-
-    addSignerKeys(env.tx.sourceAccount, ltx, keys, env, n);
-    SimulationUtils::updateAccountID(newTx.sourceAccount, n);
-
-    for (auto& op : newTx.operations)
+void
+ApplyTransactionsWork::mutateOperations(TransactionEnvelope& env,
+                                        AbstractLedgerTxn& ltx,
+                                        std::vector<SecretKey>& keys,
+                                        uint32_t n)
+{
+    auto& ops = txbridge::getOperations(env);
+    for (auto& op : ops)
     {
         // Add signer keys where needed before simulating the operation
         if (op.sourceAccount)
@@ -176,19 +191,45 @@ ApplyTransactionsWork::scaleLedger(
         }
         SimulationUtils::updateOperation(op, n);
     }
+}
 
-    // Add proper signatures, and setup results (for later verification)
-    auto newTxHash = sha256(
-        xdr::xdr_to_opaque(mApp.getNetworkID(), ENVELOPE_TYPE_TX, newTx));
-    for (auto const& k : keys)
+uint32_t
+ApplyTransactionsWork::scaleLedger(
+    std::vector<TransactionEnvelope>& transactions,
+    std::vector<TransactionResultPair>& results,
+    std::vector<UpgradeType>& upgrades, uint32_t n)
+{
+    assert(mTransactionIter != mTransactionHistory.txSet.txs.cend());
+    assert(mResultIter != mResultHistory.txResultSet.results.cend());
+
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
+    auto const& env = *mTransactionIter;
+    TransactionEnvelope newEnv = env;
+
+    // No mutation needed, simply return existing transactions and results
+    if (n == 0)
     {
-        newEnv.signatures.push_back(SignatureUtils::sign(k, newTxHash));
+        transactions.emplace_back(newEnv);
+        results.emplace_back(*mResultIter);
+        return txbridge::getOperations(newEnv).size();
     }
 
-    // In most cases, number of signatures should be equal. Simulation does
-    // not handle pre-signed transactions, so it is possible that we have
-    // less signatures
-    assert(newEnv.signatures.size() <= env.signatures.size());
+    // Keep track of accounts that need to sign
+    std::vector<SecretKey> keys;
+
+    // First, update transaction source accounts
+    mutateTxSourceAccounts(newEnv, ltx, keys, n);
+    mutateOperations(newEnv, ltx, keys, n);
+
+    // Add proper signatures, and setup results (for later verification)
+    auto& signatures = txbridge::getSignatures(newEnv);
+    signatures.clear();
+    auto txFrame = TransactionFrameBase::makeTransactionFromWire(
+        mApp.getNetworkID(), newEnv);
+    auto newTxHash = txFrame->getContentsHash();
+    std::transform(
+        keys.begin(), keys.end(), std::back_inserter(signatures),
+        [&](SecretKey const& k) { return SignatureUtils::sign(k, newTxHash); });
 
     // These are not exactly accurate, but sufficient to check result codes
     auto newRes = *mResultIter;
@@ -200,7 +241,7 @@ ApplyTransactionsWork::scaleLedger(
     // Reset pubkeys we remembered as the transaction has been processed
     mUsedPubKeys.clear();
 
-    return newTx.operations.size();
+    return txbridge::getOperations(newEnv).size();
 }
 
 bool
@@ -213,9 +254,9 @@ ApplyTransactionsWork::getNextLedgerFromHistoryArchive()
         std::unordered_map<Hash, TransactionEnvelope> transactions;
         for (auto const& tx : mTransactionHistory.txSet.txs)
         {
-            auto hash = sha256(xdr::xdr_to_opaque(mApp.getNetworkID(),
-                                                  ENVELOPE_TYPE_TX, tx.tx));
-            transactions[hash] = tx;
+            auto txFrame = TransactionFrameBase::makeTransactionFromWire(
+                mApp.getNetworkID(), tx);
+            transactions[txFrame->getContentsHash()] = tx;
         }
 
         mTransactionHistory.txSet.txs.clear();

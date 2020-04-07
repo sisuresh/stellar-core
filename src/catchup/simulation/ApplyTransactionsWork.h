@@ -49,6 +49,12 @@ class ApplyTransactionsWork : public BasicWork
                        std::vector<SecretKey>& keys,
                        TransactionEnvelope const& oldEnvelope, uint32_t n);
 
+    void mutateTxSourceAccounts(TransactionEnvelope& env,
+                                AbstractLedgerTxn& ltx,
+                                std::vector<SecretKey>& keys, uint32_t n);
+    void mutateOperations(TransactionEnvelope& env, AbstractLedgerTxn& ltx,
+                          std::vector<SecretKey>& keys, uint32_t n);
+
   public:
     ApplyTransactionsWork(Application& app, TmpDir const& downloadDir,
                           LedgerRange const& range,
