@@ -3,6 +3,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 #pragma once
 
+#include "catchup/simulation/SimulationTestMode.h"
 #include "history/HistoryArchive.h"
 #include "work/Work.h"
 
@@ -38,11 +39,12 @@ class SimulateApplyBucketsWork : public Work
     TmpDir const& mTmpDir;
     uint32_t const mMultiplier;
     uint32_t const mLedger;
+    SimulationTestMode const mMode;
 
   public:
     SimulateApplyBucketsWork(
         Application& app, uint32_t multiplier, uint32_t ledger,
-        TmpDir const& mTmpDir,
+        SimulationTestMode mode, TmpDir const& mTmpDir,
         std::shared_ptr<HistoryArchiveState> has = nullptr);
     virtual ~SimulateApplyBucketsWork() = default;
 

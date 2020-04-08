@@ -20,6 +20,7 @@
 
 #include "catchup/simulation/ApplyTransactionsWork.h"
 #include "catchup/simulation/SimulateApplyBucketsWork.h"
+#include "catchup/simulation/SimulationTestMode.h"
 #include "historywork/BatchDownloadWork.h"
 #include "work/WorkScheduler.h"
 
@@ -1068,6 +1069,30 @@ runSimulateBuckets(CommandLineArgs const& args)
     uint32_t ledger = 0;
     uint32_t n = 2;
     std::string hasStr = "";
+    auto mode = SimulationTestMode::Normal;
+    std::string modeArg = "normal";
+
+    auto validateMode = [&] {
+        if (iequals(modeArg, "normal"))
+        {
+            mode = SimulationTestMode::Normal;
+            return "";
+        }
+
+        if (iequals(modeArg, "maintainLiabilities"))
+        {
+            mode = SimulationTestMode::MaintainLiabilities;
+            return "";
+        }
+
+        return "Unrecognized simulation test mode. Please select a valid mode.";
+    };
+
+    ParserWithValidation modeParser{
+        clara::Opt{modeArg, "MODE"}["--mode"](
+            "set the simulation mode. Expected modes: normal, "
+            "maintainLiabilities. Defaults to normal."),
+        validateMode};
 
     ParserWithValidation ledgerParser{
         clara::Arg(ledger, "LEDGER").required(),
@@ -1075,7 +1100,7 @@ runSimulateBuckets(CommandLineArgs const& args)
 
     return runWithHelp(
         args,
-        {configurationParser(configOption), ledgerParser,
+        {configurationParser(configOption), ledgerParser, modeParser,
          clara::Opt{n, "N"}["--multiplier"]("amplification factor"),
          clara::Opt{hasStr, "FILENAME"}["--history-archive-state"](
              "skip directly to application if buckets already generated")},
@@ -1104,7 +1129,7 @@ runSimulateBuckets(CommandLineArgs const& args)
                 app->getHistoryManager().checkpointContainingLedger(ledger);
 
             auto simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
-                *app, n, checkpoint, dir, has);
+                *app, n, checkpoint, mode, dir, has);
 
             // Once simulated bucketlist is good to go, download ledgers headers
             // to convince LedgerManager that we have succesfully restored

@@ -52,6 +52,12 @@ class GenerateBucketsWork : public BasicWork
     HistoryArchiveState const& getGeneratedHAS();
 
   protected:
+    virtual std::vector<LedgerEntry>
+    entriesToInject()
+    {
+        return {};
+    }
+
     void onReset() override;
     BasicWork::State onRun() override;
 

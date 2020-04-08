@@ -178,6 +178,17 @@ GenerateBucketsWork::generateNewBucket(std::shared_ptr<Bucket> const& bucket)
         SimulationUtils::generateDeadEntries(newDeadEntries, deadEntries,
                                              count);
 
+        // we only want to do this once. We only get here if the multiplier is >
+        // 1
+        if (count == 1)
+        {
+            auto const& entries = entriesToInject();
+            for (auto const& entry : entries)
+            {
+                newLiveEntries.emplace_back(entry);
+            }
+        }
+
         auto nextBucket =
             Bucket::fresh(mApp.getBucketManager(), ledgerVersion,
                           newInitEntries, newLiveEntries, newDeadEntries,

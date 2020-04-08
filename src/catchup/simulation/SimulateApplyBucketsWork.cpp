@@ -4,7 +4,7 @@
 
 #include "SimulateApplyBucketsWork.h"
 #include "catchup/ApplyBucketsWork.h"
-#include "catchup/simulation/GenerateBucketsWork.h"
+#include "catchup/simulation/GenerateBucketsWithNewAccountWork.h"
 #include "historywork/DownloadBucketsWork.h"
 #include "historywork/GetHistoryArchiveStateWork.h"
 #include "ledger/LedgerManager.h"
@@ -14,13 +14,15 @@ namespace stellar
 {
 SimulateApplyBucketsWork::SimulateApplyBucketsWork(
     Application& app, uint32_t multiplier, uint32_t ledger,
-    TmpDir const& tmpDir, std::shared_ptr<HistoryArchiveState> has)
+    SimulationTestMode mode, TmpDir const& tmpDir,
+    std::shared_ptr<HistoryArchiveState> has)
     : Work(app, "simulate-buckets", BasicWork::RETRY_NEVER)
     , mApp(app)
     , mHAS(has)
     , mTmpDir(tmpDir)
     , mMultiplier(multiplier)
     , mLedger(ledger)
+    , mMode(mode)
 {
 }
 
@@ -58,8 +60,12 @@ SimulateApplyBucketsWork::doWork()
 
             auto downloadBuckets = std::make_shared<DownloadBucketsWork>(
                 mApp, mCurrentBuckets, bucketHashes, mTmpDir);
-            mGenerateBucketsWork = std::make_shared<GenerateBucketsWork>(
-                mApp, mGeneratedBuckets, has, mMultiplier);
+            mGenerateBucketsWork =
+                mMode == SimulationTestMode::Normal
+                    ? std::make_shared<GenerateBucketsWork>(
+                          mApp, mGeneratedBuckets, has, mMultiplier)
+                    : std::make_shared<GenerateBucketsWithNewAccountWork>(
+                          mApp, mGeneratedBuckets, has, mMultiplier);
 
             std::vector<std::shared_ptr<BasicWork>> seq{downloadBuckets,
                                                         mGenerateBucketsWork};
