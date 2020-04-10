@@ -5,6 +5,7 @@
 #include "transactions/simulation/SimulationTransactionFrame.h"
 #include "ledger/LedgerTxn.h"
 #include "transactions/OperationFrame.h"
+#include "transactions/TransactionBridge.h"
 #include "transactions/TransactionUtils.h"
 #include "transactions/simulation/SimulationCreatePassiveSellOfferOpFrame.h"
 #include "transactions/simulation/SimulationManageBuyOfferOpFrame.h"
@@ -13,16 +14,6 @@
 
 namespace stellar
 {
-
-TransactionFramePtr
-SimulationTransactionFrame::makeTransactionFromWire(
-    Hash const& networkID, TransactionEnvelope const& envelope,
-    TransactionResult simulationResult, uint32_t count)
-{
-    TransactionFramePtr res = std::make_shared<SimulationTransactionFrame>(
-        networkID, envelope, simulationResult, count);
-    return res;
-}
 
 SimulationTransactionFrame::SimulationTransactionFrame(
     Hash const& networkID, TransactionEnvelope const& envelope,
@@ -37,7 +28,8 @@ std::shared_ptr<OperationFrame>
 SimulationTransactionFrame::makeOperation(Operation const& op,
                                           OperationResult& res, size_t index)
 {
-    assert(index < mEnvelope.v0().tx.operations.size());
+    auto& ops = txbridge::getOperations(mEnvelope);
+    assert(index < ops.size());
     OperationResult resultFromArchive;
     if (mSimulationResult.result.code() == txSUCCESS ||
         mSimulationResult.result.code() == txFAILED)
@@ -45,7 +37,7 @@ SimulationTransactionFrame::makeOperation(Operation const& op,
         resultFromArchive = mSimulationResult.result.results()[index];
     }
 
-    switch (mEnvelope.tx.operations[index].body.type())
+    switch (ops[index].body.type())
     {
     case ACCOUNT_MERGE:
         return std::make_shared<SimulationMergeOpFrame>(op, res, *this,
@@ -118,7 +110,7 @@ SimulationTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
     // in v10 we update sequence numbers during apply
     if (header.current().ledgerVersion <= 9)
     {
-        acc.seqNum = mEnvelope.v0().tx.seqNum;
+        acc.seqNum = getSeqNum();
     }
 }
 
@@ -129,8 +121,7 @@ SimulationTransactionFrame::processSeqNum(AbstractLedgerTxn& ltx)
     if (header.current().ledgerVersion >= 10)
     {
         auto sourceAccount = loadSourceAccount(ltx, header);
-        sourceAccount.current().data.account().seqNum =
-            mEnvelope.v0().tx.seqNum;
+        sourceAccount.current().data.account().seqNum = getSeqNum();
     }
 }
 }
