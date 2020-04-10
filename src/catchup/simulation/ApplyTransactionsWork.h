@@ -32,8 +32,6 @@ class ApplyTransactionsWork : public BasicWork
     uint32_t const mMultiplier;
     bool const mVerifyResults;
 
-    std::unordered_set<PublicKey> mUsedPubKeys;
-
     bool getNextLedgerFromHistoryArchive();
 
     bool getNextLedger(std::vector<TransactionEnvelope>& transactions,
@@ -48,14 +46,14 @@ class ApplyTransactionsWork : public BasicWork
                 TransactionEnvelope const& oldEnvelope, Hash const& hash);
 
     void addSignerKeys(AccountID const& acc, AbstractLedgerTxn& ltx,
-                       std::vector<SecretKey>& keys,
+                       std::set<SecretKey>& keys,
                        TransactionEnvelope const& oldEnvelope, uint32_t n);
 
     void mutateTxSourceAccounts(TransactionEnvelope& env,
                                 AbstractLedgerTxn& ltx,
-                                std::vector<SecretKey>& keys, uint32_t n);
+                                std::set<SecretKey>& keys, uint32_t n);
     void mutateOperations(TransactionEnvelope& env, AbstractLedgerTxn& ltx,
-                          std::vector<SecretKey>& keys, uint32_t n);
+                          std::set<SecretKey>& keys, uint32_t n);
 
   public:
     ApplyTransactionsWork(Application& app, TmpDir const& downloadDir,
