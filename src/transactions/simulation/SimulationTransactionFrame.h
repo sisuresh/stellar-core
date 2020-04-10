@@ -12,6 +12,7 @@ namespace stellar
 class SimulationTransactionFrame : public TransactionFrame
 {
     TransactionResult mSimulationResult;
+    uint32_t const mCount;
 
   protected:
     bool isTooEarly(LedgerTxnHeader const& header) const override;
@@ -31,7 +32,8 @@ class SimulationTransactionFrame : public TransactionFrame
   public:
     SimulationTransactionFrame(Hash const& networkID,
                                TransactionEnvelope const& envelope,
-                               TransactionResult simulationResult);
+                               TransactionResult simulationResult,
+                               uint32_t count);
     SimulationTransactionFrame(TransactionFrame const&) = delete;
     SimulationTransactionFrame() = delete;
 
@@ -42,6 +44,6 @@ class SimulationTransactionFrame : public TransactionFrame
     static TransactionFramePtr
     makeTransactionFromWire(Hash const& networkID,
                             TransactionEnvelope const& envelope,
-                            TransactionResult simulationResult);
+                            TransactionResult simulationResult, uint32_t count);
 };
 }
