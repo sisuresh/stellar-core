@@ -24,13 +24,14 @@ computeContentsHash(Hash const& networkID, Hash const& previousLedgerHash,
 SimulationTxSetFrame::SimulationTxSetFrame(
     Hash const& networkID, Hash const& previousLedgerHash,
     std::vector<TransactionEnvelope> const& transactions,
-    std::vector<TransactionResultPair> const& results)
+    std::vector<TransactionResultPair> const& results, uint32_t multiplier)
     : mNetworkID(networkID)
     , mPreviousLedgerHash(previousLedgerHash)
     , mTransactions(transactions)
     , mResults(results)
     , mContentsHash(
           computeContentsHash(mNetworkID, mPreviousLedgerHash, mTransactions))
+    , mMultiplier(multiplier)
 {
 }
 
@@ -75,12 +76,23 @@ SimulationTxSetFrame::sortForApply()
     res.reserve(mTransactions.size());
 
     auto resultIter = mResults.cbegin();
+    uint32_t count = 0;
     for (auto const& txEnv : mTransactions)
     {
         res.emplace_back(SimulationTransactionFrame::makeTransactionFromWire(
-            mNetworkID, txEnv, resultIter->result));
+            mNetworkID, txEnv, resultIter->result, count));
         ++resultIter;
+        // Transaction generation guarantees that the number of transactions in
+        // a simulated ledger is divisible by mMultiplier. Because of this,
+        // when re-creating simulated transactions, we can assume `count`
+        // repeatedly starts at 0, and is incremented until mMultiplier.
+        if (++count == mMultiplier)
+        {
+            count = 0;
+        }
     }
+
+    assert(resultIter == mResults.end());
     return res;
 }
 
