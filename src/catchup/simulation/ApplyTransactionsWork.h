@@ -17,7 +17,6 @@ class ApplyTransactionsWork : public BasicWork
 {
     TmpDir const& mDownloadDir;
     LedgerRange const mRange;
-    Hash const mNetworkID;
 
     std::unique_ptr<HistoryArchiveStream> mStream;
     LedgerHeaderHistoryEntry mHeaderHistory;
@@ -59,6 +58,8 @@ class ApplyTransactionsWork : public BasicWork
                           bool verifyResults);
 
   protected:
+    Hash const mNetworkID;
+
     virtual void processSimulatedTx(
         AbstractLedgerTxn& ltx, TransactionResultPair const& txResPair,
         TransactionEnvelope& originalEnv, TransactionEnvelope& simulatedEnv,

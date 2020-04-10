@@ -27,7 +27,6 @@ ApplyTransactionsWork::ApplyTransactionsWork(
     : BasicWork(app, "apply-transactions", RETRY_NEVER)
     , mDownloadDir(downloadDir)
     , mRange(range)
-    , mNetworkID(sha256(networkPassphrase))
     , mTransactionHistory{}
     , mTransactionIter(mTransactionHistory.txSet.txs.cend())
     , mResultHistory{}
@@ -35,6 +34,7 @@ ApplyTransactionsWork::ApplyTransactionsWork(
     , mMaxOperations(desiredOperations)
     , mMultiplier(multiplier)
     , mVerifyResults(verifyResults)
+    , mNetworkID(sha256(networkPassphrase))
 {
     if (mMultiplier == 0)
     {
