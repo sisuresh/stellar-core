@@ -76,14 +76,12 @@ checkResults(Application& app, uint32_t ledger,
 }
 
 bool
-ApplyTransactionsWork::hasSig(PublicKey const& account,
-                              TransactionEnvelope const& oldEnvelope,
-                              Hash const& hash)
+hasSig(PublicKey const& account,
+       xdr::xvector<DecoratedSignature, 20> const& sigs, Hash const& hash)
 {
     // Is the signature of this account present in the envelope we're
     // simulating?
-    auto env = oldEnvelope;
-    for (auto& sig : txbridge::getSignatures(env))
+    for (auto const& sig : sigs)
     {
         if (PubKeyUtils::verifySig(account, sig.signature, hash))
         {
@@ -94,15 +92,13 @@ ApplyTransactionsWork::hasSig(PublicKey const& account,
 }
 
 void
-ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
-                                     AbstractLedgerTxn& ltx,
-                                     std::set<SecretKey>& keys,
-                                     TransactionEnvelope const& oldEnvelope,
-                                     uint32_t n)
+ApplyTransactionsWork::addSignerKeys(
+    AccountID const& acc, AbstractLedgerTxn& ltx, std::set<SecretKey>& keys,
+    xdr::xvector<DecoratedSignature, 20> const& sigs, uint32_t n)
 {
     auto const& txHash = mResultIter->transactionHash;
 
-    if (hasSig(acc, oldEnvelope, txHash))
+    if (hasSig(acc, sigs, txHash))
     {
         keys.emplace(SimulationUtils::getNewSecret(acc, n));
     }
@@ -118,7 +114,7 @@ ApplyTransactionsWork::addSignerKeys(AccountID const& acc,
         if (signer.key.type() == SIGNER_KEY_TYPE_ED25519)
         {
             auto pubKey = KeyUtils::convertKey<PublicKey>(signer.key);
-            if (hasSig(pubKey, oldEnvelope, txHash))
+            if (hasSig(pubKey, sigs, txHash))
             {
                 keys.emplace(SimulationUtils::getNewSecret(pubKey, n));
             }
@@ -132,8 +128,9 @@ ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
                                               std::set<SecretKey>& keys,
                                               uint32_t n)
 {
+    auto const& sigs = txbridge::getSignaturesInner(env);
     auto addSignerAndReplaceID = [&](AccountID& acc) {
-        addSignerKeys(acc, ltx, keys, env, n);
+        addSignerKeys(acc, ltx, keys, sigs, n);
         SimulationUtils::updateAccountID(acc, n);
     };
 
@@ -145,7 +142,7 @@ ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
         // Wrap raw Ed25519 key in an AccountID
         acc.type(PUBLIC_KEY_TYPE_ED25519);
         acc.ed25519() = env.v0().tx.sourceAccountEd25519;
-        addSignerKeys(acc, ltx, keys, env, n);
+        addSignerKeys(acc, ltx, keys, sigs, n);
         env.v0().tx.sourceAccountEd25519 =
             SimulationUtils::getNewSecret(acc, n).getPublicKey().ed25519();
         break;
@@ -153,9 +150,10 @@ ApplyTransactionsWork::mutateTxSourceAccounts(TransactionEnvelope& env,
         addSignerAndReplaceID(env.v1().tx.sourceAccount);
         break;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
+        // Note: handle inner transaction only, outer signatures will be handled
+        // separately
         assert(env.feeBump().tx.innerTx.type() == ENVELOPE_TYPE_TX);
         addSignerAndReplaceID(env.feeBump().tx.innerTx.v1().tx.sourceAccount);
-        addSignerAndReplaceID(env.feeBump().tx.feeSource);
         break;
     default:
         throw std::runtime_error("Unknown envelope type");
@@ -168,12 +166,14 @@ ApplyTransactionsWork::mutateOperations(TransactionEnvelope& env,
                                         std::set<SecretKey>& keys, uint32_t n)
 {
     auto& ops = txbridge::getOperations(env);
+    auto const& sigs = txbridge::getSignaturesInner(env);
+
     for (auto& op : ops)
     {
         // Add signer keys where needed before simulating the operation
         if (op.sourceAccount)
         {
-            addSignerKeys(*op.sourceAccount, ltx, keys, env, n);
+            addSignerKeys(*op.sourceAccount, ltx, keys, sigs, n);
         }
 
         // Prior to protocol 10, it is possible that we might have just added a
@@ -184,7 +184,7 @@ ApplyTransactionsWork::mutateOperations(TransactionEnvelope& env,
             if (signer.key.type() == SIGNER_KEY_TYPE_ED25519)
             {
                 auto signerKey = KeyUtils::convertKey<PublicKey>(signer.key);
-                if (hasSig(signerKey, env, mResultIter->transactionHash))
+                if (hasSig(signerKey, sigs, mResultIter->transactionHash))
                 {
                     keys.emplace(SimulationUtils::getNewSecret(signerKey, n));
                 }
@@ -222,15 +222,35 @@ ApplyTransactionsWork::scaleLedger(
     mutateTxSourceAccounts(newEnv, ltx, keys, n);
     mutateOperations(newEnv, ltx, keys, n);
 
-    // Add proper signatures, and setup results (for later verification)
-    auto& signatures = txbridge::getSignatures(newEnv);
-    signatures.clear();
-    auto txFrame = TransactionFrameBase::makeTransactionFromWire(
-        mApp.getNetworkID(), newEnv);
-    auto newTxHash = txFrame->getContentsHash();
-    std::transform(
-        keys.begin(), keys.end(), std::back_inserter(signatures),
-        [&](SecretKey const& k) { return SignatureUtils::sign(k, newTxHash); });
+    Hash newTxHash;
+
+    auto simulateSigs = [&](xdr::xvector<DecoratedSignature, 20>& sigs,
+                            std::set<SecretKey> const& keys) {
+        auto txFrame = TransactionFrameBase::makeTransactionFromWire(
+            mApp.getNetworkID(), newEnv);
+        newTxHash = txFrame->getContentsHash();
+        sigs.clear();
+        std::transform(keys.begin(), keys.end(), std::back_inserter(sigs),
+                       [&](SecretKey const& k) {
+                           return SignatureUtils::sign(k, newTxHash);
+                       });
+    };
+
+    // Handle v0 and v1 tx signatures, or fee-bump inner tx
+    // Note: for fee-bump transactions, set inner tx signatures first
+    // to ensure the right hash
+    simulateSigs(txbridge::getSignaturesInner(newEnv), keys);
+
+    // Second, if fee-bump tx, handle outer tx signatures
+    if (newEnv.type() == ENVELOPE_TYPE_TX_FEE_BUMP)
+    {
+        std::set<SecretKey> outerTxKeys;
+        auto& outerSigs = newEnv.feeBump().signatures;
+        addSignerKeys(newEnv.feeBump().tx.feeSource, ltx, outerTxKeys,
+                      outerSigs, n);
+        SimulationUtils::updateAccountID(newEnv.feeBump().tx.feeSource, n);
+        simulateSigs(outerSigs, outerTxKeys);
+    }
 
     // These are not exactly accurate, but sufficient to check result codes
     auto newRes = *mResultIter;
