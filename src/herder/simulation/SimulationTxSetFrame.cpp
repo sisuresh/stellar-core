@@ -4,6 +4,8 @@
 
 #include "herder/simulation/SimulationTxSetFrame.h"
 #include "crypto/SHA.h"
+#include "transactions/TransactionBridge.h"
+#include "transactions/simulation/SimulationFeeBumpTransactionFrame.h"
 #include "transactions/simulation/SimulationTransactionFrame.h"
 #include "xdrpp/marshal.h"
 #include <numeric>
@@ -63,9 +65,13 @@ size_t
 SimulationTxSetFrame::sizeOp() const
 {
     return std::accumulate(mTransactions.begin(), mTransactions.end(),
-                           size_t(0),
-                           [](size_t a, TransactionEnvelope const& txEnv) {
-                               return a + txEnv.v0().tx.operations.size();
+                           size_t(0), [](size_t a, TransactionEnvelope txEnv) {
+                               auto ops = txbridge::getOperations(txEnv).size();
+                               if (txEnv.type() == ENVELOPE_TYPE_TX_FEE_BUMP)
+                               {
+                                   ++ops;
+                               }
+                               return a + ops;
                            });
 }
 
@@ -79,8 +85,23 @@ SimulationTxSetFrame::sortForApply()
     uint32_t count = 0;
     for (auto const& txEnv : mTransactions)
     {
-        res.emplace_back(SimulationTransactionFrame::makeTransactionFromWire(
-            mNetworkID, txEnv, resultIter->result, count));
+        TransactionFrameBasePtr txFrame;
+        switch (txEnv.type())
+        {
+        case ENVELOPE_TYPE_TX_V0:
+        case ENVELOPE_TYPE_TX:
+            txFrame = std::make_shared<SimulationTransactionFrame>(
+                mNetworkID, txEnv, resultIter->result, count);
+            break;
+        case ENVELOPE_TYPE_TX_FEE_BUMP:
+            txFrame = std::make_shared<SimulationFeeBumpTransactionFrame>(
+                mNetworkID, txEnv, resultIter->result, count);
+            break;
+        default:
+            abort();
+        }
+
+        res.emplace_back(txFrame);
         ++resultIter;
         // Transaction generation guarantees that the number of transactions in
         // a simulated ledger is divisible by mMultiplier. Because of this,
