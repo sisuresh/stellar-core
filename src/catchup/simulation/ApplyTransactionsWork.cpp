@@ -247,10 +247,22 @@ ApplyTransactionsWork::scaleLedger(
     auto newRes = *mResultIter;
     newRes.transactionHash = newTxHash;
 
-    results.emplace_back(newRes);
-    transactions.emplace_back(newEnv);
+    auto originalEnv = *mTransactionIter;
+    processSimulatedTx(ltx, newRes, originalEnv, newEnv, transactions, results,
+                       n);
 
     return txbridge::getOperations(newEnv).size();
+}
+
+void
+ApplyTransactionsWork::processSimulatedTx(
+    AbstractLedgerTxn& ltx, TransactionResultPair const& txResPair,
+    TransactionEnvelope& originalEnv, TransactionEnvelope& simulatedEnv,
+    std::vector<TransactionEnvelope>& transactions,
+    std::vector<TransactionResultPair>& results, uint32_t n)
+{
+    results.emplace_back(txResPair);
+    transactions.emplace_back(simulatedEnv);
 }
 
 bool

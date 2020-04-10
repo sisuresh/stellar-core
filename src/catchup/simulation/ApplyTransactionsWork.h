@@ -59,6 +59,12 @@ class ApplyTransactionsWork : public BasicWork
                           bool verifyResults);
 
   protected:
+    virtual void processSimulatedTx(
+        AbstractLedgerTxn& ltx, TransactionResultPair const& txResPair,
+        TransactionEnvelope& originalEnv, TransactionEnvelope& simulatedEnv,
+        std::vector<TransactionEnvelope>& transactions,
+        std::vector<TransactionResultPair>& results, uint32_t n);
+
     void onReset() override;
     State onRun() override;
     bool onAbort() override;
