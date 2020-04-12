@@ -18,7 +18,7 @@
 #include "util/optional.h"
 #include "util/types.h"
 
-#include "catchup/simulation/ApplyTransactionsWork.h"
+#include "catchup/simulation/MaintainLiabilitiesTestWork.h"
 #include "catchup/simulation/SimulateApplyBucketsWork.h"
 #include "catchup/simulation/SimulationTestMode.h"
 #include "historywork/BatchDownloadWork.h"
@@ -976,8 +976,33 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
                                                "simulated bucketlist");
     };
 
+    // todo: This was copied from runSimulateBucketList. Fix this to share code
+    auto mode = SimulationTestMode::Normal;
+    std::string modeArg = "normal";
+    auto validateMode = [&] {
+        if (iequals(modeArg, "normal"))
+        {
+            mode = SimulationTestMode::Normal;
+            return "";
+        }
+
+        if (iequals(modeArg, "maintainLiabilities"))
+        {
+            mode = SimulationTestMode::MaintainLiabilities;
+            return "";
+        }
+
+        return "Unrecognized simulation test mode. Please select a valid mode.";
+    };
+
+    ParserWithValidation modeParser{
+        clara::Opt{modeArg, "MODE"}["--mode"](
+            "set the simulation mode. Expected modes: normal, "
+            "maintainLiabilities. Defaults to normal."),
+        validateMode};
+
     std::vector<ParserWithValidation> parsers = {
-        configurationParser(configOption), firstLedgerParser,
+        configurationParser(configOption), firstLedgerParser, modeParser,
         clara::Opt{verifyResults}["--verify"](
             "check results after application and log inconsistencies"),
         clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
@@ -1030,9 +1055,16 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
             *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
         auto downloadResults = std::make_shared<BatchDownloadWork>(
             *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
-        auto apply = std::make_shared<ApplyTransactionsWork>(
-            *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE, opsPerLedger,
-            multiplier, verifyResults);
+
+        auto apply =
+            mode == SimulationTestMode::Normal
+                ? std::make_shared<ApplyTransactionsWork>(
+                      *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
+                      opsPerLedger, multiplier, verifyResults)
+                : std::make_shared<MaintainLiabilitiesTestWork>(
+                      *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
+                      opsPerLedger, multiplier, verifyResults);
+
         std::vector<std::shared_ptr<BasicWork>> seq{
             downloadLedgers, downloadTransactions, downloadResults, apply};
 
