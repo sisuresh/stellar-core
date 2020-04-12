@@ -16,6 +16,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/SimulationUtils.h"
 #include "util/format.h"
+#include "xdrpp/printer.h"
 
 namespace stellar
 {
@@ -52,6 +53,108 @@ ApplyTransactionsWork::ApplyTransactionsWork(
 }
 
 static void
+checkOperationResults(xdr::xvector<OperationResult> const& expected,
+                      xdr::xvector<OperationResult> const& actual)
+{
+    assert(expected.size() == actual.size());
+    for (size_t i = 0; i < expected.size(); i++)
+    {
+        if (expected[i].code() != actual[i].code())
+        {
+            CLOG(ERROR, "History")
+                << fmt::format("Expected operation result {} but got {}",
+                               xdr::xdr_to_string(expected[i].code()),
+                               xdr::xdr_to_string(actual[i].code()));
+            continue;
+        }
+
+        if (expected[i].code() != opINNER)
+        {
+            continue;
+        }
+
+        auto const& expectedOpRes = expected[i].tr();
+        auto const& actualOpRes = actual[i].tr();
+
+        assert(expectedOpRes.type() == actualOpRes.type());
+
+        auto check = [&](int expectedCode, int actualCode) {
+            auto success = expectedCode >= 0 && actualCode >= 0;
+            auto fail = expectedCode < 0 && actualCode < 0;
+            return success || fail;
+        };
+
+        bool match = false;
+        switch (expectedOpRes.type())
+        {
+        case CREATE_ACCOUNT:
+            match = check(actualOpRes.createAccountResult().code(),
+                          expectedOpRes.createAccountResult().code());
+            break;
+        case PAYMENT:
+            match = check(actualOpRes.paymentResult().code(),
+                          expectedOpRes.paymentResult().code());
+            break;
+        case PATH_PAYMENT_STRICT_RECEIVE:
+            match =
+                check(actualOpRes.pathPaymentStrictReceiveResult().code(),
+                      expectedOpRes.pathPaymentStrictReceiveResult().code());
+            break;
+        case PATH_PAYMENT_STRICT_SEND:
+            match = check(actualOpRes.pathPaymentStrictSendResult().code(),
+                          expectedOpRes.pathPaymentStrictSendResult().code());
+            break;
+        case MANAGE_SELL_OFFER:
+            match = check(actualOpRes.manageSellOfferResult().code(),
+                          expectedOpRes.manageSellOfferResult().code());
+            break;
+        case MANAGE_BUY_OFFER:
+            match = check(actualOpRes.manageBuyOfferResult().code(),
+                          expectedOpRes.manageBuyOfferResult().code());
+            break;
+        case CREATE_PASSIVE_SELL_OFFER:
+            match = check(actualOpRes.createPassiveSellOfferResult().code(),
+                          expectedOpRes.createPassiveSellOfferResult().code());
+            break;
+        case SET_OPTIONS:
+            match = check(actualOpRes.setOptionsResult().code(),
+                          expectedOpRes.setOptionsResult().code());
+            break;
+        case CHANGE_TRUST:
+            match = check(actualOpRes.changeTrustResult().code(),
+                          expectedOpRes.changeTrustResult().code());
+            break;
+        case ALLOW_TRUST:
+            match = check(actualOpRes.allowTrustResult().code(),
+                          expectedOpRes.allowTrustResult().code());
+            break;
+        case ACCOUNT_MERGE:
+            match = check(actualOpRes.accountMergeResult().code(),
+                          expectedOpRes.accountMergeResult().code());
+            break;
+        case MANAGE_DATA:
+            match = check(actualOpRes.manageDataResult().code(),
+                          expectedOpRes.manageDataResult().code());
+            break;
+        case INFLATION:
+        case BUMP_SEQUENCE:
+            break;
+        default:
+            throw std::runtime_error("Unknown operation type");
+        }
+
+        if (!match)
+        {
+            CLOG(ERROR, "History")
+                << fmt::format("Expected operation result: {}",
+                               xdr::xdr_to_string(expectedOpRes));
+            CLOG(ERROR, "History") << fmt::format(
+                "Actual operation result: {}", xdr::xdr_to_string(actualOpRes));
+        }
+    }
+}
+
+static void
 checkResults(Application& app, uint32_t ledger,
              std::vector<TransactionResultPair> const& results)
 {
@@ -60,17 +163,46 @@ checkResults(Application& app, uint32_t ledger,
     assert(resSet.results.size() == results.size());
     for (size_t i = 0; i < results.size(); i++)
     {
-        auto const& res = results[i];
-        assert(res.transactionHash == resSet.results[i].transactionHash);
+        assert(results[i].transactionHash == resSet.results[i].transactionHash);
 
-        auto const& dbRes = resSet.results[i].result;
-        if (dbRes.result.code() != res.result.result.code())
+        auto const& dbRes = resSet.results[i].result.result;
+        auto const& archiveRes = results[i].result.result;
+
+        if (dbRes.code() != archiveRes.code())
         {
-            auto msg = fmt::format(
+            CLOG(ERROR, "History") << fmt::format(
                 "Expected result code {} does not agree with {} for tx {}",
-                res.result.result.code(), dbRes.result.code(),
-                binToHex(res.transactionHash));
-            CLOG(ERROR, "History") << msg;
+                xdr::xdr_to_string(archiveRes.code()),
+                xdr::xdr_to_string(dbRes.code()),
+                binToHex(results[i].transactionHash));
+        }
+        else if (dbRes.code() == txFEE_BUMP_INNER_FAILED ||
+                 dbRes.code() == txFEE_BUMP_INNER_SUCCESS)
+        {
+
+            if (dbRes.innerResultPair().result.result.code() !=
+                archiveRes.innerResultPair().result.result.code())
+            {
+                CLOG(ERROR, "History") << fmt::format(
+                    "Expected result code {} does not agree with {} for "
+                    "fee-bump inner tx {}",
+                    xdr::xdr_to_string(
+                        archiveRes.innerResultPair().result.result.code()),
+                    xdr::xdr_to_string(
+                        dbRes.innerResultPair().result.result.code()),
+                    binToHex(archiveRes.innerResultPair().transactionHash));
+            }
+            else if (dbRes.innerResultPair().result.result.code() == txFAILED ||
+                     dbRes.innerResultPair().result.result.code() == txSUCCESS)
+            {
+                checkOperationResults(
+                    archiveRes.innerResultPair().result.result.results(),
+                    dbRes.innerResultPair().result.result.results());
+            }
+        }
+        else if (dbRes.code() == txFAILED || dbRes.code() == txSUCCESS)
+        {
+            checkOperationResults(archiveRes.results(), dbRes.results());
         }
     }
 }
