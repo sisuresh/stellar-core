@@ -44,10 +44,13 @@ getNewOfferID(OperationResult const& result, uint32_t n)
 {
     if (result.code() != opINNER)
     {
-        // This will set internal error during apply
+        // This will produce txINTERNAL_ERROR on apply
         throw std::runtime_error("getNewOfferID: invalid OperationResult");
     }
 
+    // Note: assume here operation passed. If it did not, simulated transaction
+    // will fail with a txINTERNAL_ERROR (whereas op in production failed with
+    // some other code)
     int64_t offerID;
     switch (result.tr().type())
     {
