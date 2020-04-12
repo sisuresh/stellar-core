@@ -16,6 +16,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/SimulationUtils.h"
 #include "util/format.h"
+#include "xdrpp/printer.h"
 
 namespace stellar
 {
@@ -63,14 +64,125 @@ checkResults(Application& app, uint32_t ledger,
         auto const& res = results[i];
         assert(res.transactionHash == resSet.results[i].transactionHash);
 
-        auto const& dbRes = resSet.results[i].result;
-        if (dbRes.result.code() != res.result.result.code())
+        auto const& dbRes = resSet.results[i].result.result;
+        if (dbRes.code() != res.result.result.code())
         {
             auto msg = fmt::format(
                 "Expected result code {} does not agree with {} for tx {}",
-                res.result.result.code(), dbRes.result.code(),
+                res.result.result.code(), dbRes.code(),
                 binToHex(res.transactionHash));
             CLOG(ERROR, "History") << msg;
+            return;
+        }
+
+        // Now check each operation result
+        auto const& archiveRes = results[i].result.result;
+
+        if (dbRes.code() == txFAILED || dbRes.code() == txSUCCESS)
+        {
+            assert(archiveRes.code() == txFAILED ||
+                   archiveRes.code() == txSUCCESS);
+            assert(archiveRes.results().size() == dbRes.results().size());
+
+            for (size_t j = 0; j < archiveRes.results().size(); j++)
+            {
+                if (archiveRes.results()[j].code() != dbRes.results()[j].code())
+                {
+                    throw std::runtime_error(
+                        fmt::format("Expected {} but got {}",
+                                    archiveRes.results()[j].code(),
+                                    dbRes.results()[j].code()));
+                }
+
+                if (archiveRes.results()[j].code() != opINNER)
+                {
+                    continue;
+                }
+
+                // Otherwise, compare each operation
+                auto archiveOpRes = archiveRes.results()[j].tr();
+                auto dbOpRes = dbRes.results()[j].tr();
+
+                bool match = false;
+                std::string type = xdr::xdr_to_string(archiveOpRes.type());
+                assert(archiveOpRes.type() == dbOpRes.type());
+
+                auto check = [&](int expected, int actual) {
+                    auto success = expected >= 0 && actual >= 0;
+                    auto fail = expected < 0 && actual < 0;
+                    return success || fail;
+                };
+
+                switch (archiveOpRes.type())
+                {
+                case CREATE_ACCOUNT:
+                    match = check(dbOpRes.createAccountResult().code(),
+                                  archiveOpRes.createAccountResult().code());
+                    break;
+                case PAYMENT:
+                    match = check(dbOpRes.paymentResult().code(),
+                                  archiveOpRes.paymentResult().code());
+                    break;
+                case PATH_PAYMENT_STRICT_RECEIVE:
+                    match = check(
+                        dbOpRes.pathPaymentStrictReceiveResult().code(),
+                        archiveOpRes.pathPaymentStrictReceiveResult().code());
+                    break;
+                case PATH_PAYMENT_STRICT_SEND:
+                    match = check(
+                        dbOpRes.pathPaymentStrictSendResult().code(),
+                        archiveOpRes.pathPaymentStrictSendResult().code());
+                    break;
+                case MANAGE_SELL_OFFER:
+                    match = check(dbOpRes.manageSellOfferResult().code(),
+                                  archiveOpRes.manageSellOfferResult().code());
+                    break;
+                case MANAGE_BUY_OFFER:
+                    match = check(dbOpRes.manageBuyOfferResult().code(),
+                                  archiveOpRes.manageBuyOfferResult().code());
+                    break;
+                case CREATE_PASSIVE_SELL_OFFER:
+                    match = check(
+                        dbOpRes.createPassiveSellOfferResult().code(),
+                        archiveOpRes.createPassiveSellOfferResult().code());
+                    break;
+                case SET_OPTIONS:
+                    match = check(dbOpRes.setOptionsResult().code(),
+                                  archiveOpRes.setOptionsResult().code());
+                    break;
+                case CHANGE_TRUST:
+                    match = check(dbOpRes.changeTrustResult().code(),
+                                  archiveOpRes.changeTrustResult().code());
+                    break;
+                case ALLOW_TRUST:
+                    match = check(dbOpRes.allowTrustResult().code(),
+                                  archiveOpRes.allowTrustResult().code());
+                    break;
+                case ACCOUNT_MERGE:
+                    match = check(dbOpRes.accountMergeResult().code(),
+                                  archiveOpRes.accountMergeResult().code());
+                    break;
+                case MANAGE_DATA:
+                    match = check(dbOpRes.manageDataResult().code(),
+                                  archiveOpRes.manageDataResult().code());
+                    break;
+                case INFLATION:
+                case BUMP_SEQUENCE:
+                    break;
+                default:
+                    throw std::runtime_error("Unknown operation type");
+                }
+
+                if (!match)
+                {
+                    CLOG(ERROR, "History")
+                        << fmt::format("Expected operation result: {}",
+                                       xdr::xdr_to_string(archiveOpRes));
+                    CLOG(ERROR, "History")
+                        << fmt::format("Actual operation result: {}",
+                                       xdr::xdr_to_string(dbOpRes));
+                }
+            }
         }
     }
 }
