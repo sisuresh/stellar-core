@@ -204,7 +204,9 @@ ApplyTransactionsWork::scaleLedger(
     assert(mResultIter != mResultHistory.txResultSet.results.cend());
 
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    auto const& env = *mTransactionIter;
+    auto const& env = mUpgradeProtocol
+                          ? txbridge::convertForV13(*mTransactionIter)
+                          : *mTransactionIter;
     TransactionEnvelope newEnv = env;
 
     // No mutation needed, simply return existing transactions and results
