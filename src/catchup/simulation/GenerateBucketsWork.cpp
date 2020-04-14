@@ -48,7 +48,7 @@ GenerateBucketsWork::getBucketAndUpdateHAS(Hash const& bucketHash, bool isCurr)
     {
         CLOG(INFO, "History") << "Simulating " << (isCurr ? "curr" : "snap")
                               << " bucketlist level: " << mLevel;
-        auto newBucket = generateNewBucket(bucket);
+        auto newBucket = generateNewBucket(bucket, isCurr);
         auto hash = binToHex(newBucket->getHash());
         CLOG(INFO, "History")
             << "Generated bucket: " << hexAbbrev(newBucket->getHash());
@@ -129,7 +129,8 @@ GenerateBucketsWork::getGeneratedHAS()
 }
 
 std::shared_ptr<Bucket>
-GenerateBucketsWork::generateNewBucket(std::shared_ptr<Bucket> const& bucket)
+GenerateBucketsWork::generateNewBucket(std::shared_ptr<Bucket> const& bucket,
+                                       bool isCurr)
 {
     std::vector<LedgerEntry> initEntries, liveEntries;
     std::vector<LedgerKey> deadEntries;
@@ -190,6 +191,17 @@ GenerateBucketsWork::generateNewBucket(std::shared_ptr<Bucket> const& bucket)
         newDeadEntries.clear();
     }
 
+    // Create bucket with injected entries
+    auto toInject = getEntriesToInject(mLevel, isCurr);
+    if (!toInject.empty())
+    {
+        auto injectionBucket = Bucket::fresh(
+            mApp.getBucketManager(), ledgerVersion, toInject, {}, {},
+            /* countMergeEvents */ false, mApp.getClock().getIOContext(),
+            /* doFsync */ false);
+        simulated.emplace_back(injectionBucket);
+    }
+
     std::vector<FutureBucket> fbs;
     // Check when all intermediate merges have completed: `simulated` has
     // reduced to a single bucket and there are no merges in-progress
@@ -235,5 +247,11 @@ GenerateBucketsWork::onSuccess()
 {
     // Persist HAS file to avoid re-generating same buckets
     getGeneratedHAS().save("simulate-" + HistoryArchiveState::baseName());
+}
+
+std::vector<LedgerEntry>
+GenerateBucketsWork::getEntriesToInject(uint32_t level, bool isCurr)
+{
+    return {};
 }
 }

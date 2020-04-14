@@ -37,7 +37,7 @@ class GenerateBucketsWork : public BasicWork
     std::shared_ptr<Bucket> mPrevSnap;
 
     std::shared_ptr<Bucket>
-    generateNewBucket(std::shared_ptr<Bucket> const& bucket);
+    generateNewBucket(std::shared_ptr<Bucket> const& bucket, bool isCurr);
     void setFutureBucket(std::shared_ptr<Bucket> const& curr);
     std::shared_ptr<Bucket> getBucketAndUpdateHAS(Hash const& bucketHash,
                                                   bool isCurr);
@@ -62,5 +62,8 @@ class GenerateBucketsWork : public BasicWork
     }
 
     void onSuccess() override;
+
+    virtual std::vector<LedgerEntry> getEntriesToInject(uint32_t level,
+                                                        bool isCurr);
 };
 }
