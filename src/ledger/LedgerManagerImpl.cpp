@@ -28,6 +28,8 @@
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionSQL.h"
 #include "transactions/TransactionUtils.h"
+
+#include "transactions/TransactionBridge.h"
 #include "util/GlobalChecks.h"
 #include "util/LogSlowExecution.h"
 #include "util/Logging.h"
@@ -879,6 +881,106 @@ LedgerManagerImpl::prefetchTransactionData(
     }
 }
 
+std::map<PublicKey, std::set<Asset>>
+getUsedTrustorToAssets(TransactionEnvelope& env, AbstractLedgerTxn& ltx)
+{
+    // Trustor -> Assets
+    std::map<PublicKey, std::set<Asset>> assetsAndAccounts;
+
+    auto txSourceAccount = txbridge::getTxSourceAccountInner(env);
+    auto& ops = txbridge::getOperations(env);
+    for (auto& op : ops)
+    {
+        auto opSourceAccount =
+            op.sourceAccount ? *op.sourceAccount : txSourceAccount;
+
+        auto recordTrustorAndAsset = [&](Asset const& asset,
+                                         AccountID const& trustor) {
+
+            AccountID issuer;
+            switch (asset.type())
+            {
+            case ASSET_TYPE_CREDIT_ALPHANUM4:
+                issuer = asset.alphaNum4().issuer;
+                break;
+            case ASSET_TYPE_CREDIT_ALPHANUM12:
+                issuer = asset.alphaNum12().issuer;
+                break;
+            case ASSET_TYPE_NATIVE:
+                return;
+            default:
+                abort();
+            }
+
+            if (issuer == trustor)
+            {
+                return;
+            }
+
+            assetsAndAccounts[trustor].emplace(asset);
+        };
+
+        switch (op.body.type())
+        {
+        case PAYMENT:
+            recordTrustorAndAsset(op.body.paymentOp().asset,
+                                  op.body.paymentOp().destination);
+            recordTrustorAndAsset(op.body.paymentOp().asset, opSourceAccount);
+
+            break;
+        case PATH_PAYMENT_STRICT_RECEIVE:
+            recordTrustorAndAsset(
+                op.body.pathPaymentStrictReceiveOp().destAsset,
+                op.body.pathPaymentStrictReceiveOp().destination);
+            recordTrustorAndAsset(
+                op.body.pathPaymentStrictReceiveOp().sendAsset,
+                opSourceAccount);
+
+            // todo:Is it alright to ignore the trustlines along the path? Path
+            // only specifies the asset path
+            break;
+        case PATH_PAYMENT_STRICT_SEND:
+            recordTrustorAndAsset(
+                op.body.pathPaymentStrictSendOp().destAsset,
+                op.body.pathPaymentStrictSendOp().destination);
+            recordTrustorAndAsset(op.body.pathPaymentStrictSendOp().sendAsset,
+                                  opSourceAccount);
+            break;
+        case MANAGE_SELL_OFFER:
+            recordTrustorAndAsset(op.body.manageSellOfferOp().selling,
+                                  opSourceAccount);
+            recordTrustorAndAsset(op.body.manageSellOfferOp().buying,
+                                  opSourceAccount);
+            break;
+        case CREATE_PASSIVE_SELL_OFFER:
+            recordTrustorAndAsset(op.body.createPassiveSellOfferOp().selling,
+                                  opSourceAccount);
+            recordTrustorAndAsset(op.body.createPassiveSellOfferOp().buying,
+                                  opSourceAccount);
+            break;
+        case MANAGE_BUY_OFFER:
+            recordTrustorAndAsset(op.body.manageBuyOfferOp().selling,
+                                  opSourceAccount);
+            recordTrustorAndAsset(op.body.manageBuyOfferOp().buying,
+                                  opSourceAccount);
+            break;
+        case CREATE_ACCOUNT:
+        case SET_OPTIONS:
+        case CHANGE_TRUST:
+        case ALLOW_TRUST:
+        case ACCOUNT_MERGE:
+        case INFLATION:
+        case MANAGE_DATA:
+        case BUMP_SEQUENCE:
+            break;
+        default:
+            abort();
+        }
+    }
+
+    return assetsAndAccounts;
+}
+
 void
 LedgerManagerImpl::applyTransactions(
     std::vector<TransactionFrameBasePtr>& txs, AbstractLedgerTxn& ltx,
@@ -908,6 +1010,43 @@ LedgerManagerImpl::applyTransactions(
 
     for (auto tx : txs)
     {
+        auto env = tx->getEnvelope();
+        auto const& trustorToAssets = getUsedTrustorToAssets(env, ltx);
+
+        auto updateTrustLine = [&](TrustLineFlags flag) {
+            for (auto const& trustorToAsset : trustorToAssets)
+            {
+                if (ltx.loadHeader().current().ledgerVersion != 13)
+                {
+                    throw std::runtime_error("expect to be at ledger 13 here");
+                }
+
+                auto const& trustorAccount = trustorToAsset.first;
+                auto const& assets = trustorToAsset.second;
+
+                for (auto const& asset : assets)
+                {
+                    LedgerKey key(TRUSTLINE);
+                    key.trustLine().accountID = trustorAccount;
+                    key.trustLine().asset = asset;
+
+                    auto trustLineEntry = ltx.load(key);
+                    if (!trustLineEntry)
+                    {
+                        continue;
+                    }
+
+                    auto& tl = trustLineEntry.current().data.trustLine();
+                    if (tl.flags == 0)
+                    {
+                        continue;
+                    }
+
+                    tl.flags = flag;
+                }
+            }
+        };
+
         auto txTime = mTransactionApply.TimeScope();
         TransactionMeta tm(2);
         CLOG(DEBUG, "Tx") << " tx#" << index << " = "
@@ -916,6 +1055,8 @@ LedgerManagerImpl::applyTransactions(
                           << " txseq=" << tx->getSeqNum() << " (@ "
                           << mApp.getConfig().toShortString(tx->getSourceID())
                           << ")";
+        updateTrustLine(AUTHORIZED_FLAG);
+
         tx->apply(mApp, ltx, tm);
 
         TransactionResultPair results;
@@ -935,6 +1076,8 @@ LedgerManagerImpl::applyTransactions(
             trm.txApplyProcessing = tm;
             trm.result = results;
         }
+
+        updateTrustLine(AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG);
 
         // Then finally store the results and meta into the txhistory table.
         // if we're running in a mode that has one.

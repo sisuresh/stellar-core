@@ -24,6 +24,9 @@ xdr::xvector<Operation, MAX_OPS_PER_TX>&
 getOperations(TransactionEnvelope& env);
 
 #ifdef BUILD_TESTS
+
+AccountID getTxSourceAccountInner(TransactionEnvelope& env);
+
 xdr::xvector<DecoratedSignature, 20>& getSignatures(TransactionFramePtr tx);
 
 void setSeqNum(TransactionFramePtr tx, int64_t seq);
