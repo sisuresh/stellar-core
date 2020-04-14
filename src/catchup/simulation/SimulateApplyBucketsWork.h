@@ -42,12 +42,17 @@ class SimulateApplyBucketsWork : public Work
   public:
     SimulateApplyBucketsWork(
         Application& app, uint32_t multiplier, uint32_t ledger,
-        TmpDir const& mTmpDir,
+        TmpDir const& tmpDir,
         std::shared_ptr<HistoryArchiveState> has = nullptr);
     virtual ~SimulateApplyBucketsWork() = default;
 
   protected:
     BasicWork::State doWork() override;
     void doReset() override;
+
+    virtual std::shared_ptr<GenerateBucketsWork> makeGenerateBucketsWork(
+        Application& app,
+        std::map<std::string, std::shared_ptr<Bucket>>& generatedBuckets,
+        HistoryArchiveState const& has, uint32_t multiplier);
 };
 }
