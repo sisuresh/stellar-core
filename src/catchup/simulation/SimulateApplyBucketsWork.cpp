@@ -58,7 +58,7 @@ SimulateApplyBucketsWork::doWork()
 
             auto downloadBuckets = std::make_shared<DownloadBucketsWork>(
                 mApp, mCurrentBuckets, bucketHashes, mTmpDir);
-            mGenerateBucketsWork = std::make_shared<GenerateBucketsWork>(
+            mGenerateBucketsWork = makeGenerateBucketsWork(
                 mApp, mGeneratedBuckets, has, mMultiplier);
 
             std::vector<std::shared_ptr<BasicWork>> seq{downloadBuckets,
@@ -88,5 +88,15 @@ SimulateApplyBucketsWork::doReset()
     mApplyBuckets.reset();
     mCurrentBuckets.clear();
     mGeneratedBuckets.clear();
+}
+
+std::shared_ptr<GenerateBucketsWork>
+SimulateApplyBucketsWork::makeGenerateBucketsWork(
+    Application& app,
+    std::map<std::string, std::shared_ptr<Bucket>>& generatedBuckets,
+    HistoryArchiveState const& has, uint32_t multiplier)
+{
+    return std::make_shared<GenerateBucketsWork>(app, generatedBuckets, has,
+                                                 multiplier);
 }
 }
