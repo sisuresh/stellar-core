@@ -174,7 +174,16 @@ ApplyTransactionsWork::checkResults(
         auto const& dbRes = actualResults.results[i].result.result;
         auto const& archiveRes = expectedResults[i].result.result;
 
-        if (dbRes.code() != archiveRes.code())
+        if (!(dbRes == archiveRes))
+        {
+            CLOG(ERROR, "History") << fmt::format(
+                "StrictCheck - Expected result {} does "
+                "not agree with {} for tx {}",
+                xdr::xdr_to_string(archiveRes), xdr::xdr_to_string(dbRes),
+                binToHex(expectedResults[i].transactionHash));
+        }
+
+        /* if (dbRes.code() != archiveRes.code())
         {
             CLOG(ERROR, "History") << fmt::format(
                 "Expected result code {} does not agree with {} for tx {}",
@@ -209,7 +218,7 @@ ApplyTransactionsWork::checkResults(
         else if (dbRes.code() == txFAILED || dbRes.code() == txSUCCESS)
         {
             checkOperationResults(archiveRes.results(), dbRes.results());
-        }
+        } */
     }
 }
 
