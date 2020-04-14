@@ -86,6 +86,30 @@ getOperations(TransactionEnvelope& env)
 }
 
 #ifdef BUILD_TESTS
+
+AccountID
+getTxSourceAccountInner(TransactionEnvelope& env)
+{
+    switch (env.type())
+    {
+    case ENVELOPE_TYPE_TX_V0:
+    {
+        // Wrap raw Ed25519 key in an AccountID
+        AccountID acc;
+        acc.type(PUBLIC_KEY_TYPE_ED25519);
+        acc.ed25519() = env.v0().tx.sourceAccountEd25519;
+        return acc;
+    }
+    case ENVELOPE_TYPE_TX:
+        return env.v1().tx.sourceAccount;
+    case ENVELOPE_TYPE_TX_FEE_BUMP:
+        assert(env.feeBump().tx.innerTx.type() == ENVELOPE_TYPE_TX);
+        return env.feeBump().tx.innerTx.v1().tx.sourceAccount;
+    default:
+        throw std::runtime_error("Unknown envelope type");
+    }
+}
+
 xdr::xvector<DecoratedSignature, 20>&
 getSignatures(TransactionFramePtr tx)
 {
