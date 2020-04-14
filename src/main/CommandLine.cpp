@@ -18,7 +18,9 @@
 #include "util/optional.h"
 #include "util/types.h"
 
+#include "catchup/simulation/ApplyTransactionsForFeeBumpValidationWork.h"
 #include "catchup/simulation/ApplyTransactionsWork.h"
+#include "catchup/simulation/SimulateApplyBucketsForFeeBumpValidationWork.h"
 #include "catchup/simulation/SimulateApplyBucketsWork.h"
 #include "historywork/BatchDownloadWork.h"
 #include "work/WorkScheduler.h"
@@ -945,6 +947,7 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
     // Default to no simulated transactions, just real data
     uint32_t multiplier = 1;
     bool verifyResults = false;
+    std::string feeBumpValidationSeed;
 
     auto validateFirstLedger = [&] {
         if (firstLedgerInclusive == 0)
@@ -977,13 +980,16 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
     };
 
     std::vector<ParserWithValidation> parsers = {
-        configurationParser(configOption), firstLedgerParser,
+        configurationParser(configOption),
+        firstLedgerParser,
         clara::Opt{upgrade}["--upgrade"](
             "upgrade to latest known protocol version"),
         clara::Opt{verifyResults}["--verify"](
             "check results after application and log inconsistencies"),
         clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
-            "last ledger to read from history archive")};
+            "last ledger to read from history archive"),
+        clara::Opt{feeBumpValidationSeed, "SEED"}["--fee-bump-validation-seed"](
+            "apply transactions for fee-bump validation")};
 
     // Allow passing multiplier during transaction generation, ops-per-ledger
     // during simulation
@@ -1037,9 +1043,22 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
             *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
         auto downloadResults = std::make_shared<BatchDownloadWork>(
             *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
-        auto apply = std::make_shared<ApplyTransactionsWork>(
-            *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE, opsPerLedger,
-            upgrade, multiplier, verifyResults);
+
+        std::shared_ptr<ApplyTransactionsWork> apply;
+        if (feeBumpValidationSeed.empty())
+        {
+            apply = std::make_shared<ApplyTransactionsWork>(
+                *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
+                opsPerLedger, upgrade, multiplier, verifyResults);
+        }
+        else
+        {
+            auto secretKey = SecretKey::fromStrKeySeed(feeBumpValidationSeed);
+            apply = std::make_shared<ApplyTransactionsForFeeBumpValidationWork>(
+                *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
+                opsPerLedger, upgrade, multiplier, verifyResults, secretKey);
+        }
+
         std::vector<std::shared_ptr<BasicWork>> seq{
             downloadLedgers, downloadTransactions, downloadResults, apply};
 
@@ -1076,6 +1095,7 @@ runSimulateBuckets(CommandLineArgs const& args)
     uint32_t ledger = 0;
     uint32_t n = 2;
     std::string hasStr = "";
+    std::string feeBumpValidationSeed;
 
     ParserWithValidation ledgerParser{
         clara::Arg(ledger, "LEDGER").required(),
@@ -1086,7 +1106,10 @@ runSimulateBuckets(CommandLineArgs const& args)
         {configurationParser(configOption), ledgerParser,
          clara::Opt{n, "N"}["--multiplier"]("amplification factor"),
          clara::Opt{hasStr, "FILENAME"}["--history-archive-state"](
-             "skip directly to application if buckets already generated")},
+             "skip directly to application if buckets already generated"),
+         clara::Opt{feeBumpValidationSeed,
+                    "SEED"}["--fee-bump-validation-seed"](
+             "use this seed for fee-bump validation")},
         [&] {
             auto config = configOption.getConfig();
             config.setNoListen();
@@ -1111,8 +1134,20 @@ runSimulateBuckets(CommandLineArgs const& args)
             auto checkpoint =
                 app->getHistoryManager().checkpointContainingLedger(ledger);
 
-            auto simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
-                *app, n, checkpoint, dir, has);
+            std::shared_ptr<SimulateApplyBucketsWork> simulateBuckets;
+            if (feeBumpValidationSeed.empty())
+            {
+                simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
+                    *app, n, checkpoint, dir, has);
+            }
+            else
+            {
+                auto secretKey =
+                    SecretKey::fromStrKeySeed(feeBumpValidationSeed);
+                simulateBuckets = std::make_shared<
+                    SimulateApplyBucketsForFeeBumpValidationWork>(
+                    *app, n, checkpoint, dir, has, secretKey.getPublicKey());
+            }
 
             // Once simulated bucketlist is good to go, download ledgers headers
             // to convince LedgerManager that we have succesfully restored
