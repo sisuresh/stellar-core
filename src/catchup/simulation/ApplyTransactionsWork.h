@@ -64,5 +64,16 @@ class ApplyTransactionsWork : public BasicWork
     void onReset() override;
     State onRun() override;
     bool onAbort() override;
+
+    virtual void
+    mutateTransactions(std::vector<TransactionEnvelope>& transactions);
+
+    virtual void modifyLedgerBeforeClosing(
+        std::vector<TransactionEnvelope> const& transactions,
+        std::vector<TransactionResultPair> const& results);
+
+    virtual void checkResults(
+        Application& app, TransactionResultSet const& actualResults,
+        std::vector<TransactionResultPair> const& expectedResults) const;
 };
 }

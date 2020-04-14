@@ -6,6 +6,7 @@
 #include "crypto/Hex.h"
 #include "crypto/SignerKey.h"
 #include "herder/LedgerCloseData.h"
+#include "herder/simulation/ExactSimulationTxSetFrame.h"
 #include "herder/simulation/SimulationTxSetFrame.h"
 #include "ledger/LedgerManagerImpl.h"
 #include "ledger/LedgerRange.h"
@@ -159,19 +160,19 @@ checkOperationResults(xdr::xvector<OperationResult> const& expected,
     }
 }
 
-static void
-checkResults(Application& app, uint32_t ledger,
-             std::vector<TransactionResultPair> const& results)
+void
+ApplyTransactionsWork::checkResults(
+    Application& app, TransactionResultSet const& actualResults,
+    std::vector<TransactionResultPair> const& expectedResults) const
 {
-    auto resSet = getTransactionHistoryResults(app.getDatabase(), ledger);
-
-    assert(resSet.results.size() == results.size());
-    for (size_t i = 0; i < results.size(); i++)
+    assert(actualResults.results.size() == expectedResults.size());
+    for (size_t i = 0; i < expectedResults.size(); i++)
     {
-        assert(results[i].transactionHash == resSet.results[i].transactionHash);
+        assert(actualResults.results[i].transactionHash ==
+               expectedResults[i].transactionHash);
 
-        auto const& dbRes = resSet.results[i].result.result;
-        auto const& archiveRes = results[i].result.result;
+        auto const& dbRes = actualResults.results[i].result.result;
+        auto const& archiveRes = expectedResults[i].result.result;
 
         if (dbRes.code() != archiveRes.code())
         {
@@ -179,7 +180,7 @@ checkResults(Application& app, uint32_t ledger,
                 "Expected result code {} does not agree with {} for tx {}",
                 xdr::xdr_to_string(archiveRes.code()),
                 xdr::xdr_to_string(dbRes.code()),
-                binToHex(results[i].transactionHash));
+                binToHex(expectedResults[i].transactionHash));
         }
         else if (dbRes.code() == txFEE_BUMP_INNER_FAILED ||
                  dbRes.code() == txFEE_BUMP_INNER_SUCCESS)
@@ -467,12 +468,12 @@ ApplyTransactionsWork::getNextLedger(
         if (mTransactionIter != mTransactionHistory.txSet.txs.cend() ||
             mMaxOperations == 0)
         {
-            return true;
+            break;
         }
 
         if (!getNextLedgerFromHistoryArchive())
         {
-            return true;
+            break;
         }
 
         upgrades = mHeaderHistory.header.scpValue.upgrades;
@@ -487,19 +488,17 @@ ApplyTransactionsWork::getNextLedger(
             upgrades.end());
         if (!upgrades.empty())
         {
-            return true;
+            break;
         }
     }
+
+    mutateTransactions(transactions);
+    return true;
 }
 
 void
 ApplyTransactionsWork::onReset()
 {
-    // Upgrade max transaction set size if necessary
-    auto& lm = mApp.getLedgerManager();
-    auto const& lclHeader = lm.getLastClosedLedgerHeader();
-    auto const& header = lclHeader.header;
-
     // If ledgerVersion < 11 then we need to support at least mMaxOperations
     // transactions to guarantee we can support mMaxOperations operations no
     // matter how they are distributed (worst case one per transaction).
@@ -508,37 +507,16 @@ ApplyTransactionsWork::onReset()
     // operations.
     //
     // So we can do the same upgrade in both cases.
-    if (header.maxTxSetSize < mMaxOperations || mUpgradeProtocol)
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
+    auto header = ltx.loadHeader();
+    header.current().maxTxSetSize =
+        std::max(header.current().maxTxSetSize, mMaxOperations);
+    if (mUpgradeProtocol)
     {
-        StellarValue sv;
-        if (header.maxTxSetSize < mMaxOperations)
-        {
-            LedgerUpgrade upgrade(LEDGER_UPGRADE_MAX_TX_SET_SIZE);
-            upgrade.newMaxTxSetSize() = mMaxOperations;
-            auto opaqueUpgrade = xdr::xdr_to_opaque(upgrade);
-            sv.upgrades.emplace_back(opaqueUpgrade.begin(),
-                                     opaqueUpgrade.end());
-        }
-        if (mUpgradeProtocol)
-        {
-            LedgerUpgrade upgrade(LEDGER_UPGRADE_VERSION);
-            upgrade.newLedgerVersion() =
-                Config::CURRENT_LEDGER_PROTOCOL_VERSION;
-            auto opaqueUpgrade = xdr::xdr_to_opaque(upgrade);
-            sv.upgrades.emplace_back(opaqueUpgrade.begin(),
-                                     opaqueUpgrade.end());
-        }
-
-        TransactionSet txSetXDR;
-        txSetXDR.previousLedgerHash = lclHeader.hash;
-        auto txSet = std::make_shared<TxSetFrame>(mNetworkID, txSetXDR);
-
-        sv.txSetHash = txSet->getContentsHash();
-        sv.closeTime = header.scpValue.closeTime + 1;
-
-        LedgerCloseData closeData(header.ledgerSeq + 1, txSet, sv);
-        lm.closeLedger(closeData);
+        header.current().ledgerVersion =
+            Config::CURRENT_LEDGER_PROTOCOL_VERSION;
     }
+    ltx.commit();
 
     // Prepare the HistoryArchiveStream
     mStream = std::make_unique<HistoryArchiveStream>(mDownloadDir, mRange,
@@ -556,27 +534,47 @@ ApplyTransactionsWork::onRun()
         return State::WORK_SUCCESS;
     }
 
+    modifyLedgerBeforeClosing(transactions, results);
+
     auto& lm = mApp.getLedgerManager();
     auto const& lclHeader = lm.getLastClosedLedgerHeader();
     auto const& header = lclHeader.header;
 
-    // When creating SimulationTxSetFrame, we only want to use mMultiplier when
-    // generating transactions to handle offer creation (mapping created offer
-    // id to a simulated one). When simulating pre-generated transactions, we
-    // already have relevant offer ids in transaction results
-    auto txSet = std::make_shared<SimulationTxSetFrame>(
-        mNetworkID, lclHeader.hash, transactions, results, mMultiplier);
-
     StellarValue sv;
+    std::shared_ptr<AbstractTxSetFrameForApply> txSet;
+    if (mMultiplier == 1 && mMaxOperations == 0)
+    {
+        TransactionSet txSetXDR;
+        txSetXDR.previousLedgerHash = lclHeader.hash;
+        txSetXDR.txs.insert(txSetXDR.txs.begin(), transactions.begin(),
+                            transactions.end());
+        txSet =
+            std::make_shared<ExactSimulationTxSetFrame>(mNetworkID, txSetXDR);
+
+        sv.closeTime = mHeaderHistory.header.scpValue.closeTime;
+    }
+    else
+    {
+        // When creating SimulationTxSetFrame, we only want to use mMultiplier
+        // when generating transactions to handle offer creation (mapping
+        // created offer id to a simulated one). When simulating pre-generated
+        // transactions, we already have relevant offer ids in transaction
+        // results
+        txSet = std::make_shared<SimulationTxSetFrame>(
+            mNetworkID, lclHeader.hash, transactions, results, mMultiplier);
+
+        sv.closeTime = header.scpValue.closeTime + 1;
+    }
     sv.txSetHash = txSet->getContentsHash();
-    sv.closeTime = header.scpValue.closeTime + 1;
     sv.upgrades.insert(sv.upgrades.begin(), upgrades.begin(), upgrades.end());
 
     LedgerCloseData closeData(header.ledgerSeq + 1, txSet, sv);
     lm.closeLedger(closeData);
     if (mVerifyResults)
     {
-        checkResults(mApp, header.ledgerSeq, results);
+        auto actualResults =
+            getTransactionHistoryResults(mApp.getDatabase(), header.ledgerSeq);
+        checkResults(mApp, actualResults, results);
     }
     return State::WORK_RUNNING;
 }
@@ -585,5 +583,18 @@ bool
 ApplyTransactionsWork::onAbort()
 {
     return true;
+}
+
+void
+ApplyTransactionsWork::mutateTransactions(
+    std::vector<TransactionEnvelope>& transactions)
+{
+}
+
+void
+ApplyTransactionsWork::modifyLedgerBeforeClosing(
+    std::vector<TransactionEnvelope> const& transactions,
+    std::vector<TransactionResultPair> const& results)
+{
 }
 }
