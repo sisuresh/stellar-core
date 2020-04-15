@@ -137,7 +137,12 @@ checkOperationResults(xdr::xvector<OperationResult> const& expected,
                           expectedOpRes.manageDataResult().code());
             break;
         case INFLATION:
+            match = check(actualOpRes.inflationResult().code(),
+                          expectedOpRes.inflationResult().code());
+            break;
         case BUMP_SEQUENCE:
+            match = check(actualOpRes.bumpSeqResult().code(),
+                          expectedOpRes.bumpSeqResult().code());
             break;
         default:
             throw std::runtime_error("Unknown operation type");
