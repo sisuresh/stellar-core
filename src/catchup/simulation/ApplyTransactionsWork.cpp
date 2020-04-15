@@ -331,7 +331,6 @@ ApplyTransactionsWork::scaleLedger(
     assert(mTransactionIter != mTransactionHistory.txSet.txs.cend());
     assert(mResultIter != mResultHistory.txResultSet.results.cend());
 
-    LedgerTxn ltx(mApp.getLedgerTxnRoot());
     auto const& env = mUpgradeProtocol
                           ? txbridge::convertForV13(*mTransactionIter)
                           : *mTransactionIter;
@@ -349,6 +348,7 @@ ApplyTransactionsWork::scaleLedger(
     std::set<SecretKey> keys;
 
     // First, update transaction source accounts
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
     mutateTxSourceAccounts(newEnv, ltx, keys, n);
     mutateOperations(newEnv, ltx, keys, n);
 
