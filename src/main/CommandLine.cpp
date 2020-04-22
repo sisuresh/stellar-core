@@ -20,7 +20,6 @@
 
 #include "catchup/simulation/ApplyTransactionsForFeeBumpValidationWork.h"
 #include "catchup/simulation/ApplyTransactionsWork.h"
-#include "catchup/simulation/SimulateApplyBucketsForFeeBumpValidationWork.h"
 #include "catchup/simulation/SimulateApplyBucketsWork.h"
 #include "historywork/BatchDownloadWork.h"
 #include "work/WorkScheduler.h"
@@ -1090,7 +1089,6 @@ runSimulateBuckets(CommandLineArgs const& args)
     uint32_t ledger = 0;
     uint32_t n = 2;
     std::string hasStr = "";
-    std::string feeBumpValidationSeed;
 
     ParserWithValidation ledgerParser{
         clara::Arg(ledger, "LEDGER").required(),
@@ -1101,10 +1099,7 @@ runSimulateBuckets(CommandLineArgs const& args)
         {configurationParser(configOption), ledgerParser,
          clara::Opt{n, "N"}["--multiplier"]("amplification factor"),
          clara::Opt{hasStr, "FILENAME"}["--history-archive-state"](
-             "skip directly to application if buckets already generated"),
-         clara::Opt{feeBumpValidationSeed,
-                    "SEED"}["--fee-bump-validation-seed"](
-             "use this seed for fee-bump validation")},
+             "skip directly to application if buckets already generated")},
         [&] {
             auto config = configOption.getConfig();
             config.setNoListen();
@@ -1129,20 +1124,8 @@ runSimulateBuckets(CommandLineArgs const& args)
             auto checkpoint =
                 app->getHistoryManager().checkpointContainingLedger(ledger);
 
-            std::shared_ptr<SimulateApplyBucketsWork> simulateBuckets;
-            if (feeBumpValidationSeed.empty())
-            {
-                simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
-                    *app, n, checkpoint, dir, has);
-            }
-            else
-            {
-                auto secretKey =
-                    SecretKey::fromStrKeySeed(feeBumpValidationSeed);
-                simulateBuckets = std::make_shared<
-                    SimulateApplyBucketsForFeeBumpValidationWork>(
-                    *app, n, checkpoint, dir, has, secretKey.getPublicKey());
-            }
+            auto simulateBuckets = std::make_shared<SimulateApplyBucketsWork>(
+                *app, n, checkpoint, dir, has);
 
             // Once simulated bucketlist is good to go, download ledgers headers
             // to convince LedgerManager that we have succesfully restored

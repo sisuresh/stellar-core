@@ -3,6 +3,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "catchup/simulation/ApplyTransactionsForFeeBumpValidationWork.h"
+#include "ledger/LedgerManager.h"
 #include "transactions/SignatureUtils.h"
 #include "transactions/TransactionBridge.h"
 #include "transactions/TransactionUtils.h"
@@ -57,6 +58,21 @@ ApplyTransactionsForFeeBumpValidationWork::modifyLedgerBeforeClosing(
     std::vector<TransactionResultPair> const& results)
 {
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
+
+    auto srcAcc = stellar::loadAccount(ltx, mKey.getPublicKey());
+    if (!srcAcc)
+    {
+        LedgerEntry le;
+        le.data.type(ACCOUNT);
+        auto& acc = le.data.account();
+
+        acc.accountID = mKey.getPublicKey();
+        acc.balance = LedgerManager::GENESIS_LEDGER_TOTAL_COINS;
+        acc.seqNum = 1;
+        acc.thresholds[0] = 1;
+
+        ltx.create(le);
+    }
 
     assert(transactions.size() == results.size());
     for (size_t i = 0; i < results.size(); ++i)
