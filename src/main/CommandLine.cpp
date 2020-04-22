@@ -1015,11 +1015,6 @@ runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
             LOG(INFO) << "Publishing is disabled in `simulate` mode";
             config.setNoPublish();
         }
-        else if (found == config.HISTORY.end())
-        {
-            throw std::runtime_error("Must provide writable `simulate` archive "
-                                     "when generating transactions");
-        }
 
         VirtualClock clock(VirtualClock::REAL_TIME);
         auto app = Application::create(clock, config, false);
