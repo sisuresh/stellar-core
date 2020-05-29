@@ -104,6 +104,36 @@ enum AccountFlags
 // mask for all valid flags
 const MASK_ACCOUNT_FLAGS = 0x7;
 
+typedef AccountID* SponsorshipDescriptor;
+
+struct AccountEntryExtensionV2
+{
+    uint32 numSponsored;
+    uint32 numSponsoring;
+    SponsorshipDescriptor signerSponsoringIDs<20>;
+
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+struct AccountEntryExtensionV1
+{
+    Liabilities liabilities;
+
+    union switch (int v)
+    {
+    case 0:
+        void;
+    case 2:
+        AccountEntryExtensionV2 v2;
+    }
+    ext;
+};
+
 /* AccountEntry
 
     Main entry representing a user in Stellar. All transactions are
@@ -136,17 +166,7 @@ struct AccountEntry
     case 0:
         void;
     case 1:
-        struct
-        {
-            Liabilities liabilities;
-
-            union switch (int v)
-            {
-            case 0:
-                void;
-            }
-            ext;
-        } v1;
+        AccountEntryExtensionV1 v1;
     }
     ext;
 };
@@ -260,6 +280,18 @@ struct DataEntry
     ext;
 };
 
+struct LedgerEntryExtensionV1
+{
+    SponsorshipDescriptor sponsoringID;
+
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
 struct LedgerEntry
 {
     uint32 lastModifiedLedgerSeq; // ledger the LedgerEntry was last changed
@@ -282,9 +314,42 @@ struct LedgerEntry
     {
     case 0:
         void;
+    case 1:
+        LedgerEntryExtensionV1 v1;
     }
     ext;
 };
+
+union LedgerKey switch (LedgerEntryType type)
+{
+case ACCOUNT:
+    struct
+    {
+        AccountID accountID;
+    } account;
+
+case TRUSTLINE:
+    struct
+    {
+        AccountID accountID;
+        Asset asset;
+    } trustLine;
+
+case OFFER:
+    struct
+    {
+        AccountID sellerID;
+        int64 offerID;
+    } offer;
+
+case DATA:
+    struct
+    {
+        AccountID accountID;
+        string64 dataName;
+    } data;
+};
+
 
 // list of all envelope types used in the application
 // those are prefixes used when building signatures for
