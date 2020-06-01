@@ -734,7 +734,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
         if (success)
         {
-            if (ltxTx.loadHeader().current().ledgerVersion < 10)
+            uint32_t ledgerVersion = ltxTx.loadHeader().current().ledgerVersion;
+            if (ledgerVersion < 10)
             {
                 if (!signatureChecker.checkAllSignaturesUsed())
                 {
@@ -750,6 +751,19 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 removeOneTimeSignerFromAllSourceAccounts(ltxAfter);
                 newMeta.v2().txChangesAfter = ltxAfter.getChanges();
                 ltxAfter.commit();
+            }
+            else if (ledgerVersion >= 14)
+            {
+                auto delta = ltxTx.getDelta();
+                for (auto const& kv : delta.entry)
+                {
+                    auto glk = kv.first;
+                    if (glk.type() == GeneralizedLedgerEntryType::SPONSORSHIP)
+                    {
+                        getResult().result.code(txBAD_SPONSORSHIP);
+                        return false;
+                    }
+                }
             }
 
             ltxTx.commit();
