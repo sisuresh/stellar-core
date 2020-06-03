@@ -4,6 +4,7 @@
 
 #include "transactions/TransactionUtils.h"
 #include "crypto/SecretKey.h"
+#include "ledger/GeneralizedLedgerEntry.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
@@ -67,6 +68,22 @@ dataKey(AccountID const& accountID, std::string const& dataName)
     key.data().accountID = accountID;
     key.data().dataName = dataName;
     return key;
+}
+
+GeneralizedLedgerKey
+sponsorshipKey(AccountID const& sponsoredID)
+{
+    GeneralizedLedgerKey gkey(GeneralizedLedgerEntryType::SPONSORSHIP);
+    gkey.sponsorshipKey().sponsoredID = sponsoredID;
+    return gkey;
+}
+
+GeneralizedLedgerKey
+sponsorshipCounterKey(AccountID const& sponsoringID)
+{
+    GeneralizedLedgerKey gkey(GeneralizedLedgerEntryType::SPONSORSHIP_COUNTER);
+    gkey.sponsorshipCounterKey().sponsoringID = sponsoringID;
+    return gkey;
 }
 
 LedgerTxnEntry
@@ -137,6 +154,18 @@ loadTrustLineWithoutRecordIfNotNative(AbstractLedgerTxn& ltx,
         return {};
     }
     return ConstTrustLineWrapper(ltx, accountID, asset);
+}
+
+LedgerTxnEntry
+loadSponsorship(AbstractLedgerTxn& ltx, AccountID const& sponsoredID)
+{
+    return ltx.load(sponsorshipKey(sponsoredID));
+}
+
+LedgerTxnEntry
+loadSponsorshipCounter(AbstractLedgerTxn& ltx, AccountID const& sponsoringID)
+{
+    return ltx.load(sponsorshipCounterKey(sponsoringID));
 }
 
 static void
