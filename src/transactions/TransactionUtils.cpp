@@ -17,6 +17,26 @@
 namespace stellar
 {
 
+static void
+prepareAccountEntryExtensionV1(AccountEntry& ae)
+{
+    if (ae.ext.v() == 0)
+    {
+        ae.ext.v(1);
+        ae.ext.v1().liabilities = Liabilities{0, 0};
+    }
+}
+
+static void
+prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
+{
+    if (tl.ext.v() == 0)
+    {
+        tl.ext.v(1);
+        tl.ext.v1().liabilities = Liabilities{0, 0};
+    }
+}
+
 bool
 checkAuthorization(LedgerTxnHeader const& header, LedgerEntry const& entry)
 {
@@ -340,11 +360,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (acc.ext.v() == 0)
-            {
-                acc.ext.v(1);
-                acc.ext.v1().liabilities = Liabilities{0, 0};
-            }
+            prepareAccountEntryExtensionV1(acc);
             acc.ext.v1().liabilities.buying = buyingLiab;
         }
         return res;
@@ -361,11 +377,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (tl.ext.v() == 0)
-            {
-                tl.ext.v(1);
-                tl.ext.v1().liabilities = Liabilities{0, 0};
-            }
+            prepareTrustLineEntryExtensionV1(tl);
             tl.ext.v1().liabilities.buying = buyingLiab;
         }
         return res;
@@ -433,11 +445,7 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (acc.ext.v() == 0)
-            {
-                acc.ext.v(1);
-                acc.ext.v1().liabilities = Liabilities{0, 0};
-            }
+            prepareAccountEntryExtensionV1(acc);
             acc.ext.v1().liabilities.selling = sellingLiab;
         }
         return res;
@@ -454,11 +462,7 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (tl.ext.v() == 0)
-            {
-                tl.ext.v(1);
-                tl.ext.v1().liabilities = Liabilities{0, 0};
-            }
+            prepareTrustLineEntryExtensionV1(tl);
             tl.ext.v1().liabilities.selling = sellingLiab;
         }
         return res;
