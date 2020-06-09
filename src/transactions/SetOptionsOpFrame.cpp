@@ -9,6 +9,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
 #include <Tracy.hpp>
@@ -66,22 +67,27 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
         return false;
     }
 
-    switch (addNumEntries(header, sourceAccount, 1))
+    it = signers.insert(it, *mSetOptions.signer);
+    switch (createSignerWithPossibleSponsorship(ltx, header, it, sourceAccount))
     {
-    case AddSubentryResult::SUCCESS:
+    case SponsorshipResult::SUCCESS:
         break;
-    case AddSubentryResult::LOW_RESERVE:
+    case SponsorshipResult::LOW_RESERVE:
         innerResult().code(SET_OPTIONS_LOW_RESERVE);
         return false;
-    case AddSubentryResult::TOO_MANY_SUBENTRIES:
+    case SponsorshipResult::TOO_MANY_SUBENTRIES:
         mResult.code(opTOO_MANY_SUBENTRIES);
+        return false;
+    case SponsorshipResult::TOO_MANY_SPONSORING:
+        // TODO(jonjove): Result code?
+        return false;
+    case SponsorshipResult::TOO_MANY_SPONSORED:
+        // TODO(jonjove): Result code?
         return false;
     default:
         throw std::runtime_error(
-            "Unexpected result from addNumEntries");
+            "Unexpected result from createSignerWithPossibleSponsorship");
     }
-
-    signers.insert(it, *mSetOptions.signer);
     return true;
 }
 
@@ -93,14 +99,12 @@ SetOptionsOpFrame::deleteSigner(AbstractLedgerTxn& ltx,
     auto& account = sourceAccount.current().data.account();
     auto& signers = account.signers;
 
-    for (auto it = signers.begin(); it != signers.end(); ++it)
+    auto it = std::find_if(signers.begin(), signers.end(), [&](auto const& x) {
+        return !(x.key < mSetOptions.signer->key);
+    });
+    if (it != signers.end() && it->key == mSetOptions.signer->key)
     {
-        if (it->key == mSetOptions.signer->key)
-        {
-            signers.erase(it);
-            addNumEntries(header, sourceAccount, -1);
-            return;
-        }
+        removeSignerWithPossibleSponsorship(ltx, header, it, sourceAccount);
     }
 }
 
