@@ -898,7 +898,7 @@ LedgerTxn::Impl::getDelta()
             // Deep copy is not required here because getDelta causes
             // LedgerTxn to enter the sealed state, meaning subsequent
             // modifications are impossible.
-            delta.entry[key.ledgerKey()] = {kv.second, previous};
+            delta.entry[key] = {kv.second, previous};
         }
         delta.header = {*mHeader, mParent.getHeader()};
     });
