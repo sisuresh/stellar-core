@@ -37,10 +37,10 @@ prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
     }
 }
 
-bool
-checkAuthorization(LedgerTxnHeader const& header, LedgerEntry const& entry)
+static bool
+checkAuthorization(LedgerHeader const& header, LedgerEntry const& entry)
 {
-    if (header.current().ledgerVersion < 10)
+    if (header.ledgerVersion < 10)
     {
         if (!isAuthorized(entry))
         {
@@ -286,7 +286,7 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
         }
         if (header.current().ledgerVersion >= 10)
         {
-            auto minBalance = getMinBalance(header, acc);
+            auto minBalance = getMinBalance(header.current(), acc);
             if (delta < 0 &&
                 newBalance - minBalance < getSellingLiabilities(header, entry))
             {
@@ -308,7 +308,7 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
             return true;
         }
 
-        if (!checkAuthorization(header, entry.current()))
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
@@ -367,7 +367,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
     }
     else if (entry.current().data.type() == TRUSTLINE)
     {
-        if (!checkAuthorization(header, entry.current()))
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
@@ -412,8 +412,8 @@ addNumEntries(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int count)
         numSponsoring = acc.ext.v1().ext.v2().numSponsoring;
         numSponsored = acc.ext.v1().ext.v2().numSponsored;
     }
-    int64_t effMinBalance =
-        getMinBalance(header, newEntriesCount, numSponsoring, numSponsored);
+    int64_t effMinBalance = getMinBalance(header.current(), newEntriesCount,
+                                          numSponsoring, numSponsored);
     if (header.current().ledgerVersion >= 10)
     {
         effMinBalance += getSellingLiabilities(header, entry);
@@ -444,7 +444,8 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
     if (entry.current().data.type() == ACCOUNT)
     {
         auto& acc = entry.current().data.account();
-        int64_t maxLiabilities = acc.balance - getMinBalance(header, acc);
+        int64_t maxLiabilities =
+            acc.balance - getMinBalance(header.current(), acc);
         if (maxLiabilities < 0)
         {
             return false;
@@ -460,7 +461,7 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
     }
     else if (entry.current().data.type() == TRUSTLINE)
     {
-        if (!checkAuthorization(header, entry.current()))
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
@@ -488,7 +489,7 @@ generateID(LedgerTxnHeader& header)
 }
 
 int64_t
-getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
+getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
 {
     int64_t avail = 0;
     if (le.data.type() == ACCOUNT)
@@ -509,7 +510,7 @@ getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
         throw std::runtime_error("Unknown LedgerEntry type");
     }
 
-    if (header.current().ledgerVersion >= 10)
+    if (header.ledgerVersion >= 10)
     {
         avail -= getSellingLiabilities(header, le);
     }
@@ -519,14 +520,14 @@ getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
 int64_t
 getAvailableBalance(LedgerTxnHeader const& header, LedgerTxnEntry const& entry)
 {
-    return getAvailableBalance(header, entry.current());
+    return getAvailableBalance(header.current(), entry.current());
 }
 
 int64_t
 getAvailableBalance(LedgerTxnHeader const& header,
                     ConstLedgerTxnEntry const& entry)
 {
-    return getAvailableBalance(header, entry.current());
+    return getAvailableBalance(header.current(), entry.current());
 }
 
 int64_t
@@ -571,7 +572,7 @@ getMaxAmountReceive(LedgerTxnHeader const& header, LedgerEntry const& le)
     }
     if (le.data.type() == TRUSTLINE)
     {
-        if (!checkAuthorization(header, le))
+        if (!checkAuthorization(header.current(), le))
         {
             return 0;
         }
@@ -604,11 +605,11 @@ getMaxAmountReceive(LedgerTxnHeader const& header,
 }
 
 int64_t
-getMinBalance(LedgerTxnHeader const& header, AccountEntry const& acc)
+getMinBalance(LedgerHeader const& header, AccountEntry const& acc)
 {
     uint32_t numSponsoring = 0;
     uint32_t numSponsored = 0;
-    if (header.current().ledgerVersion >= 14 && acc.ext.v() == 1 &&
+    if (header.ledgerVersion >= 14 && acc.ext.v() == 1 &&
         acc.ext.v1().ext.v() == 2)
     {
         numSponsoring = acc.ext.v1().ext.v2().numSponsoring;
@@ -619,9 +620,8 @@ getMinBalance(LedgerTxnHeader const& header, AccountEntry const& acc)
 }
 
 int64_t
-getMinBalance(LedgerTxnHeader const& header, uint32_t ownerCount)
+getMinBalance(LedgerHeader const& lh, uint32_t ownerCount)
 {
-    auto const& lh = header.current();
     if (lh.ledgerVersion <= 8)
         return (2 + ownerCount) * lh.baseReserve;
     else
@@ -629,10 +629,9 @@ getMinBalance(LedgerTxnHeader const& header, uint32_t ownerCount)
 }
 
 int64_t
-getMinBalance(LedgerTxnHeader const& header, uint32_t numSubentries,
+getMinBalance(LedgerHeader const& lh, uint32_t numSubentries,
               uint32_t numSponsoring, uint32_t numSponsored)
 {
-    auto const& lh = header.current();
     if (lh.ledgerVersion < 14)
     {
         assert(numSponsored == 0 && numSponsoring == 0);
@@ -723,9 +722,9 @@ getOfferSellingLiabilities(LedgerTxnHeader const& header,
 }
 
 int64_t
-getSellingLiabilities(LedgerTxnHeader const& header, LedgerEntry const& le)
+getSellingLiabilities(LedgerHeader const& header, LedgerEntry const& le)
 {
-    if (header.current().ledgerVersion < 10)
+    if (header.ledgerVersion < 10)
     {
         throw std::runtime_error("Liabilities accessed before version 10");
     }
@@ -747,7 +746,7 @@ int64_t
 getSellingLiabilities(LedgerTxnHeader const& header,
                       LedgerTxnEntry const& entry)
 {
-    return getSellingLiabilities(header, entry.current());
+    return getSellingLiabilities(header.current(), entry.current());
 }
 
 uint64_t
