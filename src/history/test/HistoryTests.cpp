@@ -1153,7 +1153,7 @@ TEST_CASE("Catchup recent", "[history][catchup][acceptance]")
 
     for (auto r : recents)
     {
-        auto name = std::string("catchup-recent-") + std::to_string(r);
+        auto name = fmt::format("catchup-recent-{}", r);
         auto app = catchupSimulation.createCatchupApplication(r, dbMode, name);
         REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
         apps.push_back(app);
