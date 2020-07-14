@@ -17,7 +17,7 @@
 namespace stellar
 {
 
-static void
+AccountEntryExtensionV1&
 prepareAccountEntryExtensionV1(AccountEntry& ae)
 {
     if (ae.ext.v() == 0)
@@ -25,9 +25,23 @@ prepareAccountEntryExtensionV1(AccountEntry& ae)
         ae.ext.v(1);
         ae.ext.v1().liabilities = Liabilities{0, 0};
     }
+    return ae.ext.v1();
 }
 
-static void
+AccountEntryExtensionV2&
+prepareAccountEntryExtensionV2(AccountEntry& ae)
+{
+    auto& extV1 = prepareAccountEntryExtensionV1(ae);
+    if (extV1.ext.v() == 0)
+    {
+        extV1.ext.v(2);
+        auto& extV2 = extV1.ext.v2();
+        extV2.signerSponsoringIDs.resize(ae.signers.size());
+    }
+    return extV1.ext.v2();
+}
+
+TrustLineEntry::_ext_t::_v1_t&
 prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
 {
     if (tl.ext.v() == 0)
@@ -35,6 +49,18 @@ prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
         tl.ext.v(1);
         tl.ext.v1().liabilities = Liabilities{0, 0};
     }
+    return tl.ext.v1();
+}
+
+LedgerEntryExtensionV1&
+prepareLedgerEntryExtensionV1(LedgerEntry& le)
+{
+    if (le.ext.v() == 0)
+    {
+        le.ext.v(1);
+        le.ext.v1().sponsoringID.reset();
+    }
+    return le.ext.v1();
 }
 
 static bool
@@ -360,8 +386,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            prepareAccountEntryExtensionV1(acc);
-            acc.ext.v1().liabilities.buying = buyingLiab;
+            prepareAccountEntryExtensionV1(acc).liabilities.buying = buyingLiab;
         }
         return res;
     }
@@ -377,8 +402,8 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            prepareTrustLineEntryExtensionV1(tl);
-            tl.ext.v1().liabilities.buying = buyingLiab;
+            prepareTrustLineEntryExtensionV1(tl).liabilities.buying =
+                buyingLiab;
         }
         return res;
     }
@@ -454,8 +479,8 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            prepareAccountEntryExtensionV1(acc);
-            acc.ext.v1().liabilities.selling = sellingLiab;
+            prepareAccountEntryExtensionV1(acc).liabilities.selling =
+                sellingLiab;
         }
         return res;
     }
@@ -471,8 +496,8 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         bool res = stellar::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            prepareTrustLineEntryExtensionV1(tl);
-            tl.ext.v1().liabilities.selling = sellingLiab;
+            prepareTrustLineEntryExtensionV1(tl).liabilities.selling =
+                sellingLiab;
         }
         return res;
     }
