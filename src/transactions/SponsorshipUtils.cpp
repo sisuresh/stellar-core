@@ -12,41 +12,6 @@
 
 using namespace stellar;
 
-static AccountEntryExtensionV1&
-prepareAccountEntryExtensionV1(AccountEntry& ae)
-{
-    if (ae.ext.v() == 0)
-    {
-        ae.ext.v(1);
-        ae.ext.v1().liabilities = Liabilities{0, 0};
-    }
-    return ae.ext.v1();
-}
-
-static AccountEntryExtensionV2&
-prepareAccountEntryExtensionV2(AccountEntry& ae)
-{
-    auto& extV1 = prepareAccountEntryExtensionV1(ae);
-    if (extV1.ext.v() == 0)
-    {
-        extV1.ext.v(2);
-        auto& extV2 = extV1.ext.v2();
-        extV2.signerSponsoringIDs.resize(ae.signers.size());
-    }
-    return extV1.ext.v2();
-}
-
-static LedgerEntryExtensionV1&
-prepareLedgerEntryExtensionV1(LedgerEntry& le)
-{
-    if (le.ext.v() == 0)
-    {
-        le.ext.v(1);
-        le.ext.v1().sponsoringID.reset();
-    }
-    return le.ext.v1();
-}
-
 static SponsorshipResult
 canEstablishSponsorshipHelper(LedgerHeader const& lh,
                               LedgerEntry const& sponsoringAcc,
