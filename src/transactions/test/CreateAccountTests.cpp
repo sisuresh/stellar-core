@@ -2,6 +2,7 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
+#include "ledger/LedgerTxn.h"
 #include "lib/catch.hpp"
 #include "main/Application.h"
 #include "main/Config.h"
@@ -11,9 +12,55 @@
 #include "test/TestUtils.h"
 #include "test/TxTests.h"
 #include "test/test.h"
+#include "transactions/SignatureUtils.h"
+#include "transactions/TransactionFrameBase.h"
+#include "transactions/TransactionUtils.h"
 
 using namespace stellar;
 using namespace stellar::txtest;
+
+static void
+sign(Hash const& networkID, SecretKey key, TransactionV1Envelope& env)
+{
+    env.signatures.emplace_back(SignatureUtils::sign(
+        key, sha256(xdr::xdr_to_opaque(networkID, ENVELOPE_TYPE_TX, env.tx))));
+}
+
+static TransactionEnvelope
+envelopeFromOps(Hash const& networkID, TestAccount& source,
+                std::vector<Operation> const& ops,
+                std::vector<SecretKey> const& opKeys)
+{
+    TransactionEnvelope tx(ENVELOPE_TYPE_TX);
+    tx.v1().tx.sourceAccount = toMuxedAccount(source);
+    tx.v1().tx.fee = 100 * ops.size();
+    tx.v1().tx.seqNum = source.nextSequenceNumber();
+    std::copy(ops.begin(), ops.end(),
+              std::back_inserter(tx.v1().tx.operations));
+
+    sign(networkID, source, tx.v1());
+    for (auto const& opKey : opKeys)
+    {
+        sign(networkID, opKey, tx.v1());
+    }
+    return tx;
+}
+
+static TransactionFrameBasePtr
+transactionFrameFromOps(Hash const& networkID, TestAccount& source,
+                        std::vector<Operation> const& ops,
+                        std::vector<SecretKey> const& opKeys)
+{
+    return TransactionFrameBase::makeTransactionFromWire(
+        networkID, envelopeFromOps(networkID, source, ops, opKeys));
+}
+
+static CreateAccountResultCode
+getCreateAccountResultCode(TransactionFrameBasePtr& tx, size_t i)
+{
+    auto const& opRes = tx->getResult().result.results()[i];
+    return opRes.tr().createAccountResult().code();
+}
 
 TEST_CASE("create account", "[tx][createaccount]")
 {
@@ -27,6 +74,59 @@ TEST_CASE("create account", "[tx][createaccount]")
     int64_t const txfee = app->getLedgerManager().getLastTxFee();
     int64_t const minBalance2 =
         app->getLedgerManager().getLastMinBalance(2) + 10 * txfee;
+
+    SECTION("malformed with bad starting balance")
+    {
+        for_versions({13}, *app, [&] {
+            auto key = SecretKey::pseudoRandomForTesting();
+            auto tx1 = transactionFrameFromOps(
+                app->getNetworkID(), root,
+                {root.op(createAccount(key.getPublicKey(), 0))}, {});
+            root.loadSequenceNumber();
+            auto tx2 = transactionFrameFromOps(
+                app->getNetworkID(), root,
+                {root.op(createAccount(key.getPublicKey(), 1))}, {});
+
+            LedgerTxn ltx(app->getLedgerTxnRoot());
+            REQUIRE(!tx1->checkValid(ltx, 0, 0));
+            REQUIRE(getCreateAccountResultCode(tx1, 0) ==
+                    CREATE_ACCOUNT_MALFORMED);
+
+            REQUIRE(tx2->checkValid(ltx, 0, 0));
+        });
+
+        for_versions_from(14, *app, [&] {
+            auto key = SecretKey::pseudoRandomForTesting();
+            auto tx1 = transactionFrameFromOps(
+                app->getNetworkID(), root,
+                {root.op(createAccount(key.getPublicKey(), -1))}, {});
+            root.loadSequenceNumber();
+            auto tx2 = transactionFrameFromOps(
+                app->getNetworkID(), root,
+                {root.op(createAccount(key.getPublicKey(), 0))}, {});
+
+            LedgerTxn ltx(app->getLedgerTxnRoot());
+            REQUIRE(!tx1->checkValid(ltx, 0, 0));
+            REQUIRE(getCreateAccountResultCode(tx1, 0) ==
+                    CREATE_ACCOUNT_MALFORMED);
+
+            REQUIRE(tx2->checkValid(ltx, 0, 0));
+        });
+    }
+
+    SECTION("malformed with destination")
+    {
+        for_versions({13}, *app, [&] {
+            auto tx =
+                transactionFrameFromOps(app->getNetworkID(), root,
+                                        {root.op(createAccount(root, -1))}, {});
+
+            LedgerTxn ltx(app->getLedgerTxnRoot());
+            REQUIRE(!tx->checkValid(ltx, 0, 0));
+            REQUIRE(getCreateAccountResultCode(tx, 0) ==
+                    CREATE_ACCOUNT_MALFORMED);
+        });
+    }
 
     SECTION("Success")
     {
@@ -101,6 +201,54 @@ TEST_CASE("create account", "[tx][createaccount]")
             });
 
             acc1.create("acc2", minBal0 + 500);
+        });
+    }
+
+    SECTION("with sponsorship")
+    {
+        for_versions_from(14, *app, [&] {
+            auto key = SecretKey::pseudoRandomForTesting();
+            TestAccount a1(*app, key);
+            auto tx =
+                transactionFrameFromOps(app->getNetworkID(), root,
+                                        {root.op(sponsorFutureReserves(a1)),
+                                         root.op(createAccount(a1, 0)),
+                                         a1.op(confirmAndClearSponsor())},
+                                        {key});
+
+            LedgerTxn ltx(app->getLedgerTxnRoot());
+            TransactionMeta txm(2);
+            REQUIRE(tx->checkValid(ltx, 0, 0));
+            REQUIRE(tx->apply(*app, ltx, txm));
+
+            {
+                auto ltxe = stellar::loadAccount(ltx, key.getPublicKey());
+                auto const& le = ltxe.current();
+                REQUIRE(le.ext.v1().sponsoringID);
+                REQUIRE(*le.ext.v1().sponsoringID == root.getPublicKey());
+
+                auto const& ae = le.data.account();
+                REQUIRE(ae.numSubEntries == 0);
+
+                auto const& extV2 = ae.ext.v1().ext.v2();
+                REQUIRE(extV2.numSponsoring == 0);
+                REQUIRE(extV2.numSponsored == 2);
+                REQUIRE(extV2.signerSponsoringIDs.empty());
+            }
+
+            {
+                auto ltxe = stellar::loadAccount(ltx, root);
+                auto const& le = ltxe.current();
+                REQUIRE(le.ext.v() == 0);
+
+                auto const& ae = le.data.account();
+                REQUIRE(ae.numSubEntries == 0);
+
+                auto const& extV2 = ae.ext.v1().ext.v2();
+                REQUIRE(extV2.numSponsoring == 2);
+                REQUIRE(extV2.numSponsored == 0);
+                REQUIRE(extV2.signerSponsoringIDs.empty());
+            }
         });
     }
 }
