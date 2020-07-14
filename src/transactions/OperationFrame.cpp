@@ -6,6 +6,7 @@
 #include "transactions/AllowTrustOpFrame.h"
 #include "transactions/BumpSequenceOpFrame.h"
 #include "transactions/ChangeTrustOpFrame.h"
+#include "transactions/ConfirmAndClearSponsorOpFrame.h"
 #include "transactions/CreateAccountOpFrame.h"
 #include "transactions/CreatePassiveSellOfferOpFrame.h"
 #include "transactions/InflationOpFrame.h"
@@ -17,8 +18,10 @@
 #include "transactions/PathPaymentStrictSendOpFrame.h"
 #include "transactions/PaymentOpFrame.h"
 #include "transactions/SetOptionsOpFrame.h"
+#include "transactions/SponsorFutureReservesOpFrame.h"
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/UpdateSponsorshipOpFrame.h"
 #include "util/Logging.h"
 #include <Tracy.hpp>
 #include <xdrpp/printer.h>
@@ -79,6 +82,12 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
         return std::make_shared<ManageBuyOfferOpFrame>(op, res, tx);
     case PATH_PAYMENT_STRICT_SEND:
         return std::make_shared<PathPaymentStrictSendOpFrame>(op, res, tx);
+    case SPONSOR_FUTURE_RESERVES:
+        return std::make_shared<SponsorFutureReservesOpFrame>(op, res, tx);
+    case CONFIRM_AND_CLEAR_SPONSOR:
+        return std::make_shared<ConfirmAndClearSponsorOpFrame>(op, res, tx);
+    case UPDATE_SPONSORSHIP:
+        return std::make_shared<UpdateSponsorshipOpFrame>(op, res, tx);
     default:
         ostringstream err;
         err << "Unknown Tx type: " << op.body.type();
