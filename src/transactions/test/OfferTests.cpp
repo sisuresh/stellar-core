@@ -20,9 +20,7 @@
 #include "test/test.h"
 #include "transactions/OfferExchange.h"
 #include "transactions/TransactionUtils.h"
-#include "util/Logging.h"
-#include "util/Timer.h"
-#include <fmt/format.h>
+#include "transactions/test/SponsorshipTestUtils.h"
 
 using namespace stellar;
 using namespace stellar::txtest;
@@ -2958,6 +2956,29 @@ TEST_CASE("create offer", "[tx][offers]")
                     ex_MANAGE_SELL_OFFER_NOT_FOUND);
             });
         }
+    }
+
+    SECTION("sponsorship")
+    {
+        auto const minBalance1 = app->getLedgerManager().getLastMinBalance(1);
+        auto acc1 = root.create("a1", minBalance1 - 1);
+        auto acc2 = root.create("a2", minBalance2 + 2 * txfee);
+        acc2.changeTrust(usd, INT64_MAX);
+        acc2.changeTrust(idr, INT64_MAX);
+        issuer.pay(acc2, usd, 10000);
+        issuer.pay(acc2, idr, 10000);
+        createSponsoredEntryButSponsorHasInsufficientBalance(
+            *app, acc1, acc2, manageOffer(0, usd, idr, Price{1, 1}, 1000),
+            [](OperationResult const& opRes) {
+                return opRes.tr().manageSellOfferResult().code() ==
+                       MANAGE_SELL_OFFER_LOW_RESERVE;
+            });
+
+        createModifyAndRemoveSponsoredEntry(
+            *app, acc2, manageOffer(0, usd, idr, Price{1, 1}, 1000),
+            manageOffer(1, usd, idr, Price{1, 1}, 999),
+            manageOffer(1, usd, idr, Price{1, 1}, 1001),
+            manageOffer(1, usd, idr, Price{1, 1}, 0), offerKey(acc2, 1));
     }
 }
 
