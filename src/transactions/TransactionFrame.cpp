@@ -758,10 +758,14 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 for (auto const& kv : delta.entry)
                 {
                     auto glk = kv.first;
-                    if (glk.type() == GeneralizedLedgerEntryType::SPONSORSHIP)
+                    switch (glk.type())
                     {
+                    case GeneralizedLedgerEntryType::SPONSORSHIP:
+                    case GeneralizedLedgerEntryType::SPONSORSHIP_COUNTER:
                         getResult().result.code(txBAD_SPONSORSHIP);
                         return false;
+                    default:
+                        break;
                     }
                 }
             }
