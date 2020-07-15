@@ -61,11 +61,11 @@ UpdateSponsorshipOpFrame::processSponsorshipResult(SponsorshipResult sr)
         innerResult().code(UPDATE_SPONSORSHIP_LOW_RESERVE);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORING:
-        // TODO(jonjove): Result code?
+        mResult.code(opTOO_MANY_SPONSORING);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORED:
-        // TODO(jonjove): Result code?
-        return false;
+        // This is impossible right now because there is a limit on sub
+        // entries, fall through and throw
     default:
         throw std::runtime_error("unexpected sponsorship result");
     }

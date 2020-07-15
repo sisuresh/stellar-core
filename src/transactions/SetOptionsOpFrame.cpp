@@ -79,11 +79,11 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
         mResult.code(opTOO_MANY_SUBENTRIES);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORING:
-        // TODO(jonjove): Result code?
+        mResult.code(opTOO_MANY_SPONSORING);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORED:
-        // TODO(jonjove): Result code?
-        return false;
+        // This is impossible right now because there is a limit on sub
+        // entries, fall through and throw
     default:
         throw std::runtime_error(
             "Unexpected result from createSignerWithPossibleSponsorship");
