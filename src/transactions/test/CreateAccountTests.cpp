@@ -15,6 +15,7 @@
 #include "transactions/SignatureUtils.h"
 #include "transactions/TransactionFrameBase.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/test/SponsorshipTestUtils.h"
 
 using namespace stellar;
 using namespace stellar::txtest;
@@ -216,38 +217,20 @@ TEST_CASE("create account", "[tx][createaccount]")
                                          a1.op(confirmAndClearSponsor())},
                                         {key});
 
-            LedgerTxn ltx(app->getLedgerTxnRoot());
-            TransactionMeta txm(2);
-            REQUIRE(tx->checkValid(ltx, 0, 0));
-            REQUIRE(tx->apply(*app, ltx, txm));
-
             {
-                auto ltxe = stellar::loadAccount(ltx, key.getPublicKey());
-                auto const& le = ltxe.current();
-                REQUIRE(le.ext.v1().sponsoringID);
-                REQUIRE(*le.ext.v1().sponsoringID == root.getPublicKey());
-
-                auto const& ae = le.data.account();
-                REQUIRE(ae.numSubEntries == 0);
-
-                auto const& extV2 = ae.ext.v1().ext.v2();
-                REQUIRE(extV2.numSponsoring == 0);
-                REQUIRE(extV2.numSponsored == 2);
-                REQUIRE(extV2.signerSponsoringIDs.empty());
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm(2);
+                REQUIRE(tx->checkValid(ltx, 0, 0));
+                REQUIRE(tx->apply(*app, ltx, txm));
+                ltx.commit();
             }
 
             {
-                auto ltxe = stellar::loadAccount(ltx, root);
-                auto const& le = ltxe.current();
-                REQUIRE(le.ext.v() == 0);
-
-                auto const& ae = le.data.account();
-                REQUIRE(ae.numSubEntries == 0);
-
-                auto const& extV2 = ae.ext.v1().ext.v2();
-                REQUIRE(extV2.numSponsoring == 2);
-                REQUIRE(extV2.numSponsored == 0);
-                REQUIRE(extV2.signerSponsoringIDs.empty());
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                checkSponsorship(ltx, key.getPublicKey(), 1,
+                                 &root.getPublicKey(), 0, 2, 0, 2);
+                checkSponsorship(ltx, root.getPublicKey(), 0, nullptr, 0, 2, 2,
+                                 0);
             }
         });
     }
