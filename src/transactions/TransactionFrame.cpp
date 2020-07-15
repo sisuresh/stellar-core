@@ -598,12 +598,11 @@ TransactionFrame::removeAccountSigner(AbstractLedgerTxn& ltxOuter,
 
     auto header = ltx.loadHeader();
     auto& signers = account.current().data.account().signers;
-    // TODO(jonjove): This is the same as in SetOptions
-    auto it = std::find_if(signers.begin(), signers.end(),
-                           [&](auto const& x) { return !(x.key < signerKey); });
-    if (it != signers.end() && it->key == signerKey)
+    auto findRes = findSignerByKey(signers.begin(), signers.end(), signerKey);
+    if (findRes.second)
     {
-        removeSignerWithPossibleSponsorship(ltx, header, it, account);
+        removeSignerWithPossibleSponsorship(ltx, header, findRes.first,
+                                            account);
         // TODO(jonjove): Check normalization?
         ltx.commit();
     }

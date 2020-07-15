@@ -51,12 +51,11 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
     auto& signers = account.signers;
 
     // Change signer
-    auto it = std::find_if(signers.begin(), signers.end(), [&](auto const& x) {
-        return !(x.key < mSetOptions.signer->key);
-    });
-    if (it != signers.end() && it->key == mSetOptions.signer->key)
+    auto findRes = findSignerByKey(signers.begin(), signers.end(),
+                                   mSetOptions.signer->key);
+    if (findRes.second)
     {
-        it->weight = mSetOptions.signer->weight;
+        findRes.first->weight = mSetOptions.signer->weight;
         return true;
     }
 
@@ -67,7 +66,7 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
         return false;
     }
 
-    it = signers.insert(it, *mSetOptions.signer);
+    auto it = signers.insert(findRes.first, *mSetOptions.signer);
     switch (createSignerWithPossibleSponsorship(ltx, header, it, sourceAccount))
     {
     case SponsorshipResult::SUCCESS:
