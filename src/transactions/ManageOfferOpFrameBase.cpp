@@ -517,7 +517,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
 
         if (!creatingNewOffer || header.current().ledgerVersion >= 14)
         {
-            auto sourceAccount = loadAccount(ltx, getSourceID());
+            auto sourceAccount = loadSourceAccount(ltx, header);
             auto le = buildOffer(0, 0, extension);
             removeEntryWithPossibleSponsorship(ltx, header, le, sourceAccount);
         }
