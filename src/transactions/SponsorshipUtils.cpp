@@ -366,12 +366,25 @@ canCreateEntryWithoutSponsorship(LedgerHeader const& lh, LedgerEntry const& le,
             return SponsorshipResult::TOO_MANY_SUBENTRIES;
         }
 
-        // TODO(jonjove): Compare against getMinBalance
         uint32_t mult = computeMultiplier(le.data.type());
-        int64_t reserve = (int64_t)mult * (int64_t)lh.baseReserve;
-        if (getAvailableBalance(lh, acc) < reserve)
+        if (lh.ledgerVersion < 9)
         {
-            return SponsorshipResult::LOW_RESERVE;
+            // This is needed to handle the overflow in getMinBalance which was
+            // corrected in protocol version 9
+            auto accCopy = acc;
+            accCopy.data.account().numSubEntries += mult;
+            if (getAvailableBalance(lh, accCopy) < 0)
+            {
+                return SponsorshipResult::LOW_RESERVE;
+            }
+        }
+        else
+        {
+            int64_t reserve = (int64_t)mult * (int64_t)lh.baseReserve;
+            if (getAvailableBalance(lh, acc) < reserve)
+            {
+                return SponsorshipResult::LOW_RESERVE;
+            }
         }
     }
     else
