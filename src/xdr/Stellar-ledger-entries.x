@@ -105,13 +105,16 @@ enum AccountFlags
 // mask for all valid flags
 const MASK_ACCOUNT_FLAGS = 0x7;
 
+// maximum number of signers
+const MAX_SIGNERS = 20;
+
 typedef AccountID* SponsorshipDescriptor;
 
 struct AccountEntryExtensionV2
 {
     uint32 numSponsored;
     uint32 numSponsoring;
-    SponsorshipDescriptor signerSponsoringIDs<20>;
+    SponsorshipDescriptor signerSponsoringIDs<MAX_SIGNERS>;
 
     union switch (int v)
     {
@@ -159,7 +162,7 @@ struct AccountEntry
     // thresholds stores unsigned bytes: [weight of master|low|medium|high]
     Thresholds thresholds;
 
-    Signer signers<20>; // possible signers for this account
+    Signer signers<MAX_SIGNERS>; // possible signers for this account
 
     // reserved for future use
     union switch (int v)
