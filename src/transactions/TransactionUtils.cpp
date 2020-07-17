@@ -672,9 +672,9 @@ int64_t
 getMinBalance(LedgerHeader const& lh, uint32_t numSubentries,
               uint32_t numSponsoring, uint32_t numSponsored)
 {
-    if (lh.ledgerVersion < 14)
+    if (lh.ledgerVersion < 14 && (numSponsored != 0 || numSponsoring != 0))
     {
-        assert(numSponsored == 0 && numSponsoring == 0);
+        throw std::runtime_error("unexpected sponsorship state");
     }
 
     if (lh.ledgerVersion <= 8)
@@ -687,6 +687,10 @@ getMinBalance(LedgerHeader const& lh, uint32_t numSubentries,
         effEntries += numSubentries;
         effEntries += numSponsoring;
         effEntries -= numSponsored;
+        if (effEntries < 0)
+        {
+            throw std::runtime_error("unexpected account state");
+        }
         return effEntries * int64_t(lh.baseReserve);
     }
 }
