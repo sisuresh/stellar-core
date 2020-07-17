@@ -321,11 +321,42 @@ struct ClaimClaimableBalanceOp
     ClaimableBalanceID balanceID;
 };
 
+/* Sponsor Future Reserves
+
+    Establishes the is-sponsoring-future-reserves-for relationship between
+    the source account and sponsoredID
+
+    Threshold: med
+
+    Result: SponsorFutureReservesResult
+*/
 struct SponsorFutureReservesOp
 {
     AccountID sponsoredID;
 };
 
+/* ConfirmAndClearSponsorship
+
+    Terminates the current is-sponsoring-future-reserves-for relationship in
+    which source account is sponsored
+
+    Threshold: med
+
+    Result: SponsorFutureReservesResult
+*/
+// ConfirmAndClearSponsorship is empty
+
+/* Update Sponsorship
+
+    If source account is not sponsored or is sponsored by the owner of the
+    specified entry or sub-entry, then attempt to revoke the sponsorship.
+    If source account is sponsored, then attempt to transfer the sponsorship
+    to the sponsor of source account.
+
+    Threshold: med
+
+    Result: UpdateSponsorshipResult
+*/
 enum UpdateSponsorshipType
 {
     UPDATE_SPONSORSHIP_LEDGER_ENTRY = 0,
@@ -1027,6 +1058,8 @@ default:
     void;
 };
 
+/******* SponsorFutureReserves Result ********/
+
 enum SponsorFutureReservesResultCode
 {
     // codes considered as "success" for the operation
@@ -1046,6 +1079,8 @@ default:
     void;
 };
 
+/******* ConfirmAndClearSponsor Result ********/
+
 enum ConfirmAndClearSponsorResultCode
 {
     // codes considered as "success" for the operation
@@ -1062,6 +1097,8 @@ case CONFIRM_AND_CLEAR_SPONSOR_SUCCESS:
 default:
     void;
 };
+
+/******* UpdateSponsorship Result ********/
 
 enum UpdateSponsorshipResultCode
 {
