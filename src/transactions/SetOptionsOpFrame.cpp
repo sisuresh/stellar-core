@@ -43,10 +43,11 @@ SetOptionsOpFrame::getThresholdLevel() const
 }
 
 bool
-SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
-                                     LedgerTxnHeader const& header,
-                                     LedgerTxnEntry& sourceAccount)
+SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx)
 {
+    auto header = ltx.loadHeader();
+    auto sourceAccount = loadSourceAccount(ltx, header);
+
     auto& account = sourceAccount.current().data.account();
     auto& signers = account.signers;
 
@@ -184,10 +185,12 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
     {
         if (mSetOptions.signer->weight)
         {
-            if (!addOrChangeSigner(ltx, header, sourceAccount))
+            LedgerTxn ltxInner(ltx);
+            if (!addOrChangeSigner(ltxInner))
             {
                 return false;
             }
+            ltxInner.commit();
         }
         else
         {
