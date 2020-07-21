@@ -22,6 +22,16 @@ struct LedgerKey;
 struct TransactionEnvelope;
 struct MuxedAccount;
 
+template <typename IterType>
+std::pair<IterType, bool>
+findSignerByKey(IterType begin, IterType end, SignerKey const& key)
+{
+    auto it =
+        std::find_if(begin, end, [&](auto const& x) { return !(x.key < key); });
+    bool found = (it != end && it->key == key);
+    return {it, found};
+}
+
 AccountEntryExtensionV1& prepareAccountEntryExtensionV1(AccountEntry& ae);
 AccountEntryExtensionV2& prepareAccountEntryExtensionV2(AccountEntry& ae);
 TrustLineEntry::_ext_t::_v1_t&
