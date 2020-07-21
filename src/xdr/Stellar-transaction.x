@@ -43,7 +43,10 @@ enum OperationType
     MANAGE_BUY_OFFER = 12,
     PATH_PAYMENT_STRICT_SEND = 13,
     CREATE_CLAIMABLE_BALANCE = 14,
-    CLAIM_CLAIMABLE_BALANCE = 15
+    CLAIM_CLAIMABLE_BALANCE = 15,
+    SPONSOR_FUTURE_RESERVES = 16,
+    CONFIRM_AND_CLEAR_SPONSOR = 17,
+    UPDATE_SPONSORSHIP = 18
 };
 
 /* CreateAccount
@@ -318,6 +321,61 @@ struct ClaimClaimableBalanceOp
     ClaimableBalanceID balanceID;
 };
 
+/* Sponsor Future Reserves
+
+    Establishes the is-sponsoring-future-reserves-for relationship between
+    the source account and sponsoredID
+
+    Threshold: med
+
+    Result: SponsorFutureReservesResult
+*/
+struct SponsorFutureReservesOp
+{
+    AccountID sponsoredID;
+};
+
+/* ConfirmAndClearSponsorship
+
+    Terminates the current is-sponsoring-future-reserves-for relationship in
+    which source account is sponsored
+
+    Threshold: med
+
+    Result: SponsorFutureReservesResult
+*/
+// ConfirmAndClearSponsorship is empty
+
+/* Update Sponsorship
+
+    If source account is not sponsored or is sponsored by the owner of the
+    specified entry or sub-entry, then attempt to revoke the sponsorship.
+    If source account is sponsored, then attempt to transfer the sponsorship
+    to the sponsor of source account.
+
+    Threshold: med
+
+    Result: UpdateSponsorshipResult
+*/
+enum UpdateSponsorshipType
+{
+    UPDATE_SPONSORSHIP_LEDGER_ENTRY = 0,
+    UPDATE_SPONSORSHIP_SIGNER = 1
+};
+
+union UpdateSponsorshipOp switch (UpdateSponsorshipType type)
+{
+case UPDATE_SPONSORSHIP_LEDGER_ENTRY:
+    LedgerKey ledgerKey;
+case UPDATE_SPONSORSHIP_SIGNER:
+    struct
+    {
+        AccountID accountID;
+        SignerKey signerKey;
+    }
+    signer;
+};
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -360,6 +418,12 @@ struct Operation
         CreateClaimableBalanceOp createClaimableBalanceOp;
     case CLAIM_CLAIMABLE_BALANCE:
         ClaimClaimableBalanceOp claimClaimableBalanceOp;
+    case SPONSOR_FUTURE_RESERVES:
+        SponsorFutureReservesOp sponsorFutureReservesOp;
+    case CONFIRM_AND_CLEAR_SPONSOR:
+        void;
+    case UPDATE_SPONSORSHIP:
+        UpdateSponsorshipOp updateSponsorshipOp;
     }
     body;
 };
@@ -874,8 +938,9 @@ enum AccountMergeResultCode
     ACCOUNT_MERGE_IMMUTABLE_SET = -3,   // source account has AUTH_IMMUTABLE set
     ACCOUNT_MERGE_HAS_SUB_ENTRIES = -4, // account has trust lines/offers
     ACCOUNT_MERGE_SEQNUM_TOO_FAR = -5,  // sequence number is over max allowed
-    ACCOUNT_MERGE_DEST_FULL = -6        // can't add source balance to
+    ACCOUNT_MERGE_DEST_FULL = -6,       // can't add source balance to
                                         // destination balance
+    ACCOUNT_MERGE_IS_SPONSOR = -7       // can't merge account that is a sponsor
 };
 
 union AccountMergeResult switch (AccountMergeResultCode code)
@@ -993,8 +1058,70 @@ default:
     void;
 };
 
-/* High level Operation Result */
+/******* SponsorFutureReserves Result ********/
 
+enum SponsorFutureReservesResultCode
+{
+    // codes considered as "success" for the operation
+    SPONSOR_FUTURE_RESERVES_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    SPONSOR_FUTURE_RESERVES_MALFORMED = -1,
+    SPONSOR_FUTURE_RESERVES_ALREADY_SPONSORED = -2,
+    SPONSOR_FUTURE_RESERVES_RECURSIVE = -3
+};
+
+union SponsorFutureReservesResult switch (SponsorFutureReservesResultCode code)
+{
+case SPONSOR_FUTURE_RESERVES_SUCCESS:
+    void;
+default:
+    void;
+};
+
+/******* ConfirmAndClearSponsor Result ********/
+
+enum ConfirmAndClearSponsorResultCode
+{
+    // codes considered as "success" for the operation
+    CONFIRM_AND_CLEAR_SPONSOR_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    CONFIRM_AND_CLEAR_SPONSOR_NOT_SPONSORED = -1
+};
+
+union ConfirmAndClearSponsorResult switch (ConfirmAndClearSponsorResultCode code)
+{
+case CONFIRM_AND_CLEAR_SPONSOR_SUCCESS:
+    void;
+default:
+    void;
+};
+
+/******* UpdateSponsorship Result ********/
+
+enum UpdateSponsorshipResultCode
+{
+    // codes considered as "success" for the operation
+    UPDATE_SPONSORSHIP_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    UPDATE_SPONSORSHIP_DOES_NOT_EXIST = -1,
+    UPDATE_SPONSORSHIP_NOT_SPONSOR = -2,
+    UPDATE_SPONSORSHIP_LOW_RESERVE = -3,
+    UPDATE_SPONSORSHIP_LINE_FULL = -4,
+    UPDATE_SPONSORSHIP_ONLY_TRANSFERABLE = -5
+};
+
+union UpdateSponsorshipResult switch (UpdateSponsorshipResultCode code)
+{
+case UPDATE_SPONSORSHIP_SUCCESS:
+    void;
+default:
+    void;
+};
+
+/* High level Operation Result */
 enum OperationResultCode
 {
     opINNER = 0, // inner object result is valid
@@ -1003,7 +1130,8 @@ enum OperationResultCode
     opNO_ACCOUNT = -2,          // source account was not found
     opNOT_SUPPORTED = -3,       // operation not supported at this time
     opTOO_MANY_SUBENTRIES = -4, // max number of subentries already reached
-    opEXCEEDED_WORK_LIMIT = -5  // operation did too much work
+    opEXCEEDED_WORK_LIMIT = -5, // operation did too much work
+    opTOO_MANY_SPONSORING = -6  // account is sponsoring too many entries
 };
 
 union OperationResult switch (OperationResultCode code)
@@ -1043,6 +1171,12 @@ case opINNER:
         CreateClaimableBalanceResult createClaimableBalanceResult;
     case CLAIM_CLAIMABLE_BALANCE:
         ClaimClaimableBalanceResult claimClaimableBalanceResult;
+    case SPONSOR_FUTURE_RESERVES:
+        SponsorFutureReservesResult sponsorFutureReservesResult;
+    case CONFIRM_AND_CLEAR_SPONSOR:
+        ConfirmAndClearSponsorResult confirmAndClearSponsorResult;
+    case UPDATE_SPONSORSHIP:
+        UpdateSponsorshipResult updateSponsorshipResult;
     }
     tr;
 default:
@@ -1068,8 +1202,9 @@ enum TransactionResultCode
     txBAD_AUTH_EXTRA = -10,      // unused signatures attached to transaction
     txINTERNAL_ERROR = -11,      // an unknown error occured
 
-    txNOT_SUPPORTED = -12,        // transaction type not supported
-    txFEE_BUMP_INNER_FAILED = -13 // fee bump inner transaction failed
+    txNOT_SUPPORTED = -12,         // transaction type not supported
+    txFEE_BUMP_INNER_FAILED = -13, // fee bump inner transaction failed
+    txBAD_SPONSORSHIP = -14        // sponsorship not confirmed
 };
 
 // InnerTransactionResult must be binary compatible with TransactionResult
@@ -1096,7 +1231,8 @@ struct InnerTransactionResult
     case txBAD_AUTH_EXTRA:
     case txINTERNAL_ERROR:
     case txNOT_SUPPORTED:
-        // txFEE_BUMP_INNER_FAILED is not included
+    // txFEE_BUMP_INNER_FAILED is not included
+    case txBAD_SPONSORSHIP:
         void;
     }
     result;
