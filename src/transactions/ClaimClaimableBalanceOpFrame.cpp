@@ -8,6 +8,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/TrustLineWrapper.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 
 namespace stellar
@@ -95,24 +96,12 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
         return false;
     }
 
-    // Try to give reserve back to createdBy account. If we can't, try to give
-    // it back to sourceAccount
-    if (!loadAccountAndAddBalance(ltx, header, claimableBalance.createdBy,
-                                  claimableBalance.reserve))
-    {
-        if (!loadAccountAndAddBalance(ltx, header, getSourceID(),
-                                      claimableBalance.reserve))
-        {
-            innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
-            return false;
-        }
-    }
-
     auto const& asset = claimableBalance.asset;
     auto amount = claimableBalance.amount;
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
-        if (!loadAccountAndAddBalance(ltx, header, getSourceID(), amount))
+        auto sourceAccount = loadSourceAccount(ltx, header);
+        if (!addBalance(header, sourceAccount, amount))
         {
             innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
             return false;
@@ -138,6 +127,9 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
         }
     }
 
+    removeEntryWithSponsoringAcc(ltx, header,
+                                 claimableBalanceLtxEntry.current());
+
     claimableBalanceLtxEntry.erase();
 
     innerResult().code(CLAIM_CLAIMABLE_BALANCE_SUCCESS);
@@ -148,15 +140,6 @@ bool
 ClaimClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion)
 {
     return true;
-}
-
-bool
-ClaimClaimableBalanceOpFrame::loadAccountAndAddBalance(
-    AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
-    AccountID const& accountID, int64_t amount)
-{
-    auto account = stellar::loadAccount(ltx, accountID);
-    return account && addBalance(header, account, amount);
 }
 
 void

@@ -131,13 +131,18 @@ isSignerSponsored(std::vector<Signer>::const_iterator const& signerIt,
 //
 ////////////////////////////////////////////////////////////////////////////////
 static uint32_t
-computeMultiplier(LedgerEntryType let)
+computeMultiplier(LedgerEntry const& le)
 {
-    // TODO(jonjove): Handle ClaimableBalance
-    if (let == ACCOUNT)
+    auto type = le.data.type();
+    if (type == ACCOUNT)
     {
         return 2;
     }
+    else if (type == CLAIMABLE_BALANCE)
+    {
+        return le.data.claimableBalance().claimants.size();
+    }
+
     return 1;
 }
 
@@ -155,7 +160,7 @@ canEstablishEntrySponsorship(LedgerHeader const& lh, LedgerEntry const& le,
         throw std::runtime_error("sponsoring sponsored entry");
     }
 
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     return canEstablishSponsorshipHelper(lh, sponsoringAcc, sponsoredAcc, mult);
 }
 
@@ -173,7 +178,7 @@ canRemoveEntrySponsorship(LedgerHeader const& lh, LedgerEntry const& le,
         throw std::runtime_error("removing sponsorship on unsponsored entry");
     }
 
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     return canRemoveSponsorshipHelper(lh, sponsoringAcc, sponsoredAcc, mult);
 }
 
@@ -192,7 +197,7 @@ canTransferEntrySponsorship(LedgerHeader const& lh, LedgerEntry const& le,
             "transferring sponsorship on unsponsored entry");
     }
 
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     return canTransferSponsorshipHelper(lh, oldSponsoringAcc, newSponsoringAcc,
                                         mult);
 }
@@ -263,7 +268,7 @@ void
 establishEntrySponsorship(LedgerEntry& le, LedgerEntry& sponsoringAcc,
                           LedgerEntry* sponsoredAcc)
 {
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     prepareLedgerEntryExtensionV1(le).sponsoringID.activate() =
         sponsoringAcc.data.account().accountID;
     prepareAccountEntryExtensionV2(sponsoringAcc.data.account())
@@ -279,7 +284,7 @@ void
 removeEntrySponsorship(LedgerEntry& le, LedgerEntry& sponsoringAcc,
                        LedgerEntry* sponsoredAcc)
 {
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     prepareLedgerEntryExtensionV1(le).sponsoringID.reset();
     prepareAccountEntryExtensionV2(sponsoringAcc.data.account())
         .numSponsoring -= mult;
@@ -294,7 +299,7 @@ void
 transferEntrySponsorship(LedgerEntry& le, LedgerEntry& oldSponsoringAcc,
                          LedgerEntry& newSponsoringAcc)
 {
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     prepareLedgerEntryExtensionV1(le).sponsoringID.activate() =
         newSponsoringAcc.data.account().accountID;
     prepareAccountEntryExtensionV2(newSponsoringAcc.data.account())
@@ -366,7 +371,7 @@ canCreateEntryWithoutSponsorship(LedgerHeader const& lh, LedgerEntry const& le,
             return SponsorshipResult::TOO_MANY_SUBENTRIES;
         }
 
-        uint32_t mult = computeMultiplier(le.data.type());
+        uint32_t mult = computeMultiplier(le);
         if (lh.ledgerVersion < 9)
         {
             // This is needed to handle the overflow in getMinBalance which was
@@ -408,8 +413,8 @@ canCreateEntryWithSponsorship(LedgerHeader const& lh, LedgerEntry const& le,
         throw std::runtime_error("sponsorship before version 14");
     }
 
-    // TODO(jonjove): Handle ClaimableBalance
-    if (sponsoredAcc && le.data.type() != ACCOUNT)
+    if (sponsoredAcc && le.data.type() != ACCOUNT &&
+        le.data.type() != CLAIMABLE_BALANCE)
     {
         auto const& acc = sponsoredAcc->data.account();
         if (acc.numSubEntries >= ACCOUNT_SUBENTRY_LIMIT)
@@ -427,7 +432,7 @@ canRemoveEntryWithoutSponsorship(LedgerHeader const& lh, LedgerEntry const& le,
 {
     if (le.data.type() != ACCOUNT)
     {
-        uint32_t mult = computeMultiplier(le.data.type());
+        uint32_t mult = computeMultiplier(le);
         if (acc.data.account().numSubEntries < mult)
         {
             throw std::runtime_error("invalid account state");
@@ -445,7 +450,7 @@ canRemoveEntryWithSponsorship(LedgerHeader const& lh, LedgerEntry const& le,
         throw std::runtime_error("sponsorship before version 14");
     }
 
-    uint32_t mult = computeMultiplier(le.data.type());
+    uint32_t mult = computeMultiplier(le);
     if (getNumSponsoring(sponsoringAcc) < mult)
     {
         throw std::runtime_error("invalid sponsoring account state");
@@ -540,8 +545,7 @@ canRemoveSignerWithSponsorship(
 void
 createEntryWithoutSponsorship(LedgerEntry& le, LedgerEntry& acc)
 {
-    // TODO(jonjove): Handle ClaimableBalance
-    if (le.data.type() != ACCOUNT)
+    if (le.data.type() != ACCOUNT && le.data.type() != CLAIMABLE_BALANCE)
     {
         ++acc.data.account().numSubEntries;
     }
@@ -689,6 +693,55 @@ removeEntryWithPossibleSponsorship(AbstractLedgerTxn& ltx,
         canRemoveEntryWithoutSponsorship(header.current(), le, acc.current());
         removeEntryWithoutSponsorship(le, acc.current());
     }
+}
+
+SponsorshipResult
+createEntryWithSponsoringAcc(AbstractLedgerTxn& ltx,
+                             LedgerTxnHeader const& header, LedgerEntry& le,
+                             LedgerTxnEntry& acc)
+{
+    SponsorshipResult res;
+    auto sponsorship =
+        loadSponsorship(ltx, acc.current().data.account().accountID);
+    if (sponsorship)
+    {
+        auto const& se = sponsorship.currentGeneralized().sponsorshipEntry();
+        auto sponsoringAcc = loadAccount(ltx, se.sponsoringID);
+
+        res = canCreateEntryWithSponsorship(header.current(), le,
+                                            sponsoringAcc.current(), nullptr);
+        if (res == SponsorshipResult::SUCCESS)
+        {
+            createEntryWithSponsorship(le, sponsoringAcc.current(), nullptr);
+        }
+    }
+    else
+    {
+        res = canCreateEntryWithSponsorship(header.current(), le, acc.current(),
+                                            nullptr);
+        if (res == SponsorshipResult::SUCCESS)
+        {
+            createEntryWithSponsorship(le, acc.current(), nullptr);
+        }
+    }
+
+    return res;
+}
+
+void
+removeEntryWithSponsoringAcc(AbstractLedgerTxn& ltx,
+                             LedgerTxnHeader const& header, LedgerEntry& le)
+{
+    if (le.ext.v() != 1 || !le.ext.v1().sponsoringID)
+    {
+        throw std::runtime_error("no sponsoringID found");
+    }
+
+    auto sponsoringAcc = loadAccount(ltx, *le.ext.v1().sponsoringID);
+
+    canRemoveEntryWithSponsorship(header.current(), le, sponsoringAcc.current(),
+                                  nullptr);
+    removeEntryWithSponsorship(le, sponsoringAcc.current(), nullptr);
 }
 
 SponsorshipResult

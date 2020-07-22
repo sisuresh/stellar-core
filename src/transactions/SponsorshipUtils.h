@@ -92,6 +92,15 @@ void removeEntryWithPossibleSponsorship(AbstractLedgerTxn& ltx,
                                         LedgerTxnHeader const& header,
                                         LedgerEntry& le, LedgerTxnEntry& acc);
 
+// Used for entries that aren't subEntries like ClaimableBalances
+SponsorshipResult createEntryWithSponsoringAcc(AbstractLedgerTxn& ltx,
+                                               LedgerTxnHeader const& header,
+                                               LedgerEntry& le,
+                                               LedgerTxnEntry& acc);
+void removeEntryWithSponsoringAcc(AbstractLedgerTxn& ltx,
+                                  LedgerTxnHeader const& header,
+                                  LedgerEntry& le);
+
 SponsorshipResult createSignerWithPossibleSponsorship(
     AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
     std::vector<Signer>::const_iterator const& signerIt, LedgerTxnEntry& acc);
