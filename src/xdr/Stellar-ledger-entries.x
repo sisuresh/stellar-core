@@ -346,9 +346,6 @@ struct ClaimableBalanceEntry
     // Unique identifier for this ClaimableBalanceEntry
     ClaimableBalanceID balanceID;
 
-    // Account that created this ClaimableBalanceEntry
-    AccountID createdBy;
-
     // List of claimants with associated predicate
     Claimant claimants<10>;
 
@@ -357,9 +354,6 @@ struct ClaimableBalanceEntry
 
     // Amount of asset
     int64 amount;
-
-    // Amount of native asset to pay the reserve
-    int64 reserve;
 
     // reserved for future use
     union switch (int v)
