@@ -28,7 +28,7 @@ class ClaimClaimableBalanceOpFrame : public OperationFrame
 
     bool isVersionSupported(uint32_t protocolVersion) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx) override;
+    bool doApply(AbstractLedgerTxn& ltxOuter) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
     void insertLedgerKeysToPrefetch(
         std::unordered_set<LedgerKey>& keys) const override;

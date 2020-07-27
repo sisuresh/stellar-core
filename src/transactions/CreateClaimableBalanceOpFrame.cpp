@@ -138,8 +138,10 @@ CreateClaimableBalanceOpFrame::isVersionSupported(
 }
 
 bool
-CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
+
     auto header = ltx.loadHeader();
     auto sourceAccount = loadSourceAccount(ltx, header);
 
@@ -231,6 +233,8 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
 
     innerResult().code(CREATE_CLAIMABLE_BALANCE_SUCCESS);
     innerResult().balanceID() = claimableBalanceEntry.balanceID;
+
+    ltx.commit();
     return true;
 }
 

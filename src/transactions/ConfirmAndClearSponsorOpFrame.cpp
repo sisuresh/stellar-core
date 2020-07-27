@@ -24,8 +24,10 @@ ConfirmAndClearSponsorOpFrame::isVersionSupported(
 }
 
 bool
-ConfirmAndClearSponsorOpFrame::doApply(AbstractLedgerTxn& ltx)
+ConfirmAndClearSponsorOpFrame::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
+
     auto sponsorship = loadSponsorship(ltx, getSourceID());
     if (!sponsorship)
     {
@@ -56,6 +58,8 @@ ConfirmAndClearSponsorOpFrame::doApply(AbstractLedgerTxn& ltx)
 
     sponsorship.erase();
     innerResult().code(CONFIRM_AND_CLEAR_SPONSOR_SUCCESS);
+
+    ltx.commit();
     return true;
 }
 

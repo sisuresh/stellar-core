@@ -68,8 +68,10 @@ validatePredicate(ClaimPredicate const& pred, TimePoint closeTime)
 }
 
 bool
-ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
+
     auto claimableBalanceLtxEntry =
         stellar::loadClaimableBalance(ltx, mClaimClaimableBalance.balanceID);
     if (!claimableBalanceLtxEntry)
@@ -134,6 +136,8 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
     claimableBalanceLtxEntry.erase();
 
     innerResult().code(CLAIM_CLAIMABLE_BALANCE_SUCCESS);
+
+    ltx.commit();
     return true;
 }
 
