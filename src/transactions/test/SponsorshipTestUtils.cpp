@@ -252,9 +252,9 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
             // Modify sponsored entry
             {
                 LedgerTxn ltx2(ltx);
-                TransactionMeta txm(2);
+                TransactionMeta txm2(2);
                 REQUIRE(tx2->checkValid(ltx2, 0, 0));
-                REQUIRE(tx2->apply(app, ltx2, txm));
+                REQUIRE(tx2->apply(app, ltx2, txm2));
 
                 check(ltx2);
                 checkSponsorship(ltx2, sponsoredAcc, 0, nullptr, nse + 1, 2, 0,
@@ -266,9 +266,9 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
             // Modify sponsored entry while sponsored
             {
                 LedgerTxn ltx3(ltx);
-                TransactionMeta txm(2);
+                TransactionMeta txm3(2);
                 REQUIRE(tx3->checkValid(ltx3, 0, 0));
-                REQUIRE(tx3->apply(app, ltx3, txm));
+                REQUIRE(tx3->apply(app, ltx3, txm3));
 
                 check(ltx3);
                 checkSponsorship(ltx3, sponsoredAcc, 0, nullptr, nse + 1, 2, 0,
@@ -281,9 +281,9 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
             // Remove sponsored entry
             {
                 LedgerTxn ltx4(ltx);
-                TransactionMeta txm(2);
+                TransactionMeta txm4(2);
                 REQUIRE(tx4->checkValid(ltx4, 0, 0));
-                REQUIRE(tx4->apply(app, ltx4, txm));
+                REQUIRE(tx4->apply(app, ltx4, txm4));
 
                 if (uso.type() == UPDATE_SPONSORSHIP_LEDGER_ENTRY)
                 {

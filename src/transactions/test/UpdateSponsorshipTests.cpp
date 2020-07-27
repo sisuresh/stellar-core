@@ -58,7 +58,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
     auto app = createTestApplication(clock, getTestConfig());
     app->start();
 
-    auto minBal = [&](size_t n) {
+    auto minBal = [&](uint32_t n) {
         return app->getLedgerManager().getLastMinBalance(n);
     };
 

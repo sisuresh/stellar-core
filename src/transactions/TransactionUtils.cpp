@@ -36,7 +36,8 @@ prepareAccountEntryExtensionV2(AccountEntry& ae)
     {
         extV1.ext.v(2);
         auto& extV2 = extV1.ext.v2();
-        extV2.signerSponsoringIDs.resize(ae.signers.size());
+        extV2.signerSponsoringIDs.resize(
+            static_cast<uint32_t>(ae.signers.size()));
     }
     return extV1.ext.v2();
 }
