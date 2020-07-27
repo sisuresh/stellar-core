@@ -329,17 +329,29 @@ UpdateSponsorshipOpFrame::updateSignerSponsorship(AbstractLedgerTxn& ltx)
 }
 
 bool
-UpdateSponsorshipOpFrame::doApply(AbstractLedgerTxn& ltx)
+UpdateSponsorshipOpFrame::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
+    bool success;
+
     switch (mUpdateSponsorshipOp.type())
     {
     case UPDATE_SPONSORSHIP_LEDGER_ENTRY:
-        return updateLedgerEntrySponsorship(ltx);
+        success = updateLedgerEntrySponsorship(ltx);
+        break;
     case UPDATE_SPONSORSHIP_SIGNER:
-        return updateSignerSponsorship(ltx);
+        success = updateSignerSponsorship(ltx);
+        break;
     default:
         abort();
     }
+
+    if (success)
+    {
+        ltx.commit();
+    }
+
+    return success;
 }
 
 bool

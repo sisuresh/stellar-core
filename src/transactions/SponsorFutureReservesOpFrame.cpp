@@ -55,8 +55,10 @@ SponsorFutureReservesOpFrame::createSponsorshipCounter(AbstractLedgerTxn& ltx)
 }
 
 bool
-SponsorFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx)
+SponsorFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
+
     if (loadSponsorship(ltx, mSponsorFutureReservesOp.sponsoredID))
     {
         innerResult().code(SPONSOR_FUTURE_RESERVES_ALREADY_SPONSORED);
@@ -87,6 +89,8 @@ SponsorFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx)
     }
 
     innerResult().code(SPONSOR_FUTURE_RESERVES_SUCCESS);
+
+    ltx.commit();
     return true;
 }
 

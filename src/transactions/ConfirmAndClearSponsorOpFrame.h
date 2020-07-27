@@ -23,7 +23,7 @@ class ConfirmAndClearSponsorOpFrame : public OperationFrame
     ConfirmAndClearSponsorOpFrame(Operation const& op, OperationResult& res,
                                   TransactionFrame& parentTx);
 
-    bool doApply(AbstractLedgerTxn& ltx) override;
+    bool doApply(AbstractLedgerTxn& ltxOuter) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     static ConfirmAndClearSponsorResultCode
