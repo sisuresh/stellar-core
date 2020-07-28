@@ -23,7 +23,8 @@ enum class IsSignerSponsoredResult
 
 IsSignerSponsoredResult
 isSignerSponsored(std::vector<Signer>::const_iterator const& signerIt,
-                  LedgerEntry const& le);
+                  LedgerEntry const& sponsoringAcc,
+                  LedgerEntry const& sponsoredAcc);
 
 enum class SponsorshipResult
 {
