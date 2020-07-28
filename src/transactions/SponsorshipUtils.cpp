@@ -74,6 +74,17 @@ canTransferSponsorshipHelper(LedgerHeader const& lh,
     return canEstablishSponsorshipHelper(lh, newSponsoringAcc, nullptr, mult);
 }
 
+static void
+accountIsSponsor(SponsorshipDescriptor const& sponsoringID,
+                 LedgerEntry const& sponsoringAcc)
+{
+    if (!sponsoringID ||
+        !(*sponsoringID == sponsoringAcc.data.account().accountID))
+    {
+        throw std::runtime_error("sponsorship doesn't match");
+    }
+}
+
 namespace stellar
 {
 
@@ -106,9 +117,10 @@ getNumSponsoring(LedgerEntry const& le)
 
 IsSignerSponsoredResult
 isSignerSponsored(std::vector<Signer>::const_iterator const& signerIt,
-                  LedgerEntry const& le)
+                  LedgerEntry const& sponsoringAcc,
+                  LedgerEntry const& sponsoredAcc)
 {
-    auto const& ae = le.data.account();
+    auto const& ae = sponsoredAcc.data.account();
     if (signerIt == ae.signers.end())
     {
         return IsSignerSponsoredResult::DOES_NOT_EXIST;
@@ -118,8 +130,10 @@ isSignerSponsored(std::vector<Signer>::const_iterator const& signerIt,
     {
         auto const& extV2 = ae.ext.v1().ext.v2();
         size_t n = signerIt - ae.signers.begin();
-        if (extV2.signerSponsoringIDs.at(n))
+        auto const& sponsoringID = extV2.signerSponsoringIDs.at(n);
+        if (sponsoringID)
         {
+            accountIsSponsor(sponsoringID, sponsoringAcc);
             return IsSignerSponsoredResult::SPONSORED;
         }
     }
@@ -196,6 +210,8 @@ canRemoveEntrySponsorship(LedgerHeader const& lh, LedgerEntry const& le,
         throw std::runtime_error("removing sponsorship on unsponsored entry");
     }
 
+    accountIsSponsor(le.ext.v1().sponsoringID, sponsoringAcc);
+
     uint32_t mult = computeMultiplier(le);
     return canRemoveSponsorshipHelper(lh, sponsoringAcc, sponsoredAcc, mult);
 }
@@ -215,6 +231,8 @@ canTransferEntrySponsorship(LedgerHeader const& lh, LedgerEntry const& le,
             "transferring sponsorship on unsponsored entry");
     }
 
+    accountIsSponsor(le.ext.v1().sponsoringID, oldSponsoringAcc);
+
     uint32_t mult = computeMultiplier(le);
     return canTransferSponsorshipHelper(lh, oldSponsoringAcc, newSponsoringAcc,
                                         mult);
@@ -229,7 +247,7 @@ canEstablishSignerSponsorship(
     {
         throw std::runtime_error("sponsorship before version 14");
     }
-    if (isSignerSponsored(signerIt, sponsoredAcc) !=
+    if (isSignerSponsored(signerIt, sponsoringAcc, sponsoredAcc) !=
         IsSignerSponsoredResult::NOT_SPONSORED)
     {
         throw std::runtime_error("bad signer sponsorship");
@@ -248,7 +266,7 @@ canRemoveSignerSponsorship(LedgerHeader const& lh,
     {
         throw std::runtime_error("sponsorship before version 14");
     }
-    if (isSignerSponsored(signerIt, sponsoredAcc) !=
+    if (isSignerSponsored(signerIt, sponsoringAcc, sponsoredAcc) !=
         IsSignerSponsoredResult::SPONSORED)
     {
         throw std::runtime_error("bad signer sponsorship");
@@ -267,7 +285,7 @@ canTransferSignerSponsorship(
     {
         throw std::runtime_error("sponsorship before version 14");
     }
-    if (isSignerSponsored(signerIt, sponsoredAcc) !=
+    if (isSignerSponsored(signerIt, oldSponsoringAcc, sponsoredAcc) !=
         IsSignerSponsoredResult::SPONSORED)
     {
         throw std::runtime_error("bad signer sponsorship");
@@ -302,14 +320,17 @@ void
 removeEntrySponsorship(LedgerEntry& le, LedgerEntry& sponsoringAcc,
                        LedgerEntry* sponsoredAcc)
 {
+    auto& sponsoringID = getLedgerEntryExtensionV1(le).sponsoringID;
+    accountIsSponsor(sponsoringID, sponsoringAcc);
+    sponsoringID.reset();
+
     uint32_t mult = computeMultiplier(le);
-    prepareLedgerEntryExtensionV1(le).sponsoringID.reset();
-    prepareAccountEntryExtensionV2(sponsoringAcc.data.account())
-        .numSponsoring -= mult;
+    getAccountEntryExtensionV2(sponsoringAcc.data.account()).numSponsoring -=
+        mult;
     if (sponsoredAcc)
     {
-        prepareAccountEntryExtensionV2(sponsoredAcc->data.account())
-            .numSponsored -= mult;
+        getAccountEntryExtensionV2(sponsoredAcc->data.account()).numSponsored -=
+            mult;
     }
 }
 
@@ -317,13 +338,18 @@ void
 transferEntrySponsorship(LedgerEntry& le, LedgerEntry& oldSponsoringAcc,
                          LedgerEntry& newSponsoringAcc)
 {
+    auto& sponsoringID = getLedgerEntryExtensionV1(le).sponsoringID;
+    accountIsSponsor(sponsoringID, oldSponsoringAcc);
+
     uint32_t mult = computeMultiplier(le);
-    prepareLedgerEntryExtensionV1(le).sponsoringID.activate() =
-        newSponsoringAcc.data.account().accountID;
+    sponsoringID.activate() = newSponsoringAcc.data.account().accountID;
+
+    // This could be the first interaction with sponsorships for
+    // newSponsoringAcc, so prepare the extension
     prepareAccountEntryExtensionV2(newSponsoringAcc.data.account())
         .numSponsoring += mult;
-    prepareAccountEntryExtensionV2(oldSponsoringAcc.data.account())
-        .numSponsoring -= mult;
+    getAccountEntryExtensionV2(oldSponsoringAcc.data.account()).numSponsoring -=
+        mult;
 }
 
 void
@@ -347,11 +373,13 @@ removeSignerSponsorship(std::vector<Signer>::const_iterator const& signerIt,
 {
     size_t n = signerIt - sponsoredAcc.data.account().signers.begin();
 
-    auto& extV2 = prepareAccountEntryExtensionV2(sponsoredAcc.data.account());
-    extV2.signerSponsoringIDs.at(n).reset();
+    auto& extV2 = getAccountEntryExtensionV2(sponsoredAcc.data.account());
+    auto& sponsoringID = extV2.signerSponsoringIDs.at(n);
+    accountIsSponsor(sponsoringID, sponsoringAcc);
+
+    sponsoringID.reset();
     --extV2.numSponsored;
-    --prepareAccountEntryExtensionV2(sponsoringAcc.data.account())
-          .numSponsoring;
+    --getAccountEntryExtensionV2(sponsoringAcc.data.account()).numSponsoring;
 }
 
 void
@@ -362,13 +390,17 @@ transferSignerSponsorship(std::vector<Signer>::const_iterator const& signerIt,
 {
     size_t n = signerIt - sponsoredAcc.data.account().signers.begin();
 
-    auto& extV2 = prepareAccountEntryExtensionV2(sponsoredAcc.data.account());
-    extV2.signerSponsoringIDs.at(n).activate() =
-        newSponsoringAcc.data.account().accountID;
+    auto& extV2 = getAccountEntryExtensionV2(sponsoredAcc.data.account());
+    auto& sponsoringID = extV2.signerSponsoringIDs.at(n);
+    accountIsSponsor(sponsoringID, oldSponsoringAcc);
+
+    sponsoringID.activate() = newSponsoringAcc.data.account().accountID;
+
+    // This could be the first interaction with sponsorships for
+    // newSponsoringAcc, so prepare the extension
     ++prepareAccountEntryExtensionV2(newSponsoringAcc.data.account())
           .numSponsoring;
-    --prepareAccountEntryExtensionV2(oldSponsoringAcc.data.account())
-          .numSponsoring;
+    --getAccountEntryExtensionV2(oldSponsoringAcc.data.account()).numSponsoring;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

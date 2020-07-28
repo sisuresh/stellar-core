@@ -64,6 +64,27 @@ prepareLedgerEntryExtensionV1(LedgerEntry& le)
     return le.ext.v1();
 }
 
+AccountEntryExtensionV2&
+getAccountEntryExtensionV2(AccountEntry& ae)
+{
+    if (ae.ext.v() != 1 || ae.ext.v1().ext.v() != 2)
+    {
+        throw std::runtime_error("expected AccountEntry extension V2");
+    }
+    return ae.ext.v1().ext.v2();
+}
+
+LedgerEntryExtensionV1&
+getLedgerEntryExtensionV1(LedgerEntry& le)
+{
+    if (le.ext.v() != 1)
+    {
+        throw std::runtime_error("expected LedgerEntry extension V1");
+    }
+
+    return le.ext.v1();
+}
+
 static bool
 checkAuthorization(LedgerHeader const& header, LedgerEntry const& entry)
 {
