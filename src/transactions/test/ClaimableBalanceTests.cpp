@@ -332,7 +332,7 @@ validateBalancesOnCreateAndClaim(TestAccount& createAcc, TestAccount& claimAcc,
             claimAccBalanceAfterClaim);
 }
 
-TEST_CASE("claimableBalance", "[tx][managedata]")
+TEST_CASE("claimableBalance", "[tx][claimablebalance]")
 {
     Config const& cfg = getTestConfig();
 
