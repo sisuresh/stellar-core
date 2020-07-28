@@ -8,6 +8,7 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "overlay/StellarXDR.h"
 #include "transactions/TransactionUtils.h"
+#include "util/XDROperators.h"
 #include "util/types.h"
 
 using namespace stellar;
@@ -726,8 +727,7 @@ removeEntryWithPossibleSponsorship(AbstractLedgerTxn& ltx,
         LedgerEntry* sponsoredAccount =
             le.data.type() == CLAIMABLE_BALANCE ? nullptr : &acc.current();
 
-        if (acc.current().data.account().accountID.ed25519() ==
-            le.ext.v1().sponsoringID->ed25519())
+        if (acc.current().data.account().accountID == *le.ext.v1().sponsoringID)
         {
             if (le.data.type() != CLAIMABLE_BALANCE)
             {
