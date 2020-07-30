@@ -551,11 +551,9 @@ canCreateSignerWithSponsorship(
                                          sponsoredAcc);
 }
 
-// TODO(jonjove): Use signerIt or remove it
 void
-canRemoveSignerWithoutSponsorship(
-    LedgerHeader const& lh, std::vector<Signer>::const_iterator const& signerIt,
-    LedgerEntry const& acc)
+canRemoveSignerWithoutSponsorship(LedgerHeader const& lh,
+                                  LedgerEntry const& acc)
 {
     if (acc.data.account().numSubEntries < 1)
     {
@@ -563,11 +561,10 @@ canRemoveSignerWithoutSponsorship(
     }
 }
 
-// TODO(jonjove): Use signerIt or remove it
 void
-canRemoveSignerWithSponsorship(
-    LedgerHeader const& lh, std::vector<Signer>::const_iterator const& signerIt,
-    LedgerEntry const& sponsoringAcc, LedgerEntry const& sponsoredAcc)
+canRemoveSignerWithSponsorship(LedgerHeader const& lh,
+                               LedgerEntry const& sponsoringAcc,
+                               LedgerEntry const& sponsoredAcc)
 {
     if (lh.ledgerVersion < 14)
     {
@@ -840,15 +837,14 @@ removeSignerWithPossibleSponsorship(
     {
         auto sponsoringAcc = loadAccount(ltx, *sponsoringID);
 
-        canRemoveSignerWithSponsorship(header.current(), signerIt,
+        canRemoveSignerWithSponsorship(header.current(),
                                        sponsoringAcc.current(), acc.current());
         removeSignerWithSponsorship(signerIt, sponsoringAcc.current(),
                                     acc.current());
     }
     else
     {
-        canRemoveSignerWithoutSponsorship(header.current(), signerIt,
-                                          acc.current());
+        canRemoveSignerWithoutSponsorship(header.current(), acc.current());
         removeSignerWithoutSponsorship(signerIt, acc.current());
     }
 }
