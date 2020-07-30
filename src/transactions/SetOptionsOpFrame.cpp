@@ -68,6 +68,18 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx)
     }
 
     auto it = signers.insert(findRes.first, *mSetOptions.signer);
+
+    if (account.ext.v() == 1 && account.ext.v1().ext.v() == 2)
+    {
+        size_t n = it - account.signers.begin();
+        auto& extV2 = account.ext.v1().ext.v2();
+        // There must always be an element in signerSponsoringIDs corresponding
+        // to each element in signers. Because the signer is not sponsored, the
+        // relevant signerSponsoringID must be null.
+        extV2.signerSponsoringIDs.insert(extV2.signerSponsoringIDs.begin() + n,
+                                         SponsorshipDescriptor{});
+    }
+
     switch (createSignerWithPossibleSponsorship(ltx, header, it, sourceAccount))
     {
     case SponsorshipResult::SUCCESS:

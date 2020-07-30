@@ -629,21 +629,10 @@ removeEntryWithSponsorship(LedgerEntry& le, LedgerEntry& sponsoringAcc,
 }
 
 void
-createSignerWithoutSponsorship(
-    std::vector<Signer>::const_iterator const& signerIt, LedgerEntry& acc)
+createSignerWithoutSponsorship(LedgerEntry& acc)
 {
     auto& ae = acc.data.account();
     ++ae.numSubEntries;
-    if (ae.ext.v() == 1 && ae.ext.v1().ext.v() == 2)
-    {
-        size_t n = signerIt - ae.signers.begin();
-        auto& extV2 = ae.ext.v1().ext.v2();
-        // There must always be an element in signerSponsoringIDs corresponding
-        // to each element in signers. Because the signer is not sponsored, the
-        // relevant signerSponsoringID must be null.
-        extV2.signerSponsoringIDs.insert(extV2.signerSponsoringIDs.begin() + n,
-                                         {});
-    }
 }
 
 void
@@ -651,7 +640,7 @@ createSignerWithSponsorship(std::vector<Signer>::const_iterator const& signerIt,
                             LedgerEntry& sponsoringAcc,
                             LedgerEntry& sponsoredAcc)
 {
-    createSignerWithoutSponsorship(signerIt, sponsoredAcc);
+    createSignerWithoutSponsorship(sponsoredAcc);
     establishSignerSponsorship(signerIt, sponsoringAcc, sponsoredAcc);
 }
 
@@ -812,7 +801,7 @@ createSignerWithPossibleSponsorship(
             canCreateSignerWithoutSponsorship(header.current(), acc.current());
         if (res == SponsorshipResult::SUCCESS)
         {
-            createSignerWithoutSponsorship(signerIt, acc.current());
+            createSignerWithoutSponsorship(acc.current());
         }
     }
 
