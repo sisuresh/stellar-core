@@ -77,22 +77,10 @@ CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx)
 }
 
 bool
-CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltx)
+CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter)
 {
+    LedgerTxn ltx(ltxOuter);
     auto header = ltx.loadHeader();
-    {
-        auto sourceAccount = loadAccount(ltx, getSourceID());
-        if (getAvailableBalance(header, sourceAccount) <
-            mCreateAccount.startingBalance)
-        { // they don't have enough to send
-            innerResult().code(CREATE_ACCOUNT_UNDERFUNDED);
-            return false;
-        }
-
-        auto ok =
-            addBalance(header, sourceAccount, -mCreateAccount.startingBalance);
-        assert(ok);
-    }
 
     LedgerEntry newAccountEntry;
     newAccountEntry.data.type(ACCOUNT);
@@ -124,9 +112,23 @@ CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltx)
         throw std::runtime_error("Unexpected result from "
                                  "createEntryWithPossibleSponsorship");
     }
-    ltx.create(newAccountEntry);
 
+    auto sourceAccount = loadAccount(ltx, getSourceID());
+    if (getAvailableBalance(header, sourceAccount) <
+        mCreateAccount.startingBalance)
+    { // they don't have enough to send
+        innerResult().code(CREATE_ACCOUNT_UNDERFUNDED);
+        return false;
+    }
+
+    auto ok =
+        addBalance(header, sourceAccount, -mCreateAccount.startingBalance);
+    assert(ok);
+
+    ltx.create(newAccountEntry);
     innerResult().code(CREATE_ACCOUNT_SUCCESS);
+
+    ltx.commit();
     return true;
 }
 
