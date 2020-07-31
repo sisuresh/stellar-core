@@ -154,7 +154,6 @@ checkSponsorship(AbstractLedgerTxn& ltx, AccountID const& acc, int leExt,
     }
 }
 
-// TODO(jonjove): Commit to database
 void
 createSponsoredEntryButSponsorHasInsufficientBalance(
     Application& app, TestAccount& sponsoringAcc, TestAccount& sponsoredAcc,
@@ -176,11 +175,11 @@ createSponsoredEntryButSponsorHasInsufficientBalance(
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(!tx->apply(app, ltx, txm));
             REQUIRE(check(getOperationResult(tx, 1)));
+            ltx.commit();
         });
     }
 }
 
-// TODO(jonjove): Commit to database
 static void
 createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
                                     Operation const& opCreate,
@@ -240,18 +239,22 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
                 }
             };
 
-            LedgerTxn ltx(app.getLedgerTxnRoot());
-            TransactionMeta txm(2);
-            REQUIRE(tx->checkValid(ltx, 0, 0));
-            REQUIRE(tx->apply(app, ltx, txm));
+            {
+                LedgerTxn ltx(app.getLedgerTxnRoot());
+                TransactionMeta txm(2);
+                REQUIRE(tx->checkValid(ltx, 0, 0));
+                REQUIRE(tx->apply(app, ltx, txm));
 
-            check(ltx);
-            checkSponsorship(ltx, sponsoredAcc, 0, nullptr, nse + 1, 2, 0, 1);
-            checkSponsorship(ltx, root, 0, nullptr, 0, 2, 1, 0);
+                check(ltx);
+                checkSponsorship(ltx, sponsoredAcc, 0, nullptr, nse + 1, 2, 0,
+                                 1);
+                checkSponsorship(ltx, root, 0, nullptr, 0, 2, 1, 0);
+                ltx.commit();
+            }
 
             // Modify sponsored entry
             {
-                LedgerTxn ltx2(ltx);
+                LedgerTxn ltx2(app.getLedgerTxnRoot());
                 TransactionMeta txm2(2);
                 REQUIRE(tx2->checkValid(ltx2, 0, 0));
                 REQUIRE(tx2->apply(app, ltx2, txm2));
@@ -265,7 +268,7 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
 
             // Modify sponsored entry while sponsored
             {
-                LedgerTxn ltx3(ltx);
+                LedgerTxn ltx3(app.getLedgerTxnRoot());
                 TransactionMeta txm3(2);
                 REQUIRE(tx3->checkValid(ltx3, 0, 0));
                 REQUIRE(tx3->apply(app, ltx3, txm3));
@@ -280,7 +283,7 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
 
             // Remove sponsored entry
             {
-                LedgerTxn ltx4(ltx);
+                LedgerTxn ltx4(app.getLedgerTxnRoot());
                 TransactionMeta txm4(2);
                 REQUIRE(tx4->checkValid(ltx4, 0, 0));
                 REQUIRE(tx4->apply(app, ltx4, txm4));
@@ -291,6 +294,7 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
                 }
                 checkSponsorship(ltx4, sponsoredAcc, 0, nullptr, nse, 2, 0, 0);
                 checkSponsorship(ltx4, root, 0, nullptr, 0, 2, 0, 0);
+                ltx4.commit();
             }
         });
     }

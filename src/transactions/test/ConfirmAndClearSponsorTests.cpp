@@ -70,12 +70,8 @@ getConfirmAndClearSponsorResultCode(TransactionFrameBasePtr& tx, size_t i)
 TEST_CASE("confirm and clear sponsor", "[tx][sponsorship]")
 {
     VirtualClock clock;
-    Config cfg = getTestConfig();
-    // TODO(jonjove): Don't use in-memory ledger
-    cfg.NODE_IS_VALIDATOR = false;
-    cfg.MODE_USES_IN_MEMORY_LEDGER = true;
-    auto app = createTestApplication(clock, cfg);
-    // app->start();
+    auto app = createTestApplication(clock, getTestConfig());
+    app->start();
 
     auto root = TestAccount::createRoot(*app);
     int64_t minBalance = app->getLedgerManager().getLastMinBalance(0);
@@ -95,7 +91,7 @@ TEST_CASE("confirm and clear sponsor", "[tx][sponsorship]")
         });
     }
 
-    SECTION("already sponsored")
+    SECTION("not sponsored")
     {
         for_versions_from(14, *app, [&] {
             auto a1 = root.create("a1", minBalance);

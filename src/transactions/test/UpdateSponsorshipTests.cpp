@@ -84,6 +84,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
 
                 checkSponsorship(ltx, accountKey(a1), 0, nullptr);
                 checkSponsorship(ltx, a1, 0, nullptr, 0, 0, 0, 0);
+                ltx.commit();
             }
 
             SECTION("trust line")
@@ -102,6 +103,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
 
                 checkSponsorship(ltx, trustlineKey(a1, cur1), 0, nullptr);
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 0, 0, 0);
+                ltx.commit();
             }
 
             SECTION("signer")
@@ -121,6 +123,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
 
                 checkSponsorship(ltx, a1, signer.key, 0, nullptr);
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 0, 0, 0);
+                ltx.commit();
             }
         }
 
@@ -148,6 +151,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                                  &root.getPublicKey());
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 1);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 1, 0);
+                ltx.commit();
             }
 
             SECTION("signer")
@@ -171,6 +175,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, signer.key, 2, &root.getPublicKey());
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 1);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 1, 0);
+                ltx.commit();
             }
         }
     }
@@ -208,6 +213,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, trustlineKey(a1, cur1), 1, nullptr);
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 0);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
             }
 
             SECTION("signer")
@@ -238,6 +244,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, signer.key, 2, nullptr);
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 0);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
             }
         }
 
@@ -278,6 +285,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 1);
                 checkSponsorship(ltx, a2, 0, nullptr, 0, 2, 1, 0);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
             }
 
             SECTION("signer")
@@ -312,6 +320,7 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 1);
                 checkSponsorship(ltx, a2, 0, nullptr, 0, 2, 1, 0);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
             }
         }
     }

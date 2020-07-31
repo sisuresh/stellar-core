@@ -70,12 +70,8 @@ getSponsorFutureReservesResultCode(TransactionFrameBasePtr& tx, size_t i)
 TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
 {
     VirtualClock clock;
-    Config cfg = getTestConfig();
-    // TODO(jonjove): Don't use in-memory ledger
-    cfg.NODE_IS_VALIDATOR = false;
-    cfg.MODE_USES_IN_MEMORY_LEDGER = true;
-    auto app = createTestApplication(clock, cfg);
-    // app->start();
+    auto app = createTestApplication(clock, getTestConfig());
+    app->start();
 
     auto root = TestAccount::createRoot(*app);
     int64_t minBalance = app->getLedgerManager().getLastMinBalance(0);
@@ -90,6 +86,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
 
             LedgerTxn ltx(app->getLedgerTxnRoot());
             REQUIRE(!tx->checkValid(ltx, 0, 0));
+            ltx.commit();
 
             REQUIRE(getOperationResultCode(tx, 0) == opNOT_SUPPORTED);
         });
@@ -104,6 +101,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
 
             LedgerTxn ltx(app->getLedgerTxnRoot());
             REQUIRE(!tx->checkValid(ltx, 0, 0));
+            ltx.commit();
 
             REQUIRE(getSponsorFutureReservesResultCode(tx, 0) ==
                     SPONSOR_FUTURE_RESERVES_MALFORMED);
@@ -124,6 +122,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
             TransactionMeta txm(2);
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(!tx->apply(*app, ltx, txm));
+            ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
             REQUIRE(getSponsorFutureReservesResultCode(tx, 0) ==
@@ -145,6 +144,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
             TransactionMeta txm(2);
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(!tx->apply(*app, ltx, txm));
+            ltx.commit();
 
             REQUIRE(tx->getResultCode() == txBAD_SPONSORSHIP);
         });
@@ -167,6 +167,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
             TransactionMeta txm(2);
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(!tx->apply(*app, ltx, txm));
+            ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
             REQUIRE(getSponsorFutureReservesResultCode(tx, 0) ==
@@ -193,6 +194,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
             TransactionMeta txm(2);
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(!tx->apply(*app, ltx, txm));
+            ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
             REQUIRE(getSponsorFutureReservesResultCode(tx, 0) ==
@@ -216,6 +218,7 @@ TEST_CASE("sponsor future reserves", "[tx][sponsorship]")
             TransactionMeta txm(2);
             REQUIRE(tx->checkValid(ltx, 0, 0));
             REQUIRE(tx->apply(*app, ltx, txm));
+            ltx.commit();
 
             REQUIRE(tx->getResultCode() == txSUCCESS);
         });
