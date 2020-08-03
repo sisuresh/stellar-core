@@ -52,6 +52,26 @@ transactionFrameFromOps(Hash const& networkID, TestAccount& source,
         networkID, envelopeFromOps(networkID, source, ops, opKeys));
 }
 
+static UpdateSponsorshipResultCode
+getUpdateSponsorshipResultCode(TransactionFrameBasePtr& tx, size_t i)
+{
+    auto const& opRes = tx->getResult().result.results()[i];
+    return opRes.tr().updateSponsorshipResult().code();
+}
+
+Claimant
+getClaimant(TestAccount const& account)
+{
+    ClaimPredicate pred;
+    pred.type(CLAIM_PREDICATE_BEFORE_ABSOLUTE_TIME).absBefore() = INT64_MAX;
+
+    Claimant c;
+    c.v0().destination = account;
+    c.v0().predicate = pred;
+
+    return c;
+}
+
 TEST_CASE("update sponsorship", "[tx][sponsorship]")
 {
     VirtualClock clock;
@@ -125,11 +145,58 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 0, 0, 0);
                 ltx.commit();
             }
+
+            SECTION("claimable balances")
+            {
+                auto native = makeNativeAsset();
+                auto a1 = root.create("a1", minBal(2));
+
+                auto balanceID =
+                    a1.createClaimableBalance(native, 1, {getClaimant(a1)});
+
+                auto tx = transactionFrameFromOps(
+                    app->getNetworkID(), a1,
+                    {a1.op(updateSponsorship(claimableBalanceKey(balanceID)))},
+                    {});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm(2);
+                REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                REQUIRE(!tx->apply(*app, ltx, txm));
+
+                REQUIRE(getUpdateSponsorshipResultCode(tx, 0) ==
+                        UPDATE_SPONSORSHIP_ONLY_TRANSFERABLE);
+
+                checkSponsorship(ltx, claimableBalanceKey(balanceID), 1,
+                                 &a1.getPublicKey());
+                checkSponsorship(ltx, a1, 0, nullptr, 0, 2, 1, 0);
+                ltx.commit();
+            }
         }
 
         // Transfers sponsorship to sponsor-of-account
         SECTION("account is sponsored")
         {
+            SECTION("account")
+            {
+                auto a1 = root.create("a1", minBal(1));
+
+                auto tx = transactionFrameFromOps(
+                    app->getNetworkID(), a1,
+                    {root.op(sponsorFutureReserves(a1)),
+                     a1.op(updateSponsorship(accountKey(a1))),
+                     a1.op(confirmAndClearSponsor())},
+                    {root});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm(2);
+                REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx->apply(*app, ltx, txm));
+
+                checkSponsorship(ltx, accountKey(a1), 1, &root.getPublicKey());
+                checkSponsorship(ltx, a1, 1, &root.getPublicKey(), 0, 2, 0, 2);
+                ltx.commit();
+            }
             SECTION("trust line")
             {
                 auto cur1 = makeAsset(root, "CUR1");
@@ -177,6 +244,32 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 1, 0);
                 ltx.commit();
             }
+
+            SECTION("claimable balances")
+            {
+                auto native = makeNativeAsset();
+                auto a1 = root.create("a1", minBal(2));
+
+                auto balanceID =
+                    a1.createClaimableBalance(native, 1, {getClaimant(a1)});
+
+                auto tx = transactionFrameFromOps(
+                    app->getNetworkID(), a1,
+                    {root.op(sponsorFutureReserves(a1)),
+                     a1.op(updateSponsorship(claimableBalanceKey(balanceID))),
+                     a1.op(confirmAndClearSponsor())},
+                    {root});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm(2);
+                REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx->apply(*app, ltx, txm));
+
+                checkSponsorship(ltx, claimableBalanceKey(balanceID), 1,
+                                 &root.getPublicKey());
+                checkSponsorship(ltx, a1, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
+            }
         }
     }
 
@@ -185,6 +278,38 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
         // Revokes sponsorship entirely
         SECTION("sponsor is not sponsored")
         {
+            SECTION("account")
+            {
+                auto key = getAccount("a1");
+                TestAccount a1(*app, key);
+                auto tx1 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {root.op(sponsorFutureReserves(a1)),
+                     root.op(createAccount(a1, minBal(2))),
+                     a1.op(confirmAndClearSponsor())},
+                    {key});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm1(2);
+                REQUIRE(tx1->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx1->apply(*app, ltx, txm1));
+
+                auto tx2 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {root.op(updateSponsorship(accountKey(a1.getPublicKey())))},
+                    {});
+
+                TransactionMeta txm2(2);
+                REQUIRE(tx2->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx2->apply(*app, ltx, txm2));
+
+                checkSponsorship(ltx, accountKey(a1.getPublicKey()), 1,
+                                 nullptr);
+                checkSponsorship(ltx, a1, 1, nullptr, 0, 2, 0, 0);
+                checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
+            }
+
             SECTION("trust line")
             {
                 auto cur1 = makeAsset(root, "CUR1");
@@ -246,11 +371,88 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
                 ltx.commit();
             }
+
+            SECTION("claimable balance")
+            {
+                auto native = makeNativeAsset();
+                auto a1 = root.create("a1", minBal(2));
+
+                auto tx1 =
+                    transactionFrameFromOps(app->getNetworkID(), root,
+                                            {root.op(sponsorFutureReserves(a1)),
+                                             a1.op(createClaimableBalance(
+                                                 native, 1, {getClaimant(a1)})),
+                                             a1.op(confirmAndClearSponsor())},
+                                            {a1});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm1(2);
+                REQUIRE(tx1->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx1->apply(*app, ltx, txm1));
+
+                auto balanceID = tx1->getResult()
+                                     .result.results()[1]
+                                     .tr()
+                                     .createClaimableBalanceResult()
+                                     .balanceID();
+
+                auto tx2 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {root.op(
+                        updateSponsorship(claimableBalanceKey(balanceID)))},
+                    {});
+
+                TransactionMeta txm2(2);
+                REQUIRE(tx2->checkValid(ltx, 0, 0, 0));
+                REQUIRE(!tx2->apply(*app, ltx, txm2));
+
+                REQUIRE(getUpdateSponsorshipResultCode(tx2, 0) ==
+                        UPDATE_SPONSORSHIP_ONLY_TRANSFERABLE);
+
+                checkSponsorship(ltx, claimableBalanceKey(balanceID), 1,
+                                 &root.getPublicKey());
+                checkSponsorship(ltx, a1, 0, nullptr, 0, 0, 0, 0);
+                ltx.commit();
+            }
         }
 
         // Transfers sponsorship to sponsor-of-sponsor
         SECTION("sponsor is sponsored")
         {
+            SECTION("account")
+            {
+                auto a2 = root.create("a2", minBal(2));
+                auto key = getAccount("a1");
+                TestAccount a1(*app, key);
+
+                auto tx1 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {root.op(sponsorFutureReserves(a1)),
+                     root.op(createAccount(a1, minBal(2))),
+                     a1.op(confirmAndClearSponsor())},
+                    {key});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm1(2);
+                REQUIRE(tx1->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx1->apply(*app, ltx, txm1));
+
+                auto tx2 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {a2.op(sponsorFutureReserves(root)),
+                     root.op(updateSponsorship(accountKey(a1.getPublicKey()))),
+                     root.op(confirmAndClearSponsor())},
+                    {a2});
+
+                TransactionMeta txm2(2);
+                REQUIRE(tx2->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx2->apply(*app, ltx, txm2));
+
+                checkSponsorship(ltx, a1, 1, &a2.getPublicKey(), 0, 2, 0, 2);
+                checkSponsorship(ltx, a2, 0, nullptr, 0, 2, 2, 0);
+                ltx.commit();
+            }
+
             SECTION("trust line")
             {
                 auto cur1 = makeAsset(root, "CUR1");
@@ -320,6 +522,49 @@ TEST_CASE("update sponsorship", "[tx][sponsorship]")
                 checkSponsorship(ltx, a1, 0, nullptr, 1, 2, 0, 1);
                 checkSponsorship(ltx, a2, 0, nullptr, 0, 2, 1, 0);
                 checkSponsorship(ltx, root, 0, nullptr, 0, 2, 0, 0);
+                ltx.commit();
+            }
+
+            SECTION("claimable balances")
+            {
+                auto native = makeNativeAsset();
+                auto a1 = root.create("a1", minBal(2));
+                auto a2 = root.create("a2", minBal(2));
+
+                auto tx1 =
+                    transactionFrameFromOps(app->getNetworkID(), root,
+                                            {root.op(sponsorFutureReserves(a1)),
+                                             a1.op(createClaimableBalance(
+                                                 native, 1, {getClaimant(a1)})),
+                                             a1.op(confirmAndClearSponsor())},
+                                            {a1});
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                TransactionMeta txm1(2);
+                REQUIRE(tx1->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx1->apply(*app, ltx, txm1));
+
+                auto balanceID = tx1->getResult()
+                                     .result.results()[1]
+                                     .tr()
+                                     .createClaimableBalanceResult()
+                                     .balanceID();
+
+                auto tx2 = transactionFrameFromOps(
+                    app->getNetworkID(), root,
+                    {a2.op(sponsorFutureReserves(root)),
+                     root.op(updateSponsorship(claimableBalanceKey(balanceID))),
+                     root.op(confirmAndClearSponsor())},
+                    {a2});
+
+                TransactionMeta txm2(2);
+                REQUIRE(tx2->checkValid(ltx, 0, 0, 0));
+                REQUIRE(tx2->apply(*app, ltx, txm2));
+
+                checkSponsorship(ltx, claimableBalanceKey(balanceID), 1,
+                                 &a2.getPublicKey());
+                checkSponsorship(ltx, a1, 0, nullptr, 0, 0, 0, 0);
+                checkSponsorship(ltx, a2, 0, nullptr, 0, 2, 1, 0);
                 ltx.commit();
             }
         }

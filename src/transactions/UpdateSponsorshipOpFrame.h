@@ -26,6 +26,16 @@ class UpdateSponsorshipOpFrame : public OperationFrame
     bool updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx);
     bool updateSignerSponsorship(AbstractLedgerTxn& ltx);
 
+    bool tryRemoveEntrySponsorship(AbstractLedgerTxn& ltx,
+                                   LedgerTxnHeader const& header,
+                                   LedgerEntry& le, LedgerEntry& sponsoringAcc,
+                                   LedgerEntry& sponsoredAcc);
+    bool tryEstablishEntrySponsorship(AbstractLedgerTxn& ltx,
+                                      LedgerTxnHeader const& header,
+                                      LedgerEntry& le,
+                                      LedgerEntry& sponsoringAcc,
+                                      LedgerEntry& sponsoredAcc);
+
   public:
     UpdateSponsorshipOpFrame(Operation const& op, OperationResult& res,
                              TransactionFrame& parentTx);

@@ -156,32 +156,48 @@ UpdateSponsorshipOpFrame::updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx)
     {
         // Remove sponsorship
         auto oldSponsoringAcc = loadAccount(ltx, *le.ext.v1().sponsoringID);
-        auto sponsoredAcc = loadAccount(ltx, getAccountID(le));
-        auto res = canRemoveEntrySponsorship(header.current(), le,
-                                             oldSponsoringAcc.current(),
-                                             &sponsoredAcc.current());
-        if (!processSponsorshipResult(res))
+        if (le.data.type() == ACCOUNT)
         {
-            return false;
+            if (!tryRemoveEntrySponsorship(ltx, header, le,
+                                           oldSponsoringAcc.current(), le))
+            {
+                return false;
+            }
         }
-        removeEntrySponsorship(le, oldSponsoringAcc.current(),
-                               &sponsoredAcc.current());
+        else
+        {
+            auto sponsoredAcc = loadAccount(ltx, getAccountID(le));
+            if (!tryRemoveEntrySponsorship(ltx, header, le,
+                                           oldSponsoringAcc.current(),
+                                           sponsoredAcc.current()))
+            {
+                return false;
+            }
+        }
     }
     else if (!wasEntrySponsored && willEntryBeSponsored)
     {
         // Establish sponsorship
         auto const& se = sponsorship.currentGeneralized().sponsorshipEntry();
         auto sponsoringAcc = loadAccount(ltx, se.sponsoringID);
-        auto sponsoredAcc = loadAccount(ltx, getAccountID(le));
-        auto res = canEstablishEntrySponsorship(header.current(), le,
-                                                sponsoringAcc.current(),
-                                                &sponsoredAcc.current());
-        if (!processSponsorshipResult(res))
+        if (le.data.type() == ACCOUNT)
         {
-            return false;
+            if (!tryEstablishEntrySponsorship(ltx, header, le,
+                                              sponsoringAcc.current(), le))
+            {
+                return false;
+            }
         }
-        establishEntrySponsorship(le, sponsoringAcc.current(),
-                                  &sponsoredAcc.current());
+        else
+        {
+            auto sponsoredAcc = loadAccount(ltx, getAccountID(le));
+            if (!tryEstablishEntrySponsorship(ltx, header, le,
+                                              sponsoringAcc.current(),
+                                              sponsoredAcc.current()))
+            {
+                return false;
+            }
+        }
     }
     else // (!wasEntrySponsored && !willEntryBeSponsored)
     {
@@ -189,6 +205,35 @@ UpdateSponsorshipOpFrame::updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx)
     }
 
     innerResult().code(UPDATE_SPONSORSHIP_SUCCESS);
+    return true;
+}
+
+bool
+UpdateSponsorshipOpFrame::tryRemoveEntrySponsorship(
+    AbstractLedgerTxn& ltx, LedgerTxnHeader const& header, LedgerEntry& le,
+    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc)
+{
+    auto res = canRemoveEntrySponsorship(header.current(), le, sponsoringAcc,
+                                         &sponsoredAcc);
+    if (!processSponsorshipResult(res))
+    {
+        return false;
+    }
+    removeEntrySponsorship(le, sponsoringAcc, &sponsoredAcc);
+    return true;
+}
+bool
+UpdateSponsorshipOpFrame::tryEstablishEntrySponsorship(
+    AbstractLedgerTxn& ltx, LedgerTxnHeader const& header, LedgerEntry& le,
+    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc)
+{
+    auto res = canEstablishEntrySponsorship(header.current(), le, sponsoringAcc,
+                                            &sponsoredAcc);
+    if (!processSponsorshipResult(res))
+    {
+        return false;
+    }
+    establishEntrySponsorship(le, sponsoringAcc, &sponsoredAcc);
     return true;
 }
 
