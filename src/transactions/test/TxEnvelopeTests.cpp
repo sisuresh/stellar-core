@@ -1094,7 +1094,8 @@ TEST_CASE("txenvelope", "[tx][envelope]")
                             {
                                 LedgerTxn ltx(app->getLedgerTxnRoot());
                                 TransactionMeta txm(2);
-                                REQUIRE(insideSignerTx->checkValid(ltx, 0, 0, 0));
+                                REQUIRE(
+                                    insideSignerTx->checkValid(ltx, 0, 0, 0));
                                 REQUIRE(insideSignerTx->apply(*app, ltx, txm));
                                 REQUIRE(insideSignerTx->getResultCode() ==
                                         txSUCCESS);
@@ -1111,7 +1112,8 @@ TEST_CASE("txenvelope", "[tx][envelope]")
                             {
                                 LedgerTxn ltx(app->getLedgerTxnRoot());
                                 TransactionMeta txm(2);
-                                REQUIRE(outsideSignerTx->checkValid(ltx, 0, 0, 0));
+                                REQUIRE(
+                                    outsideSignerTx->checkValid(ltx, 0, 0, 0));
                                 REQUIRE(outsideSignerTx->apply(*app, ltx, txm));
                                 REQUIRE(outsideSignerTx->getResultCode() ==
                                         txSUCCESS);
