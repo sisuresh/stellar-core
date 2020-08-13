@@ -4727,7 +4727,6 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
     SECTION("crossed offers release sponsorships allowing payment to succeed "
             "for source")
     {
-        auto const minBal0 = app->getLedgerManager().getLastMinBalance(0);
         auto const minBal1 = app->getLedgerManager().getLastMinBalance(1);
 
         for_versions_from(14, *app, [&]() {
