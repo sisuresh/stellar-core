@@ -4427,6 +4427,12 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         [&] { payor.pay(payee, buying, 50, selling, 50, {}); });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o1.sellerID, o1.offerID), 1,
+                                     &b.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &b.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &b.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 4, 2, 0, 2);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 2, 3, 0);
@@ -4440,6 +4446,10 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                     });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &b.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &b.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 2, 2, 0);
@@ -4456,6 +4466,10 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &b.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &b.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 2, 2, 0);
@@ -4471,6 +4485,8 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &b.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 2, 2, 0, 0);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 2, 1, 0);
@@ -4488,6 +4504,8 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &b.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 2, 2, 0, 0);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 2, 1, 0);
@@ -4592,6 +4610,12 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         [&] { b.pay(c, buying, 50, selling, 50, {}); });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o1.sellerID, o1.offerID), 1,
+                                     &a2.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &a2.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &a1.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 4, 2, 1, 2);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 2, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 0, 0, 0);
@@ -4605,6 +4629,10 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                     });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &a2.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &a1.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 3, 2, 1, 1);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 1, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 0, 0, 0);
@@ -4619,6 +4647,10 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         [&] { b.pay(c, buying, 150, selling, 150, {}); });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o2.sellerID, o2.offerID), 1,
+                                     &a2.getPublicKey());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &a1.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 3, 2, 1, 1);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 1, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 0, 0, 0);
@@ -4632,6 +4664,8 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         [&] { b.pay(c, buying, 200, selling, 200, {}); });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &a1.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 2, 2, 1, 0);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 0, 0, 0);
@@ -4647,6 +4681,8 @@ TEST_CASE("pathpayment", "[tx][pathpayment]")
                         [&] { b.pay(c, buying, 250, selling, 250, {}); });
 
                     LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, offerKey(o3.sellerID, o3.offerID), 1,
+                                     &a1.getPublicKey());
                     checkSponsorship(ltx, a1, 0, nullptr, 2, 2, 1, 0);
                     checkSponsorship(ltx, a2, 0, nullptr, 3, 2, 0, 1);
                     checkSponsorship(ltx, b, 0, nullptr, 2, 0, 0, 0);
