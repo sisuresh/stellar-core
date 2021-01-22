@@ -1190,6 +1190,27 @@ revokeSponsorship(AccountID const& accID, SignerKey const& key)
     return op;
 }
 
+Operation
+clawback(AccountID const& from, Asset const& asset, int64_t amount)
+{
+    Operation op;
+    op.body.type(CLAWBACK);
+    op.body.clawbackOp().from = toMuxedAccount(from);
+    op.body.clawbackOp().amount = amount;
+
+    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4)
+    {
+        op.body.clawbackOp().asset.type(ASSET_TYPE_CREDIT_ALPHANUM4);
+        op.body.clawbackOp().asset.assetCode4() = asset.alphaNum4().assetCode;
+    }
+    else if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM12)
+    {
+        op.body.clawbackOp().asset.type(ASSET_TYPE_CREDIT_ALPHANUM12);
+        op.body.clawbackOp().asset.assetCode12() = asset.alphaNum12().assetCode;
+    }
+    return op;
+}
+
 OperationFrame const&
 getFirstOperationFrame(TransactionFrame const& tx)
 {
