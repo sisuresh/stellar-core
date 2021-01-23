@@ -964,6 +964,17 @@ getAsset(AccountID const& issuer, AssetCode const& assetCode)
     return asset;
 }
 
+void
+setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb)
+{
+    if (cb.ext.v() == 0)
+    {
+        cb.ext.v(1);
+        cb.ext.v1().flags = 0;
+    }
+    cb.ext.v1().flags |= CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG;
+}
+
 namespace detail
 {
 struct MuxChecker

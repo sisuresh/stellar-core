@@ -149,6 +149,12 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
     auto const& asset = mCreateClaimableBalance.asset;
     auto amount = mCreateClaimableBalance.amount;
 
+    // Create claimable balance entry
+    LedgerEntry newClaimableBalance;
+    newClaimableBalance.data.type(CLAIMABLE_BALANCE);
+
+    auto& claimableBalanceEntry = newClaimableBalance.data.claimableBalance();
+
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
         if (getAvailableBalance(header, sourceAccount) < amount)
@@ -179,13 +185,14 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
             return false;
         }
+
+        if (header.current().ledgerVersion >= 16 &&
+            trustline.isClawbackEnabled())
+        {
+            setClaimableBalanceClawbackEnabled(claimableBalanceEntry);
+        }
     }
 
-    // Create claimable balance entry
-    LedgerEntry newClaimableBalance;
-    newClaimableBalance.data.type(CLAIMABLE_BALANCE);
-
-    auto& claimableBalanceEntry = newClaimableBalance.data.claimableBalance();
     claimableBalanceEntry.amount = amount;
     claimableBalanceEntry.asset = asset;
 
