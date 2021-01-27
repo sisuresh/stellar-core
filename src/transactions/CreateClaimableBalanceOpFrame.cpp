@@ -14,6 +14,19 @@
 namespace stellar
 {
 
+void
+setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb)
+{
+    if (cb.ext.v() != 0)
+    {
+        throw std::runtime_error(
+            "unexpected ClaimableBalanceEntry ext version");
+    }
+
+    cb.ext.v(1);
+    cb.ext.v1().flags = CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG;
+}
+
 int64_t
 relativeToAbsolute(TimePoint closeTime, int64_t relative)
 {
@@ -149,6 +162,12 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
     auto const& asset = mCreateClaimableBalance.asset;
     auto amount = mCreateClaimableBalance.amount;
 
+    // Create claimable balance entry
+    LedgerEntry newClaimableBalance;
+    newClaimableBalance.data.type(CLAIMABLE_BALANCE);
+
+    auto& claimableBalanceEntry = newClaimableBalance.data.claimableBalance();
+
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
         if (getAvailableBalance(header, sourceAccount) < amount)
@@ -179,13 +198,19 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
             return false;
         }
+
+        // if the issuer is creating a claimable balance, then we need to check
+        // the account flags to determine if clawback should be enabled on the
+        // balance
+        if (header.current().ledgerVersion >= 16 &&
+            (trustline.isClawbackEnabled() ||
+             (getSourceID() == getIssuer(asset) &&
+              isClawbackEnabledOnAccount(sourceAccount))))
+        {
+            setClaimableBalanceClawbackEnabled(claimableBalanceEntry);
+        }
     }
 
-    // Create claimable balance entry
-    LedgerEntry newClaimableBalance;
-    newClaimableBalance.data.type(CLAIMABLE_BALANCE);
-
-    auto& claimableBalanceEntry = newClaimableBalance.data.claimableBalance();
     claimableBalanceEntry.amount = amount;
     claimableBalanceEntry.asset = asset;
 
