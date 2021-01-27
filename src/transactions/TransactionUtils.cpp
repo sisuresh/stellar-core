@@ -1013,6 +1013,17 @@ setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb)
     cb.ext.v1().flags |= CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG;
 }
 
+bool
+claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb)
+{
+    if (cb.ext.v() == 1)
+    {
+        return (cb.ext.v1().flags & ~MASK_CLAIMABLE_BALANCE_FLAGS) == 0;
+    }
+
+    return true;
+}
+
 namespace detail
 {
 struct MuxChecker

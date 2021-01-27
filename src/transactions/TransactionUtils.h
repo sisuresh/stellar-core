@@ -189,4 +189,5 @@ bool hasAccountEntryExtV2(AccountEntry const& ae);
 Asset getAsset(AccountID const& issuer, AssetCode const& assetCode);
 
 void setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb);
+bool claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb);
 }
