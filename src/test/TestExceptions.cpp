@@ -430,6 +430,24 @@ throwIf(ClawbackClaimableBalanceResult const& result)
     case CLAWBACK_CLAIMABLE_BALANCE_NOT_CLAWBACK_ENABLED:
         throw ex_CLAWBACK_CLAIMABLE_BALANCE_NOT_CLAWBACK_ENABLED{};
     case CLAWBACK_CLAIMABLE_BALANCE_SUCCESS:
+            break;
+    default:
+        throw ex_UNKNOWN{};
+    }
+}
+throwIf(SetTrustLineFlagsResult const& result)
+{
+    switch (result.code())
+    {
+    case SET_TRUST_LINE_FLAGS_MALFORMED:
+        throw ex_SET_TRUST_LINE_FLAGS_MALFORMED{};
+    case SET_TRUST_LINE_FLAGS_NO_TRUST_LINE:
+        throw ex_SET_TRUST_LINE_FLAGS_NO_TRUST_LINE{};
+    case SET_TRUST_LINE_FLAGS_CANT_REVOKE:
+        throw ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE{};
+    case SET_TRUST_LINE_FLAGS_INVALID_STATE:
+        throw ex_SET_TRUST_LINE_FLAGS_INVALID_STATE{};
+    case SET_TRUST_LINE_FLAGS_SUCCESS:
         break;
     default:
         throw ex_UNKNOWN{};
@@ -531,6 +549,8 @@ throwIf(TransactionResult const& result)
         break;
     case CLAWBACK_CLAIMABLE_BALANCE:
         throwIf(opResult.tr().clawbackClaimableBalanceResult());
+    case SET_TRUST_LINE_FLAGS:
+        throwIf(opResult.tr().setTrustLineFlagsResult());
         break;
     }
 }
