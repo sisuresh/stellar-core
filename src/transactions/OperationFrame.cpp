@@ -23,6 +23,7 @@
 #include "transactions/PaymentOpFrame.h"
 #include "transactions/RevokeSponsorshipOpFrame.h"
 #include "transactions/SetOptionsOpFrame.h"
+#include "transactions/SetTrustLineFlagsOpFrame.h"
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
@@ -100,6 +101,8 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
         return std::make_shared<RevokeSponsorshipOpFrame>(op, res, tx);
     case CLAWBACK:
         return std::make_shared<ClawbackOpFrame>(op, res, tx);
+    case SET_TRUST_LINE_FLAGS:
+        return std::make_shared<SetTrustLineFlagsOpFrame>(op, res, tx);
     default:
         ostringstream err;
         err << "Unknown Tx type: " << op.body.type();
