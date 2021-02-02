@@ -60,26 +60,30 @@ TEST_CASE("authorized to maintain liabilities", "[tx][allowtrust]")
         return market.addOffer(a1, {usd, idr, Price{1, 1}, 1000});
     });
 
-    auto offerTest = [&](bool buyIsOnlyAllowedToMaintainLiabilities) {
+    auto offerTest = [&](bool buyIsOnlyAllowedToMaintainLiabilities,
+                         TrustFlagOp flagOp) {
         auto& maintainLiabilitiesAsset =
             buyIsOnlyAllowedToMaintainLiabilities ? idr : usd;
 
         market.requireChanges({}, [&] {
-            gateway.allowMaintainLiabilities(maintainLiabilitiesAsset, a1);
+            gateway.allowMaintainLiabilities(maintainLiabilitiesAsset, a1,
+                                             flagOp);
         });
 
         SECTION("don't pull orders until denyTrust")
         {
             SECTION("denyTrust on buying asset")
             {
-                market.requireChanges({{offer.key, OfferState::DELETED}},
-                                      [&] { gateway.denyTrust(idr, a1); });
+                market.requireChanges({{offer.key, OfferState::DELETED}}, [&] {
+                    gateway.denyTrust(idr, a1, flagOp);
+                });
             }
 
             SECTION("denyTrust on selling asset")
             {
-                market.requireChanges({{offer.key, OfferState::DELETED}},
-                                      [&] { gateway.denyTrust(usd, a1); });
+                market.requireChanges({{offer.key, OfferState::DELETED}}, [&] {
+                    gateway.denyTrust(usd, a1, flagOp);
+                });
             }
         }
 
@@ -223,33 +227,46 @@ TEST_CASE("authorized to maintain liabilities", "[tx][allowtrust]")
     SECTION("AUTHORIZED_FLAG and AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG can't "
             "be used together")
     {
-        for_versions_from(13, *app, [&] {
-            REQUIRE_THROWS_AS(
-                gateway.allowTrust(idr, a1,
-                                   AUTHORIZED_FLAG |
-                                       AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG),
-                ex_ALLOW_TRUST_MALFORMED);
-        });
+        SECTION("allow trust")
+        {
+            for_versions_from(13, *app, [&] {
+                REQUIRE_THROWS_AS(
+                    gateway.allowTrust(
+                        idr, a1,
+                        AUTHORIZED_FLAG |
+                            AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG),
+                    ex_ALLOW_TRUST_MALFORMED);
+            });
+        }
+
+        SECTION("set trustline flags")
+        {
+            auto flags = setTrustLineFlags(
+                AUTHORIZED_FLAG | AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG);
+            for_versions_from(16, *app, [&] {
+                REQUIRE_THROWS_AS(gateway.setTrustLineFlags(idr, a1, flags),
+                                  ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+            });
+        }
     }
 
-    for_versions_from(13, *app, [&] {
+    auto maintainLiabilitiesTest = [&](TrustFlagOp flagOp) {
         SECTION("offer tests")
         {
             SECTION("buying asset is only allowed to maintain liabilities")
             {
-                offerTest(true);
+                offerTest(true, flagOp);
             }
             SECTION("selling asset is only allowed to maintain liabilities")
             {
-                offerTest(false);
+                offerTest(false, flagOp);
             }
         }
 
         SECTION("payment tests")
         {
             market.requireChanges(
-                {}, [&] { gateway.allowMaintainLiabilities(idr, a1); });
-
+                {}, [&] { gateway.allowMaintainLiabilities(idr, a1, flagOp); });
             SECTION("can't send payment")
             {
                 REQUIRE_THROWS_AS(
@@ -260,7 +277,7 @@ TEST_CASE("authorized to maintain liabilities", "[tx][allowtrust]")
             SECTION("can't receive payment")
             {
                 a2.changeTrust(idr, trustLineLimit);
-                gateway.allowTrust(idr, a2);
+                gateway.allowTrust(idr, a2, flagOp);
                 gateway.pay(a2, idr, trustLineStartingBalance);
 
                 REQUIRE_THROWS_AS(a2.pay(a1, idr, 1),
@@ -281,19 +298,50 @@ TEST_CASE("authorized to maintain liabilities", "[tx][allowtrust]")
 
             SECTION("authorized -> authorized to maintain liabilities")
             {
-                issuer.allowTrust(iss, a3);
-                REQUIRE_THROWS_AS(issuer.allowMaintainLiabilities(iss, a3),
-                                  ex_ALLOW_TRUST_CANT_REVOKE);
+                issuer.allowTrust(iss, a3, flagOp);
+                if (flagOp == TrustFlagOp::ALLOW_TRUST)
+                {
+                    REQUIRE_THROWS_AS(
+                        issuer.allowMaintainLiabilities(iss, a3, flagOp),
+                        ex_ALLOW_TRUST_CANT_REVOKE);
+                }
+                else
+                {
+                    REQUIRE_THROWS_AS(
+                        issuer.allowMaintainLiabilities(iss, a3, flagOp),
+                        ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+                }
             }
 
             SECTION("authorized to maintain liabilities -> not authorized")
             {
                 issuer.allowMaintainLiabilities(iss, a3);
-                REQUIRE_THROWS_AS(issuer.denyTrust(iss, a3),
-                                  ex_ALLOW_TRUST_CANT_REVOKE);
+                if (flagOp == TrustFlagOp::ALLOW_TRUST)
+                {
+                    REQUIRE_THROWS_AS(issuer.denyTrust(iss, a3, flagOp),
+                                      ex_ALLOW_TRUST_CANT_REVOKE);
+                }
+                else
+                {
+                    REQUIRE_THROWS_AS(issuer.denyTrust(iss, a3, flagOp),
+                                      ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+                }
             }
         }
-    });
+    };
+
+    SECTION("allow trust")
+    {
+        for_versions_from(13, *app, [&] {
+            maintainLiabilitiesTest(TrustFlagOp::ALLOW_TRUST);
+        });
+    }
+    SECTION("set trustline flags")
+    {
+        for_versions_from(16, *app, [&] {
+            maintainLiabilitiesTest(TrustFlagOp::SET_TRUST_LINE_FLAGS);
+        });
+    }
 }
 
 TEST_CASE("allow trust", "[tx][allowtrust]")
@@ -330,27 +378,62 @@ TEST_CASE("allow trust", "[tx][allowtrust]")
 
     SECTION("allow trust without trustline")
     {
-        for_all_versions(*app, [&] {
-            {
-                gateway.setOptions(setFlags(AUTH_REQUIRED_FLAG));
-            }
-            SECTION("do not set revocable flag")
-            {
-                REQUIRE_THROWS_AS(gateway.allowTrust(idr, a1),
-                                  ex_ALLOW_TRUST_NO_TRUST_LINE);
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
-                                  ex_ALLOW_TRUST_CANT_REVOKE);
-            }
-            SECTION("set revocable flag")
-            {
-                gateway.setOptions(setFlags(AUTH_REVOCABLE_FLAG));
+        SECTION("allow trust without trustline")
+        {
+            for_all_versions(*app, [&] {
+                {
+                    gateway.setOptions(setFlags(AUTH_REQUIRED_FLAG));
+                }
+                SECTION("do not set revocable flag")
+                {
+                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, a1),
+                                      ex_ALLOW_TRUST_NO_TRUST_LINE);
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
+                                      ex_ALLOW_TRUST_CANT_REVOKE);
+                }
+                SECTION("set revocable flag")
+                {
+                    gateway.setOptions(setFlags(AUTH_REVOCABLE_FLAG));
 
-                REQUIRE_THROWS_AS(gateway.allowTrust(idr, a1),
-                                  ex_ALLOW_TRUST_NO_TRUST_LINE);
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
-                                  ex_ALLOW_TRUST_NO_TRUST_LINE);
-            }
-        });
+                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, a1),
+                                      ex_ALLOW_TRUST_NO_TRUST_LINE);
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
+                                      ex_ALLOW_TRUST_NO_TRUST_LINE);
+                }
+            });
+        }
+        SECTION("set trustline flags without trustline")
+        {
+            for_versions_from(16, *app, [&] {
+                {
+                    gateway.setOptions(setFlags(AUTH_REQUIRED_FLAG));
+                }
+                SECTION("do not set revocable flag")
+                {
+                    REQUIRE_THROWS_AS(
+                        gateway.allowTrust(idr, a1,
+                                           TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
+                    REQUIRE_THROWS_AS(
+                        gateway.denyTrust(idr, a1,
+                                          TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+                }
+                SECTION("set revocable flag")
+                {
+                    gateway.setOptions(setFlags(AUTH_REVOCABLE_FLAG));
+
+                    REQUIRE_THROWS_AS(
+                        gateway.allowTrust(idr, a1,
+                                           TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
+                    REQUIRE_THROWS_AS(
+                        gateway.denyTrust(idr, a1,
+                                          TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
+                }
+            });
+        }
     }
 
     SECTION("allow trust not required with payment")
@@ -362,49 +445,75 @@ TEST_CASE("allow trust", "[tx][allowtrust]")
         });
     }
 
-    SECTION("allow trust required")
+    SECTION("invalid authorization flag")
     {
         for_all_versions(*app, [&] {
-            {
-                gateway.setOptions(setFlags(AUTH_REQUIRED_FLAG));
+            REQUIRE_THROWS_AS(
+                gateway.allowTrust(idr, a1,
+                                   AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG + 1),
+                ex_ALLOW_TRUST_MALFORMED);
+        });
+    }
 
-                a1.changeTrust(idr, trustLineLimit);
-                REQUIRE_THROWS_AS(
-                    gateway.pay(a1, idr, trustLineStartingBalance),
-                    ex_PAYMENT_NOT_AUTHORIZED);
+    SECTION("allow trust required")
+    {
+        auto allowTrustRequired = [&](TrustFlagOp flagOp) {
+            gateway.setOptions(setFlags(AUTH_REQUIRED_FLAG));
 
-                gateway.allowTrust(idr, a1);
-                gateway.pay(a1, idr, trustLineStartingBalance);
-            }
-            SECTION("invalid authorization flag")
-            {
-                REQUIRE_THROWS_AS(
-                    gateway.allowTrust(
-                        idr, a1, AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG + 1),
-                    ex_ALLOW_TRUST_MALFORMED);
-            }
+            a1.changeTrust(idr, trustLineLimit);
+            REQUIRE_THROWS_AS(gateway.pay(a1, idr, trustLineStartingBalance),
+                              ex_PAYMENT_NOT_AUTHORIZED);
+
+            gateway.allowTrust(idr, a1, flagOp);
+            gateway.pay(a1, idr, trustLineStartingBalance);
+
             SECTION("do not set revocable flag")
             {
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
-                                  ex_ALLOW_TRUST_CANT_REVOKE);
-                a1.pay(gateway, idr, trustLineStartingBalance);
+                if (flagOp == TrustFlagOp::ALLOW_TRUST)
+                {
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1, flagOp),
+                                      ex_ALLOW_TRUST_CANT_REVOKE);
+                    a1.pay(gateway, idr, trustLineStartingBalance);
 
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1),
-                                  ex_ALLOW_TRUST_CANT_REVOKE);
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1, flagOp),
+                                      ex_ALLOW_TRUST_CANT_REVOKE);
+                }
+                else
+                {
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1, flagOp),
+                                      ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+                    a1.pay(gateway, idr, trustLineStartingBalance);
+
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, a1, flagOp),
+                                      ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+                }
             }
             SECTION("set revocable flag")
             {
                 gateway.setOptions(setFlags(AUTH_REVOCABLE_FLAG));
 
-                gateway.denyTrust(idr, a1);
+                gateway.denyTrust(idr, a1, flagOp);
                 REQUIRE_THROWS_AS(
                     a1.pay(gateway, idr, trustLineStartingBalance),
                     ex_PAYMENT_SRC_NOT_AUTHORIZED);
 
-                gateway.allowTrust(idr, a1);
+                gateway.allowTrust(idr, a1, flagOp);
                 a1.pay(gateway, idr, trustLineStartingBalance);
             }
-        });
+        };
+
+        SECTION("allow trust")
+        {
+            for_all_versions(
+                *app, [&] { allowTrustRequired(TrustFlagOp::ALLOW_TRUST); });
+        }
+
+        SECTION("set trustline flags")
+        {
+            for_versions_from(16, *app, [&] {
+                allowTrustRequired(TrustFlagOp::SET_TRUST_LINE_FLAGS);
+            });
+        }
     }
 
     SECTION("self allow trust")
@@ -418,19 +527,36 @@ TEST_CASE("allow trust", "[tx][allowtrust]")
                                   ex_ALLOW_TRUST_TRUST_NOT_REQUIRED);
             });
 
-            for_versions(3, 15, *app, [&] {
-                REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                  ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                  ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-            });
+            SECTION("allow trust")
+            {
+                for_versions(3, 15, *app, [&] {
+                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                });
 
-            for_versions_from(16, *app, [&] {
-                REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                  ex_ALLOW_TRUST_MALFORMED);
-                REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                  ex_ALLOW_TRUST_MALFORMED);
-            });
+                for_versions_from(16, *app, [&] {
+                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                      ex_ALLOW_TRUST_MALFORMED);
+                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                      ex_ALLOW_TRUST_MALFORMED);
+                });
+            }
+
+            SECTION("set trustline flags")
+            {
+                for_versions_from(16, *app, [&] {
+                    REQUIRE_THROWS_AS(
+                        gateway.allowTrust(idr, gateway,
+                                           TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                    REQUIRE_THROWS_AS(
+                        gateway.denyTrust(idr, gateway,
+                                          TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                        ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                });
+            }
         }
 
         SECTION("allow trust without explicit trustline")
@@ -446,19 +572,38 @@ TEST_CASE("allow trust", "[tx][allowtrust]")
                                       ex_ALLOW_TRUST_CANT_REVOKE);
                 });
 
-                for_versions(3, 15, *app, [&] {
-                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-                });
+                SECTION("allow trust")
+                {
+                    for_versions(3, 15, *app, [&] {
+                        REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                        REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                    });
 
-                for_versions_from(16, *app, [&] {
-                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_MALFORMED);
-                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_MALFORMED);
-                });
+                    for_versions_from(16, *app, [&] {
+                        REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_MALFORMED);
+                        REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_MALFORMED);
+                    });
+                }
+
+                SECTION("set trustline flags")
+                {
+                    for_versions_from(16, *app, [&] {
+                        REQUIRE_THROWS_AS(
+                            gateway.allowTrust(
+                                idr, gateway,
+                                TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                            ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                        REQUIRE_THROWS_AS(
+                            gateway.denyTrust(
+                                idr, gateway,
+                                TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                            ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                    });
+                }
             }
             SECTION("set revocable flag")
             {
@@ -469,89 +614,128 @@ TEST_CASE("allow trust", "[tx][allowtrust]")
                     gateway.denyTrust(idr, gateway);
                 });
 
-                for_versions(3, 15, *app, [&] {
-                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
-                });
+                SECTION("allow trust")
+                {
+                    for_versions(3, 15, *app, [&] {
+                        REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                        REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_SELF_NOT_ALLOWED);
+                    });
 
-                for_versions_from(16, *app, [&] {
-                    REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_MALFORMED);
-                    REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
-                                      ex_ALLOW_TRUST_MALFORMED);
-                });
+                    for_versions_from(16, *app, [&] {
+                        REQUIRE_THROWS_AS(gateway.allowTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_MALFORMED);
+                        REQUIRE_THROWS_AS(gateway.denyTrust(idr, gateway),
+                                          ex_ALLOW_TRUST_MALFORMED);
+                    });
+                }
+
+                SECTION("set trustline flags")
+                {
+                    for_versions_from(16, *app, [&] {
+                        REQUIRE_THROWS_AS(
+                            gateway.allowTrust(
+                                idr, gateway,
+                                TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                            ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                        REQUIRE_THROWS_AS(
+                            gateway.denyTrust(
+                                idr, gateway,
+                                TrustFlagOp::SET_TRUST_LINE_FLAGS),
+                            ex_SET_TRUST_LINE_FLAGS_MALFORMED);
+                    });
+                }
             }
         }
     }
 
     SECTION("allow trust with offers")
     {
-        SECTION("an asset matches")
+        auto assetMatches = [&](TrustFlagOp flagOp) {
+            auto native = makeNativeAsset();
+
+            auto toSet = static_cast<uint32_t>(AUTH_REQUIRED_FLAG) |
+                         static_cast<uint32_t>(AUTH_REVOCABLE_FLAG);
+            gateway.setOptions(setFlags(toSet));
+
+            a1.changeTrust(idr, trustLineLimit);
+            gateway.allowTrust(idr, a1, flagOp);
+
+            auto market = TestMarket{*app};
+            SECTION("buying asset matches")
+            {
+                auto offer = market.requireChangesWithOffer({}, [&] {
+                    return market.addOffer(a1,
+                                           {native, idr, Price{1, 1}, 1000});
+                });
+                market.requireChanges({{offer.key, OfferState::DELETED}},
+                                      [&] { gateway.denyTrust(idr, a1); });
+            }
+            SECTION("selling asset matches")
+            {
+                gateway.pay(a1, idr, trustLineStartingBalance);
+
+                auto offer = market.requireChangesWithOffer({}, [&] {
+                    return market.addOffer(a1,
+                                           {idr, native, Price{1, 1}, 1000});
+                });
+                market.requireChanges({{offer.key, OfferState::DELETED}},
+                                      [&] { gateway.denyTrust(idr, a1); });
+            }
+        };
+        SECTION("allow trust - an asset matches")
         {
-            for_versions_from(10, *app, [&] {
-                auto native = makeNativeAsset();
+            for_versions_from(10, *app,
+                              [&] { assetMatches(TrustFlagOp::ALLOW_TRUST); });
+        }
 
-                auto toSet = static_cast<uint32_t>(AUTH_REQUIRED_FLAG) |
-                             static_cast<uint32_t>(AUTH_REVOCABLE_FLAG);
-                gateway.setOptions(setFlags(toSet));
-
-                a1.changeTrust(idr, trustLineLimit);
-                gateway.allowTrust(idr, a1);
-
-                auto market = TestMarket{*app};
-                SECTION("buying asset matches")
-                {
-                    auto offer = market.requireChangesWithOffer({}, [&] {
-                        return market.addOffer(
-                            a1, {native, idr, Price{1, 1}, 1000});
-                    });
-                    market.requireChanges({{offer.key, OfferState::DELETED}},
-                                          [&] { gateway.denyTrust(idr, a1); });
-                }
-                SECTION("selling asset matches")
-                {
-                    gateway.pay(a1, idr, trustLineStartingBalance);
-
-                    auto offer = market.requireChangesWithOffer({}, [&] {
-                        return market.addOffer(
-                            a1, {idr, native, Price{1, 1}, 1000});
-                    });
-                    market.requireChanges({{offer.key, OfferState::DELETED}},
-                                          [&] { gateway.denyTrust(idr, a1); });
-                }
+        SECTION("set trustline flags - an asset matches")
+        {
+            for_versions_from(16, *app, [&] {
+                assetMatches(TrustFlagOp::SET_TRUST_LINE_FLAGS);
             });
         }
 
-        SECTION("neither asset matches")
+        auto neitherAssetMatches = [&](TrustFlagOp flagOp) {
+            auto toSet = static_cast<uint32_t>(AUTH_REQUIRED_FLAG) |
+                         static_cast<uint32_t>(AUTH_REVOCABLE_FLAG);
+            gateway.setOptions(setFlags(toSet));
+
+            auto cur1 = makeAsset(gateway, "CUR1");
+            auto cur2 = makeAsset(gateway, "CUR2");
+
+            a1.changeTrust(idr, trustLineLimit);
+            gateway.allowTrust(idr, a1, flagOp);
+
+            a1.changeTrust(cur1, trustLineLimit);
+            gateway.allowTrust(cur1, a1, flagOp);
+
+            a1.changeTrust(cur2, trustLineLimit);
+            gateway.allowTrust(cur2, a1, flagOp);
+
+            gateway.pay(a1, cur1, trustLineStartingBalance);
+
+            auto market = TestMarket{*app};
+            auto offer = market.requireChangesWithOffer({}, [&] {
+                return market.addOffer(a1, {cur1, cur2, Price{1, 1}, 1000});
+            });
+            market.requireChanges(
+                {{offer.key, {cur1, cur2, Price{1, 1}, 1000}}},
+                [&] { gateway.denyTrust(idr, a1, flagOp); });
+        };
+
+        SECTION("allow trust - neither asset matches")
         {
             for_versions_from(10, *app, [&] {
-                auto toSet = static_cast<uint32_t>(AUTH_REQUIRED_FLAG) |
-                             static_cast<uint32_t>(AUTH_REVOCABLE_FLAG);
-                gateway.setOptions(setFlags(toSet));
+                neitherAssetMatches(TrustFlagOp::ALLOW_TRUST);
+            });
+        }
 
-                auto cur1 = makeAsset(gateway, "CUR1");
-                auto cur2 = makeAsset(gateway, "CUR2");
-
-                a1.changeTrust(idr, trustLineLimit);
-                gateway.allowTrust(idr, a1);
-
-                a1.changeTrust(cur1, trustLineLimit);
-                gateway.allowTrust(cur1, a1);
-
-                a1.changeTrust(cur2, trustLineLimit);
-                gateway.allowTrust(cur2, a1);
-
-                gateway.pay(a1, cur1, trustLineStartingBalance);
-
-                auto market = TestMarket{*app};
-                auto offer = market.requireChangesWithOffer({}, [&] {
-                    return market.addOffer(a1, {cur1, cur2, Price{1, 1}, 1000});
-                });
-                market.requireChanges(
-                    {{offer.key, {cur1, cur2, Price{1, 1}, 1000}}},
-                    [&] { gateway.denyTrust(idr, a1); });
+        SECTION("set trustline flags - an asset matches")
+        {
+            for_versions_from(16, *app, [&] {
+                neitherAssetMatches(TrustFlagOp::SET_TRUST_LINE_FLAGS);
             });
         }
     }
