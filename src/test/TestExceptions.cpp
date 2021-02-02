@@ -419,6 +419,26 @@ throwIf(ClawbackResult const& result)
 }
 
 void
+throwIf(SetTrustLineFlagsResult const& result)
+{
+    switch (result.code())
+    {
+    case SET_TRUST_LINE_FLAGS_MALFORMED:
+        throw ex_SET_TRUST_LINE_FLAGS_MALFORMED{};
+    case SET_TRUST_LINE_FLAGS_NO_TRUST_LINE:
+        throw ex_SET_TRUST_LINE_FLAGS_NO_TRUST_LINE{};
+    case SET_TRUST_LINE_FLAGS_CANT_REVOKE:
+        throw ex_SET_TRUST_LINE_FLAGS_CANT_REVOKE{};
+    case SET_TRUST_LINE_FLAGS_INVALID_STATE:
+        throw ex_SET_TRUST_LINE_FLAGS_INVALID_STATE{};
+    case SET_TRUST_LINE_FLAGS_SUCCESS:
+        break;
+    default:
+        throw ex_UNKNOWN{};
+    }
+}
+
+void
 throwIf(TransactionResult const& result)
 {
     switch (result.result.code())
@@ -510,6 +530,9 @@ throwIf(TransactionResult const& result)
         break;
     case CLAWBACK:
         throwIf(opResult.tr().clawbackResult());
+        break;
+    case SET_TRUST_LINE_FLAGS:
+        throwIf(opResult.tr().setTrustLineFlagsResult());
         break;
     }
 }
