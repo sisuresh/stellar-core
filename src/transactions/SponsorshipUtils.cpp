@@ -753,6 +753,13 @@ removeEntryWithPossibleSponsorship(AbstractLedgerTxn& ltx,
 
         if (acc.current().data.account().accountID == *le.ext.v1().sponsoringID)
         {
+            // the "owner" of a subentry cannot also be the sponsor of that
+            // subentry. The only reason we can get into this block is that
+            // claimable balances are not subentries, so there is no "owner". In
+            // this scenario, the account that is claiming the claimable balance
+            // is also the sponsor. We can't load it twice, which is why this
+            // block is necessary.
+
             if (le.data.type() != CLAIMABLE_BALANCE)
             {
                 throw std::runtime_error("sponsoringID == sourceAccount for "
