@@ -835,6 +835,14 @@ isClawbackEnabledOnTrustline(LedgerTxnEntry const& entry)
 }
 
 bool
+isClawbackEnabledOnClaimableBalance(LedgerEntry const& entry)
+{
+    return entry.data.claimableBalance().ext.v() == 1 &&
+           (entry.data.claimableBalance().ext.v1().flags &
+            CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG) != 0;
+}
+
+bool
 isClawbackEnabledOnAccount(ConstLedgerTxnEntry const& entry)
 {
     return (entry.current().data.account().flags &
@@ -1030,6 +1038,28 @@ removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx,
                                            trustAcc);
         offer.erase();
     }
+}
+
+void
+setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb)
+{
+    if (cb.ext.v() == 0)
+    {
+        cb.ext.v(1);
+        cb.ext.v1().flags = 0;
+    }
+    cb.ext.v1().flags |= CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG;
+}
+
+bool
+claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb)
+{
+    if (cb.ext.v() == 1)
+    {
+        return (cb.ext.v1().flags & ~MASK_CLAIMABLE_BALANCE_FLAGS) == 0;
+    }
+
+    return true;
 }
 
 namespace detail

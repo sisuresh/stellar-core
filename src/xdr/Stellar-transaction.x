@@ -48,6 +48,7 @@ enum OperationType
     END_SPONSORING_FUTURE_RESERVES = 17,
     REVOKE_SPONSORSHIP = 18,
     CLAWBACK = 19,
+    CLAWBACK_CLAIMABLE_BALANCE = 20,
     SET_TRUST_LINE_FLAGS = 21
 };
 
@@ -397,6 +398,17 @@ struct SetTrustLineFlagsOp
     uint32* setFlags;   // which flags to set
 };
 
+/* Claws back a claimable balance
+
+    Threshold: med
+
+    Result: ClawbackClaimableBalanceResult
+*/
+struct ClawbackClaimableBalanceOp
+{
+    ClaimableBalanceID balanceID;
+};
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -449,6 +461,8 @@ struct Operation
         ClawbackOp clawbackOp;
     case SET_TRUST_LINE_FLAGS:
         SetTrustLineFlagsOp setTrustLineFlagsOp;
+    case CLAWBACK_CLAIMABLE_BALANCE:
+        ClawbackClaimableBalanceOp clawbackClaimableBalanceOp;
     }
     body;
 };
@@ -1192,6 +1206,27 @@ case SET_TRUST_LINE_FLAGS_SUCCESS:
 default:
     void;
 };
+/******* ClawbackClaimableBalance Result ********/
+
+enum ClawbackClaimableBalanceResultCode
+{
+    // codes considered as "success" for the operation
+    CLAWBACK_CLAIMABLE_BALANCE_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    CLAWBACK_CLAIMABLE_BALANCE_DOES_NOT_EXIST = -1,
+    CLAWBACK_CLAIMABLE_BALANCE_NOT_ISSUER = -2,
+    CLAWBACK_CLAIMABLE_BALANCE_NOT_CLAWBACK_ENABLED = -3
+};
+
+union ClawbackClaimableBalanceResult switch (
+    ClawbackClaimableBalanceResultCode code)
+{
+case CLAWBACK_CLAIMABLE_BALANCE_SUCCESS:
+    void;
+default:
+    void;
+};
 
 /* High level Operation Result */
 enum OperationResultCode
@@ -1253,6 +1288,8 @@ case opINNER:
         ClawbackResult clawbackResult;
     case SET_TRUST_LINE_FLAGS:
         SetTrustLineFlagsResult setTrustLineFlagsResult;
+    case CLAWBACK_CLAIMABLE_BALANCE:
+        ClawbackClaimableBalanceResult clawbackClaimableBalanceResult;
     }
     tr;
 default:
