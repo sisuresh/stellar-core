@@ -435,6 +435,8 @@ throwIf(ClawbackClaimableBalanceResult const& result)
         throw ex_UNKNOWN{};
     }
 }
+
+void
 throwIf(SetTrustLineFlagsResult const& result)
 {
     switch (result.code())
@@ -549,6 +551,7 @@ throwIf(TransactionResult const& result)
         break;
     case CLAWBACK_CLAIMABLE_BALANCE:
         throwIf(opResult.tr().clawbackClaimableBalanceResult());
+        break;
     case SET_TRUST_LINE_FLAGS:
         throwIf(opResult.tr().setTrustLineFlagsResult());
         break;
