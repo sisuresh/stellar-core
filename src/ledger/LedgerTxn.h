@@ -175,7 +175,29 @@
 namespace stellar
 {
 
-typedef std::shared_ptr<InternalLedgerEntry> EntryPtr;
+class EntryPtr
+{
+  private:
+    std::shared_ptr<InternalLedgerEntry> mEntryPtr;
+
+  public:
+    // TODO: Make sure appropriate constructors/destructors exist!
+    EntryPtr();
+    EntryPtr(std::nullptr_t nullp);
+    EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr);
+
+    InternalLedgerEntry& operator*();
+    InternalLedgerEntry const& operator*() const;
+
+    InternalLedgerEntry* operator->();
+    InternalLedgerEntry const* operator->() const;
+
+    std::shared_ptr<InternalLedgerEntry const> get() const;
+
+    explicit operator bool() const;
+};
+
+// typedef std::shared_ptr<InternalLedgerEntry> EntryPtr;
 
 // A heuristic number that is used to batch together groups of
 // LedgerEntries for bulk commit at the database interface layer. For sake
@@ -403,7 +425,7 @@ class AbstractLedgerTxnParent
     // version stored in this AbstractLedgerTxnParent, and if not recursively
     // invoking getNewestVersion on its parent. Returns nullptr if the key does
     // not exist or if the corresponding LedgerEntry has been erased.
-    virtual std::shared_ptr<InternalLedgerEntry const>
+    virtual EntryPtr const
     getNewestVersion(InternalLedgerKey const& key) const = 0;
 
     // Return the count of the number of ledger objects of type `let`. Will
@@ -668,7 +690,7 @@ class LedgerTxn final : public AbstractLedgerTxn
                        std::vector<LedgerEntry>& liveEntries,
                        std::vector<LedgerKey>& deadEntries) override;
 
-    std::shared_ptr<InternalLedgerEntry const>
+    EntryPtr const
     getNewestVersion(InternalLedgerKey const& key) const override;
 
     LedgerTxnEntry load(InternalLedgerKey const& key) override;
@@ -784,7 +806,7 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
     std::vector<InflationWinner>
     getInflationWinners(size_t maxWinners, int64_t minBalance) override;
 
-    std::shared_ptr<InternalLedgerEntry const>
+    EntryPtr const
     getNewestVersion(InternalLedgerKey const& key) const override;
 
     void rollbackChild() override;
