@@ -162,9 +162,7 @@ class LedgerTxn::Impl
     class EntryIteratorImpl;
     class WorstBestOfferIteratorImpl;
 
-    typedef UnorderedMap<InternalLedgerKey,
-                         std::shared_ptr<InternalLedgerEntry>>
-        EntryMap;
+    typedef UnorderedMap<InternalLedgerKey, EntryPtr> EntryMap;
 
     AbstractLedgerTxnParent& mParent;
     AbstractLedgerTxn* mChild;
@@ -391,13 +389,10 @@ class LedgerTxn::Impl
     // guarantee
     void updateEntryIfRecorded(InternalLedgerKey const& key,
                                bool effectiveActive);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr,
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr);
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                      bool effectiveActive);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr,
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                      bool effectiveActive, bool eraseIfNull);
 
     // updateWorstBestOffer has the strong exception safety guarantee

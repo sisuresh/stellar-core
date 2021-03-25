@@ -1750,7 +1750,7 @@ LedgerTxn::Impl::maybeUpdateLastModified() const
     for (auto const& kv : mEntry)
     {
         auto const& key = kv.first;
-        std::shared_ptr<InternalLedgerEntry> entry;
+        EntryPtr entry;
         if (kv.second)
         {
             entry = std::make_shared<InternalLedgerEntry>(*kv.second);
@@ -1824,16 +1824,14 @@ LedgerTxn::Impl::updateEntryIfRecorded(InternalLedgerKey const& key,
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr)
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr)
 {
     bool effectiveActive = mActive.find(key) != mActive.end();
     updateEntry(key, lePtr, effectiveActive);
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr,
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                              bool effectiveActive)
 {
     bool eraseIfNull = !lePtr && !mParent.getNewestVersion(key);
@@ -1841,8 +1839,7 @@ LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr,
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                              bool effectiveActive, bool eraseIfNull)
 {
     // recordEntry has the strong exception safety guarantee because

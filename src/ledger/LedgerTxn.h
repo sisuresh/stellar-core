@@ -175,6 +175,8 @@
 namespace stellar
 {
 
+typedef std::shared_ptr<InternalLedgerEntry> EntryPtr;
+
 // A heuristic number that is used to batch together groups of
 // LedgerEntries for bulk commit at the database interface layer. For sake
 // of mechanical sympathy with said batching, one should attempt to group
