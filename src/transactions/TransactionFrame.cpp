@@ -236,7 +236,7 @@ TransactionFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
         if (res)
         {
             auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
-            mCachedAccount = newest;
+            mCachedAccount = newest.get();
         }
         else
         {
@@ -267,7 +267,7 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
         }
 
         auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
-        mCachedAccount = newest;
+        mCachedAccount = newest.get();
         return res;
     }
     else

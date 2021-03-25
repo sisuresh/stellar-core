@@ -24,6 +24,77 @@
 namespace stellar
 {
 
+EntryPtr::EntryPtr() : mEntryPtr(nullptr)
+{
+}
+
+EntryPtr::EntryPtr(std::nullptr_t nullp) : EntryPtr()
+{
+}
+
+EntryPtr::EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr)
+    : mEntryPtr(lePtr)
+{
+}
+
+EntryPtr&
+EntryPtr::operator=(std::shared_ptr<InternalLedgerEntry> lePtr)
+{
+    mEntryPtr = lePtr;
+    return *this;
+}
+
+InternalLedgerEntry& EntryPtr::operator*()
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return *mEntryPtr;
+}
+
+InternalLedgerEntry const& EntryPtr::operator*() const
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return *mEntryPtr;
+}
+
+InternalLedgerEntry* EntryPtr::operator->()
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return mEntryPtr.get();
+}
+
+InternalLedgerEntry const* EntryPtr::operator->() const
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return mEntryPtr.get();
+}
+
+std::shared_ptr<InternalLedgerEntry const>
+EntryPtr::get() const
+{
+    return mEntryPtr;
+}
+
+EntryPtr::operator bool() const
+{
+    return (bool)mEntryPtr;
+}
+
 UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>>
 populateLoadedEntries(UnorderedSet<LedgerKey> const& keys,
                       std::vector<LedgerEntry> const& entries)
@@ -1038,7 +1109,7 @@ LedgerTxn::Impl::getDelta()
             // Deep copy is not required here because getDelta causes
             // LedgerTxn to enter the sealed state, meaning subsequent
             // modifications are impossible.
-            delta.entry[key] = {kv.second, previous};
+            delta.entry[key] = {kv.second.get(), previous.get()};
         }
         delta.header = {*mHeader, mParent.getHeader()};
     });
@@ -1273,13 +1344,13 @@ LedgerTxn::Impl::getAllEntries(std::vector<LedgerEntry>& initEntries,
     deadEntries.swap(resDead);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxn::getNewestVersion(InternalLedgerKey const& key) const
 {
     return getImpl()->getNewestVersion(key);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxn::Impl::getNewestVersion(InternalLedgerKey const& key) const
 {
     auto iter = mEntry.find(key);
@@ -1353,7 +1424,7 @@ LedgerTxn::Impl::load(LedgerTxn& self, InternalLedgerKey const& key)
         return {};
     }
 
-    auto current = std::make_shared<InternalLedgerEntry>(*newest);
+    EntryPtr current = std::make_shared<InternalLedgerEntry>(*newest);
     auto impl = LedgerTxnEntry::makeSharedImpl(self, *current);
 
     // Set the key to active before constructing the LedgerTxnEntry, as this
@@ -2978,13 +3049,13 @@ LedgerTxnRoot::Impl::getInflationWinners(size_t maxWinners, int64_t minVotes)
     }
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::getNewestVersion(InternalLedgerKey const& key) const
 {
     return mImpl->getNewestVersion(key);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
 {
     ZoneScoped;
@@ -3058,7 +3129,7 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
     putInEntryCache(key, entry, LoadType::IMMEDIATE);
     if (entry)
     {
-        return std::make_shared<InternalLedgerEntry const>(*entry);
+        return std::make_shared<InternalLedgerEntry>(*entry);
     }
     else
     {
@@ -3096,7 +3167,7 @@ LedgerTxnRoot::Impl::rollbackChild()
     mPrefetchMisses = 0;
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
 {
     try
@@ -3109,7 +3180,7 @@ LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
 
         if (cached.entry)
         {
-            return std::make_shared<InternalLedgerEntry const>(*cached.entry);
+            return std::make_shared<InternalLedgerEntry>(*cached.entry);
         }
         else
         {
