@@ -472,11 +472,12 @@ LedgerTxn::Impl::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
             if (iter.entryExists())
             {
                 updateEntry(
-                    key, std::make_shared<InternalLedgerEntry>(iter.entry()));
+                    key, {std::make_shared<InternalLedgerEntry>(iter.entry()),
+                          iter.isInit()});
             }
             else
             {
-                updateEntry(key, nullptr);
+                updateEntry(key, {nullptr, iter.isInit()});
             }
         }
 
@@ -601,7 +602,7 @@ LedgerTxn::Impl::create(LedgerTxn& self, InternalLedgerEntry const& entry)
     mActive.emplace(key, toEntryImplBase(impl));
     LedgerTxnEntry ltxe(impl);
 
-    updateEntry(key, current);
+    updateEntry(key, {current, true});
     return ltxe;
 }
 
@@ -625,7 +626,8 @@ LedgerTxn::Impl::createOrUpdateWithoutLoading(LedgerTxn& self,
         throw std::runtime_error("Key is already active");
     }
 
-    updateEntry(key, std::make_shared<InternalLedgerEntry>(entry));
+    // TODO: Look at this!
+    updateEntry(key, {std::make_shared<InternalLedgerEntry>(entry), false});
 }
 
 void
@@ -687,7 +689,7 @@ LedgerTxn::Impl::erase(InternalLedgerKey const& key)
     auto activeIter = mActive.find(key);
     bool isActive = activeIter != mActive.end();
 
-    updateEntry(key, nullptr, false);
+    updateEntry(key, {nullptr, newest.isInit()}, false);
     // Note: Cannot throw after this point because the entry will not be
     // deactivated in that case
 
@@ -1376,7 +1378,21 @@ LedgerTxn::Impl::getNewestVersion(InternalLedgerKey const& key) const
     {
         return iter->second;
     }
-    return mParent.getNewestVersion(key);
+
+    auto entryPtr = mParent.getNewestVersion(key);
+
+    // pulling from a parent means this entry cannot be an init one at this
+    // LedgerTxn level
+    if (entryPtr.isInit())
+    {
+        if (entryPtr)
+        {
+            return {std::make_shared<InternalLedgerEntry>(*entryPtr), false};
+        }
+        return {nullptr, false};
+    }
+
+    return entryPtr;
 }
 
 UnorderedMap<LedgerKey, LedgerEntry>
@@ -1442,7 +1458,7 @@ LedgerTxn::Impl::load(LedgerTxn& self, InternalLedgerKey const& key)
         return {};
     }
 
-    EntryPtr current = std::make_shared<InternalLedgerEntry>(*newest);
+    EntryPtr current(std::make_shared<InternalLedgerEntry>(*newest), false);
     auto impl = LedgerTxnEntry::makeSharedImpl(self, *current);
 
     // Set the key to active before constructing the LedgerTxnEntry, as this
@@ -1842,7 +1858,8 @@ LedgerTxn::Impl::maybeUpdateLastModified() const
         EntryPtr entry;
         if (kv.second)
         {
-            entry = std::make_shared<InternalLedgerEntry>(*kv.second);
+            entry = {std::make_shared<InternalLedgerEntry>(*kv.second),
+                     kv.second.isInit()};
             if (mShouldUpdateLastModified &&
                 entry->type() == InternalLedgerEntryType::LEDGER_ENTRY)
             {
@@ -3153,7 +3170,7 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
     putInEntryCache(key, entry, LoadType::IMMEDIATE);
     if (entry)
     {
-        return std::make_shared<InternalLedgerEntry>(*entry);
+        return {std::make_shared<InternalLedgerEntry>(*entry), false};
     }
     else
     {
@@ -3204,7 +3221,8 @@ LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
 
         if (cached.entry)
         {
-            return std::make_shared<InternalLedgerEntry>(*cached.entry);
+            return {std::make_shared<InternalLedgerEntry>(*cached.entry),
+                    false};
         }
         else
         {
