@@ -24,7 +24,7 @@
 namespace stellar
 {
 
-EntryPtr::EntryPtr() : mEntryPtr(nullptr)
+EntryPtr::EntryPtr() : mEntryPtr(nullptr), mIsInit(false)
 {
 }
 
@@ -32,8 +32,9 @@ EntryPtr::EntryPtr(std::nullptr_t nullp) : EntryPtr()
 {
 }
 
-EntryPtr::EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr)
-    : mEntryPtr(lePtr)
+EntryPtr::EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr,
+                   bool isInit)
+    : mEntryPtr(lePtr), mIsInit(isInit)
 {
 }
 
@@ -77,6 +78,12 @@ InternalLedgerEntry const* EntryPtr::operator->() const
     return mEntryPtr.get();
 }
 
+std::shared_ptr<InternalLedgerEntry>
+EntryPtr::get()
+{
+    return mEntryPtr;
+}
+
 std::shared_ptr<InternalLedgerEntry const>
 EntryPtr::get() const
 {
@@ -86,6 +93,18 @@ EntryPtr::get() const
 EntryPtr::operator bool() const
 {
     return (bool)mEntryPtr;
+}
+
+void
+EntryPtr::updatePtr(std::shared_ptr<InternalLedgerEntry> const& lePtr)
+{
+    mEntryPtr = lePtr;
+}
+
+bool
+EntryPtr::isInit() const
+{
+    return mIsInit;
 }
 
 UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>>

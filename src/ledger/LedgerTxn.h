@@ -179,12 +179,13 @@ class EntryPtr
 {
   private:
     std::shared_ptr<InternalLedgerEntry> mEntryPtr;
+    bool mIsInit;
 
   public:
     // TODO: Make sure appropriate constructors/destructors exist!
     EntryPtr();
     EntryPtr(std::nullptr_t nullp);
-    EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr);
+    EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr, bool isInit);
 
     InternalLedgerEntry& operator*();
     InternalLedgerEntry const& operator*() const;
@@ -192,9 +193,13 @@ class EntryPtr
     InternalLedgerEntry* operator->();
     InternalLedgerEntry const* operator->() const;
 
+    std::shared_ptr<InternalLedgerEntry> get();
     std::shared_ptr<InternalLedgerEntry const> get() const;
 
     explicit operator bool() const;
+
+    bool isInit() const;
+    void updatePtr(std::shared_ptr<InternalLedgerEntry> const& lePtr);
 };
 
 // typedef std::shared_ptr<InternalLedgerEntry> EntryPtr;
