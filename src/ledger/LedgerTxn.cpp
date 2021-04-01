@@ -241,6 +241,12 @@ EntryIterator::entryExists() const
     return getImpl()->entryExists();
 }
 
+bool
+EntryIterator::isInit() const
+{
+    return getImpl()->isInit();
+}
+
 InternalLedgerKey const&
 EntryIterator::key() const
 {
@@ -2142,6 +2148,12 @@ bool
 LedgerTxn::Impl::EntryIteratorImpl::entryExists() const
 {
     return (bool)(mIter->second);
+}
+
+bool
+LedgerTxn::Impl::EntryIteratorImpl::isInit() const
+{
+    return mIter->second.isInit();
 }
 
 InternalLedgerKey const&

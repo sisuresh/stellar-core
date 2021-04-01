@@ -37,6 +37,8 @@ class EntryIterator::AbstractImpl
 
     virtual bool entryExists() const = 0;
 
+    virtual bool isInit() const = 0;
+
     virtual InternalLedgerKey const& key() const = 0;
 
     virtual std::unique_ptr<AbstractImpl> clone() const = 0;
@@ -612,6 +614,8 @@ class LedgerTxn::Impl::EntryIteratorImpl : public EntryIterator::AbstractImpl
     InternalLedgerEntry const& entry() const override;
 
     bool entryExists() const override;
+
+    bool isInit() const override;
 
     InternalLedgerKey const& key() const override;
 

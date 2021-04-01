@@ -338,6 +338,8 @@ class EntryIterator
 
     bool entryExists() const;
 
+    bool isInit() const;
+
     InternalLedgerKey const& key() const;
 };
 
