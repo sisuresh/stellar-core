@@ -1940,8 +1940,7 @@ void
 LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                              bool effectiveActive)
 {
-    bool eraseIfNull = !lePtr && !mParent.getNewestVersion(key);
-    updateEntry(key, lePtr, effectiveActive, eraseIfNull);
+    updateEntry(key, lePtr, effectiveActive, true);
 }
 
 void
@@ -1955,9 +1954,25 @@ LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
     //   guarantee
     // - std::shared_ptr<...>::operator= does not throw
     auto recordEntry = [&]() {
-        if (eraseIfNull)
+        // TODO:Rename eraseIfNull
+        if (!eraseIfNull)
         {
-            mEntry.erase(key);
+            mEntry[key] = lePtr;
+            return;
+        }
+
+        auto it = mEntry.find(key);
+        if (it != mEntry.end())
+        {
+            if (!lePtr && it->second.isInit())
+            {
+                mEntry.erase(key);
+            }
+            else
+            {
+                // upstream isInit flag should never be overwritten by a child
+                it->second.updatePtr(lePtr.get());
+            }
         }
         else
         {
