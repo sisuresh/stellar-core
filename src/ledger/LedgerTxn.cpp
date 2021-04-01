@@ -1343,14 +1343,13 @@ LedgerTxn::Impl::getAllEntries(std::vector<LedgerEntry>& initEntries,
 
             if (entry)
             {
-                auto previous = mParent.getNewestVersion(key);
-                if (previous)
+                if (entry.isInit())
                 {
-                    resLive.emplace_back(entry->ledgerEntry());
+                    resInit.emplace_back(entry->ledgerEntry());
                 }
                 else
                 {
-                    resInit.emplace_back(entry->ledgerEntry());
+                    resLive.emplace_back(entry->ledgerEntry());
                 }
             }
             else
