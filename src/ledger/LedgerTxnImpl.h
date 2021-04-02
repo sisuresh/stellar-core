@@ -37,6 +37,8 @@ class EntryIterator::AbstractImpl
 
     virtual bool entryExists() const = 0;
 
+    virtual bool isInit() const = 0;
+
     virtual InternalLedgerKey const& key() const = 0;
 
     virtual std::unique_ptr<AbstractImpl> clone() const = 0;
@@ -162,9 +164,7 @@ class LedgerTxn::Impl
     class EntryIteratorImpl;
     class WorstBestOfferIteratorImpl;
 
-    typedef UnorderedMap<InternalLedgerKey,
-                         std::shared_ptr<InternalLedgerEntry>>
-        EntryMap;
+    typedef UnorderedMap<InternalLedgerKey, EntryPtr> EntryMap;
 
     AbstractLedgerTxnParent& mParent;
     AbstractLedgerTxn* mChild;
@@ -391,13 +391,10 @@ class LedgerTxn::Impl
     // guarantee
     void updateEntryIfRecorded(InternalLedgerKey const& key,
                                bool effectiveActive);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr,
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr);
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                      bool effectiveActive);
-    void updateEntry(InternalLedgerKey const& key,
-                     std::shared_ptr<InternalLedgerEntry> lePtr,
+    void updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                      bool effectiveActive, bool eraseIfNull);
 
     // updateWorstBestOffer has the strong exception safety guarantee
@@ -509,8 +506,7 @@ class LedgerTxn::Impl
     // - the prepared statement cache may be, but is not guaranteed to be,
     //   modified
     // - the entry cache may be, but is not guaranteed to be, cleared.
-    std::shared_ptr<InternalLedgerEntry const>
-    getNewestVersion(InternalLedgerKey const& key) const;
+    EntryPtr const getNewestVersion(InternalLedgerKey const& key) const;
 
     // load has the basic exception safety guarantee. If it throws an exception,
     // then
@@ -618,6 +614,8 @@ class LedgerTxn::Impl::EntryIteratorImpl : public EntryIterator::AbstractImpl
     InternalLedgerEntry const& entry() const override;
 
     bool entryExists() const override;
+
+    bool isInit() const override;
 
     InternalLedgerKey const& key() const override;
 
@@ -763,8 +761,7 @@ class LedgerTxnRoot::Impl
     //  - It is therefore always kept in exact correspondence with the
     //    database for the keyset that it has entries for. It's a precise
     //    image of a subset of the database.
-    std::shared_ptr<InternalLedgerEntry const>
-    getFromEntryCache(LedgerKey const& key) const;
+    EntryPtr const getFromEntryCache(LedgerKey const& key) const;
     void putInEntryCache(LedgerKey const& key,
                          std::shared_ptr<LedgerEntry const> const& entry,
                          LoadType type) const;
@@ -869,8 +866,7 @@ class LedgerTxnRoot::Impl
     // - the prepared statement cache may be, but is not guaranteed to be,
     //   modified
     // - the entry cache may be, but is not guaranteed to be, cleared.
-    std::shared_ptr<InternalLedgerEntry const>
-    getNewestVersion(InternalLedgerKey const& key) const;
+    EntryPtr const getNewestVersion(InternalLedgerKey const& key) const;
 
     // rollbackChild has the strong exception safety guarantee.
     void rollbackChild();

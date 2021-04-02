@@ -24,6 +24,89 @@
 namespace stellar
 {
 
+EntryPtr::EntryPtr() : mEntryPtr(nullptr), mIsInit(false)
+{
+}
+
+EntryPtr::EntryPtr(std::nullptr_t nullp) : EntryPtr()
+{
+}
+
+EntryPtr::EntryPtr(std::shared_ptr<InternalLedgerEntry> const& lePtr,
+                   bool isInit)
+    : mEntryPtr(lePtr), mIsInit(isInit)
+{
+}
+
+InternalLedgerEntry& EntryPtr::operator*()
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return *mEntryPtr;
+}
+
+InternalLedgerEntry const& EntryPtr::operator*() const
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return *mEntryPtr;
+}
+
+InternalLedgerEntry* EntryPtr::operator->()
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return mEntryPtr.get();
+}
+
+InternalLedgerEntry const* EntryPtr::operator->() const
+{
+    if (!mEntryPtr)
+    {
+        throw std::runtime_error("cannot deference null mEntryPtr");
+    }
+
+    return mEntryPtr.get();
+}
+
+std::shared_ptr<InternalLedgerEntry>
+EntryPtr::get()
+{
+    return mEntryPtr;
+}
+
+std::shared_ptr<InternalLedgerEntry const>
+EntryPtr::get() const
+{
+    return mEntryPtr;
+}
+
+EntryPtr::operator bool() const
+{
+    return (bool)mEntryPtr;
+}
+
+void
+EntryPtr::updatePtr(std::shared_ptr<InternalLedgerEntry> const& lePtr)
+{
+    mEntryPtr = lePtr;
+}
+
+bool
+EntryPtr::isInit() const
+{
+    return mIsInit;
+}
+
 UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>>
 populateLoadedEntries(UnorderedSet<LedgerKey> const& keys,
                       std::vector<LedgerEntry> const& entries)
@@ -156,6 +239,12 @@ bool
 EntryIterator::entryExists() const
 {
     return getImpl()->entryExists();
+}
+
+bool
+EntryIterator::isInit() const
+{
+    return getImpl()->isInit();
 }
 
 InternalLedgerKey const&
@@ -383,11 +472,12 @@ LedgerTxn::Impl::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
             if (iter.entryExists())
             {
                 updateEntry(
-                    key, std::make_shared<InternalLedgerEntry>(iter.entry()));
+                    key, {std::make_shared<InternalLedgerEntry>(iter.entry()),
+                          iter.isInit()});
             }
             else
             {
-                updateEntry(key, nullptr);
+                updateEntry(key, {nullptr, iter.isInit()});
             }
         }
 
@@ -512,7 +602,7 @@ LedgerTxn::Impl::create(LedgerTxn& self, InternalLedgerEntry const& entry)
     mActive.emplace(key, toEntryImplBase(impl));
     LedgerTxnEntry ltxe(impl);
 
-    updateEntry(key, current);
+    updateEntry(key, {current, true});
     return ltxe;
 }
 
@@ -536,7 +626,8 @@ LedgerTxn::Impl::createOrUpdateWithoutLoading(LedgerTxn& self,
         throw std::runtime_error("Key is already active");
     }
 
-    updateEntry(key, std::make_shared<InternalLedgerEntry>(entry));
+    // TODO: Look at this!
+    updateEntry(key, {std::make_shared<InternalLedgerEntry>(entry), false});
 }
 
 void
@@ -598,7 +689,7 @@ LedgerTxn::Impl::erase(InternalLedgerKey const& key)
     auto activeIter = mActive.find(key);
     bool isActive = activeIter != mActive.end();
 
-    updateEntry(key, nullptr, false);
+    updateEntry(key, {nullptr, newest.isInit()}, false);
     // Note: Cannot throw after this point because the entry will not be
     // deactivated in that case
 
@@ -1038,7 +1129,7 @@ LedgerTxn::Impl::getDelta()
             // Deep copy is not required here because getDelta causes
             // LedgerTxn to enter the sealed state, meaning subsequent
             // modifications are impossible.
-            delta.entry[key] = {kv.second, previous};
+            delta.entry[key] = {kv.second.get(), previous.get()};
         }
         delta.header = {*mHeader, mParent.getHeader()};
     });
@@ -1252,14 +1343,13 @@ LedgerTxn::Impl::getAllEntries(std::vector<LedgerEntry>& initEntries,
 
             if (entry)
             {
-                auto previous = mParent.getNewestVersion(key);
-                if (previous)
+                if (entry.isInit())
                 {
-                    resLive.emplace_back(entry->ledgerEntry());
+                    resInit.emplace_back(entry->ledgerEntry());
                 }
                 else
                 {
-                    resInit.emplace_back(entry->ledgerEntry());
+                    resLive.emplace_back(entry->ledgerEntry());
                 }
             }
             else
@@ -1273,13 +1363,13 @@ LedgerTxn::Impl::getAllEntries(std::vector<LedgerEntry>& initEntries,
     deadEntries.swap(resDead);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxn::getNewestVersion(InternalLedgerKey const& key) const
 {
     return getImpl()->getNewestVersion(key);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxn::Impl::getNewestVersion(InternalLedgerKey const& key) const
 {
     auto iter = mEntry.find(key);
@@ -1287,7 +1377,21 @@ LedgerTxn::Impl::getNewestVersion(InternalLedgerKey const& key) const
     {
         return iter->second;
     }
-    return mParent.getNewestVersion(key);
+
+    auto entryPtr = mParent.getNewestVersion(key);
+
+    // pulling from a parent means this entry cannot be an init one at this
+    // LedgerTxn level
+    if (entryPtr.isInit())
+    {
+        if (entryPtr)
+        {
+            return {std::make_shared<InternalLedgerEntry>(*entryPtr), false};
+        }
+        return {nullptr, false};
+    }
+
+    return entryPtr;
 }
 
 UnorderedMap<LedgerKey, LedgerEntry>
@@ -1353,7 +1457,7 @@ LedgerTxn::Impl::load(LedgerTxn& self, InternalLedgerKey const& key)
         return {};
     }
 
-    auto current = std::make_shared<InternalLedgerEntry>(*newest);
+    EntryPtr current(std::make_shared<InternalLedgerEntry>(*newest), false);
     auto impl = LedgerTxnEntry::makeSharedImpl(self, *current);
 
     // Set the key to active before constructing the LedgerTxnEntry, as this
@@ -1750,10 +1854,11 @@ LedgerTxn::Impl::maybeUpdateLastModified() const
     for (auto const& kv : mEntry)
     {
         auto const& key = kv.first;
-        std::shared_ptr<InternalLedgerEntry> entry;
+        EntryPtr entry;
         if (kv.second)
         {
-            entry = std::make_shared<InternalLedgerEntry>(*kv.second);
+            entry = {std::make_shared<InternalLedgerEntry>(*kv.second),
+                     kv.second.isInit()};
             if (mShouldUpdateLastModified &&
                 entry->type() == InternalLedgerEntryType::LEDGER_ENTRY)
             {
@@ -1824,25 +1929,21 @@ LedgerTxn::Impl::updateEntryIfRecorded(InternalLedgerKey const& key,
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr)
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr)
 {
     bool effectiveActive = mActive.find(key) != mActive.end();
     updateEntry(key, lePtr, effectiveActive);
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr,
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                              bool effectiveActive)
 {
-    bool eraseIfNull = !lePtr && !mParent.getNewestVersion(key);
-    updateEntry(key, lePtr, effectiveActive, eraseIfNull);
+    updateEntry(key, lePtr, effectiveActive, true);
 }
 
 void
-LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
-                             std::shared_ptr<InternalLedgerEntry> lePtr,
+LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key, EntryPtr lePtr,
                              bool effectiveActive, bool eraseIfNull)
 {
     // recordEntry has the strong exception safety guarantee because
@@ -1852,9 +1953,25 @@ LedgerTxn::Impl::updateEntry(InternalLedgerKey const& key,
     //   guarantee
     // - std::shared_ptr<...>::operator= does not throw
     auto recordEntry = [&]() {
-        if (eraseIfNull)
+        // TODO:Rename eraseIfNull
+        if (!eraseIfNull)
         {
-            mEntry.erase(key);
+            mEntry[key] = lePtr;
+            return;
+        }
+
+        auto it = mEntry.find(key);
+        if (it != mEntry.end())
+        {
+            if (!lePtr && it->second.isInit())
+            {
+                mEntry.erase(key);
+            }
+            else
+            {
+                // upstream isInit flag should never be overwritten by a child
+                it->second.updatePtr(lePtr.get());
+            }
         }
         else
         {
@@ -2062,6 +2179,12 @@ bool
 LedgerTxn::Impl::EntryIteratorImpl::entryExists() const
 {
     return (bool)(mIter->second);
+}
+
+bool
+LedgerTxn::Impl::EntryIteratorImpl::isInit() const
+{
+    return mIter->second.isInit();
 }
 
 InternalLedgerKey const&
@@ -2981,13 +3104,13 @@ LedgerTxnRoot::Impl::getInflationWinners(size_t maxWinners, int64_t minVotes)
     }
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::getNewestVersion(InternalLedgerKey const& key) const
 {
     return mImpl->getNewestVersion(key);
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
 {
     ZoneScoped;
@@ -3061,7 +3184,7 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
     putInEntryCache(key, entry, LoadType::IMMEDIATE);
     if (entry)
     {
-        return std::make_shared<InternalLedgerEntry const>(*entry);
+        return {std::make_shared<InternalLedgerEntry>(*entry), false};
     }
     else
     {
@@ -3099,7 +3222,7 @@ LedgerTxnRoot::Impl::rollbackChild()
     mPrefetchMisses = 0;
 }
 
-std::shared_ptr<InternalLedgerEntry const>
+EntryPtr const
 LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
 {
     try
@@ -3112,7 +3235,8 @@ LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
 
         if (cached.entry)
         {
-            return std::make_shared<InternalLedgerEntry const>(*cached.entry);
+            return {std::make_shared<InternalLedgerEntry>(*cached.entry),
+                    false};
         }
         else
         {
