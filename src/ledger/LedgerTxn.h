@@ -7,6 +7,7 @@
 #include "ledger/InternalLedgerEntry.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
+#include "util/Decoder.h"
 #include "util/UnorderedMap.h"
 #include "util/UnorderedSet.h"
 #include "xdr/Stellar-ledger.h"
@@ -239,6 +240,22 @@ struct IsBetterOfferComparator
     bool operator()(OfferDescriptor const& lhs,
                     OfferDescriptor const& rhs) const;
 };
+
+template <typename T>
+std::string
+toOpaqueBase64(T const& input)
+{
+    return decoder::encode_b64(xdr::xdr_to_opaque(input));
+}
+
+template <typename T>
+void
+fromOpaqueBase64(T& res, std::string const& opaqueBase64)
+{
+    std::vector<uint8_t> opaque;
+    decoder::decode_b64(opaqueBase64, opaque);
+    xdr::xdr_from_opaque(opaque, res);
+}
 
 struct AssetPair
 {
