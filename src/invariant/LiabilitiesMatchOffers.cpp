@@ -157,9 +157,11 @@ addOrSubtractLiabilities(
     else if (entry->data.type() == TRUSTLINE)
     {
         auto const& trust = entry->data.trustLine();
-        deltaLiabilities[trust.accountID][trust.asset].selling -=
+
+        auto const& asset = trustLineAssetToAsset(trust.asset);
+        deltaLiabilities[trust.accountID][asset].selling -=
             sign * getSellingLiabilities(*entry);
-        deltaLiabilities[trust.accountID][trust.asset].buying -=
+        deltaLiabilities[trust.accountID][asset].buying -=
             sign * getBuyingLiabilities(*entry);
     }
     else if (entry->data.type() == OFFER)
