@@ -5,6 +5,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "xdr/Stellar-ledger-entries.h"
+#include "xdr/Stellar-transaction.h"
 #include <algorithm>
 
 namespace stellar
@@ -203,4 +204,9 @@ bool claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb);
 void removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx,
                                    AccountID const& account,
                                    Asset const& asset);
+
+TrustLineAsset assetToTrustLineAsset(Asset const& asset);
+TrustLineAsset
+changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset);
+ChangeTrustAsset assetToChangeTrustAsset(Asset const& asset);
 }
