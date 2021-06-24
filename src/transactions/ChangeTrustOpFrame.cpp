@@ -165,7 +165,8 @@ ChangeTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
         innerResult().code(CHANGE_TRUST_MALFORMED);
         return false;
     }
-    if (!isAssetValid(mChangeTrust.line))
+
+    if (!isChangeTrustAssetValid(mChangeTrust.line, ledgerVersion))
     {
         innerResult().code(CHANGE_TRUST_MALFORMED);
         return false;
