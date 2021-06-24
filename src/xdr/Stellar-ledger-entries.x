@@ -14,6 +14,7 @@ typedef string string64<64>;
 typedef int64 SequenceNumber;
 typedef uint64 TimePoint;
 typedef opaque DataValue<64>;
+typedef Hash PoolID; // SHA256(LiquidityPoolParameters)
 
 // 1-4 alphanumeric characters right-padded with 0 bytes
 typedef opaque AssetCode4[4];
@@ -25,7 +26,8 @@ enum AssetType
 {
     ASSET_TYPE_NATIVE = 0,
     ASSET_TYPE_CREDIT_ALPHANUM4 = 1,
-    ASSET_TYPE_CREDIT_ALPHANUM12 = 2
+    ASSET_TYPE_CREDIT_ALPHANUM12 = 2,
+    ASSET_TYPE_POOL_SHARE = 3
 };
 
 union AssetCode switch (AssetType type)
@@ -39,24 +41,28 @@ case ASSET_TYPE_CREDIT_ALPHANUM12:
     // add other asset types here in the future
 };
 
+struct AlphaNum4
+{
+    AssetCode4 assetCode;
+    AccountID issuer;
+};
+
+struct AlphaNum12
+{
+    AssetCode12 assetCode;
+    AccountID issuer;
+};
+
 union Asset switch (AssetType type)
 {
 case ASSET_TYPE_NATIVE: // Not credit
     void;
 
 case ASSET_TYPE_CREDIT_ALPHANUM4:
-    struct
-    {
-        AssetCode4 assetCode;
-        AccountID issuer;
-    } alphaNum4;
+    AlphaNum4 alphaNum4;
 
 case ASSET_TYPE_CREDIT_ALPHANUM12:
-    struct
-    {
-        AssetCode12 assetCode;
-        AccountID issuer;
-    } alphaNum12;
+    AlphaNum12 alphaNum12;
 
     // add other asset types here in the future
 };
@@ -214,10 +220,32 @@ const MASK_TRUSTLINE_FLAGS = 1;
 const MASK_TRUSTLINE_FLAGS_V13 = 3;
 const MASK_TRUSTLINE_FLAGS_V17 = 7;
 
+enum LiquidityPoolType
+{
+    LIQUIDITY_POOL_CONSTANT_PRODUCT = 0
+};
+
+union TrustLineAsset switch (AssetType type)
+{
+case ASSET_TYPE_NATIVE: // Not credit
+    void;
+
+case ASSET_TYPE_CREDIT_ALPHANUM4:
+    AlphaNum4 alphaNum4;
+
+case ASSET_TYPE_CREDIT_ALPHANUM12:
+    AlphaNum12 alphaNum12;
+
+case ASSET_TYPE_POOL_SHARE:
+    PoolID liquidityPoolID;
+
+    // add other asset types here in the future
+};
+
 struct TrustLineEntry
 {
     AccountID accountID; // account this trustline belongs to
-    Asset asset;         // type of asset (with issuer)
+    TrustLineAsset asset;         // type of asset (with issuer)
     int64 balance;       // how much of this asset the user has.
                          // Asset defines the unit for this;
 
@@ -403,6 +431,13 @@ struct ClaimableBalanceEntry
     ext;
 };
 
+struct LiquidityPoolConstantProductParameters
+{
+    Asset assetA; // assetA < assetB
+    Asset assetB;
+    int32 fee;    // Fee is in basis points, so the actual rate is (fee/100)%
+};
+
 struct LedgerEntryExtensionV1
 {
     SponsorshipDescriptor sponsoringID;
@@ -457,7 +492,7 @@ case TRUSTLINE:
     struct
     {
         AccountID accountID;
-        Asset asset;
+        TrustLineAsset asset;
     } trustLine;
 
 case OFFER:
