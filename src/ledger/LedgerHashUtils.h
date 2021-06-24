@@ -9,6 +9,47 @@
 #include "xdr/Stellar-ledger.h"
 #include <functional>
 
+namespace stellar
+{
+namespace detail
+{
+template <typename T>
+size_t
+getAssetHash(T const& asset)
+{
+    size_t res = asset.type();
+
+    switch (asset.type())
+    {
+    case stellar::ASSET_TYPE_NATIVE:
+        break;
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+    {
+        auto& a4 = asset.alphaNum4();
+        res ^= stellar::shortHash::computeHash(
+            stellar::ByteSlice(a4.issuer.ed25519().data(), 8));
+        res ^= a4.assetCode[0];
+        break;
+    }
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+    {
+        auto& a12 = asset.alphaNum12();
+        res ^= stellar::shortHash::computeHash(
+            stellar::ByteSlice(a12.issuer.ed25519().data(), 8));
+        res ^= a12.assetCode[0];
+        break;
+    }
+    case stellar::ASSET_TYPE_POOL_SHARE:
+        throw std::runtime_error(
+            "ASSET_TYPE_POOL_SHARE is not a valid Asset type");
+    default:
+        throw std::runtime_error("unknown Asset type");
+    }
+    return res;
+}
+}
+}
+
 // implements a default hasher for "LedgerKey"
 namespace std
 {
@@ -18,29 +59,24 @@ template <> class hash<stellar::Asset>
     size_t
     operator()(stellar::Asset const& asset) const
     {
-        size_t res = asset.type();
-        switch (asset.type())
+        return stellar::detail::getAssetHash<stellar::Asset>(asset);
+    }
+};
+
+template <> class hash<stellar::TrustLineAsset>
+{
+  public:
+    size_t
+    operator()(stellar::TrustLineAsset const& asset) const
+    {
+        if (asset.type() == stellar::ASSET_TYPE_POOL_SHARE)
         {
-        case stellar::ASSET_TYPE_NATIVE:
-            break;
-        case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
-        {
-            auto& a4 = asset.alphaNum4();
+            size_t res = asset.type();
             res ^= stellar::shortHash::computeHash(
-                stellar::ByteSlice(a4.issuer.ed25519().data(), 8));
-            res ^= a4.assetCode[0];
-            break;
+                stellar::ByteSlice(asset.liquidityPoolID().data(), 8));
+            return res;
         }
-        case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
-        {
-            auto& a12 = asset.alphaNum12();
-            res ^= stellar::shortHash::computeHash(
-                stellar::ByteSlice(a12.issuer.ed25519().data(), 8));
-            res ^= a12.assetCode[0];
-            break;
-        }
-        }
-        return res;
+        return stellar::detail::getAssetHash<stellar::TrustLineAsset>(asset);
     }
 };
 
@@ -62,7 +98,7 @@ template <> class hash<stellar::LedgerKey>
             auto& tl = lk.trustLine();
             res = stellar::shortHash::computeHash(
                 stellar::ByteSlice(tl.accountID.ed25519().data(), 8));
-            res ^= hash<stellar::Asset>()(tl.asset);
+            res ^= hash<stellar::TrustLineAsset>()(tl.asset);
             break;
         }
         case stellar::DATA:
