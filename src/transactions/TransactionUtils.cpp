@@ -3,6 +3,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "transactions/TransactionUtils.h"
+#include "crypto/SHA.h"
 #include "crypto/SecretKey.h"
 #include "ledger/InternalLedgerEntry.h"
 #include "ledger/LedgerTxn.h"
@@ -1078,6 +1079,127 @@ removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx, AccountID const& account,
         offer.erase();
     }
     ltxInner.commit();
+}
+
+Asset
+trustLineAssetToAsset(TrustLineAsset const& tlAsset)
+{
+    if (tlAsset.type() == ASSET_TYPE_POOL_SHARE)
+    {
+        throw std::runtime_error("Asset can't have type ASSET_TYPE_POOL_SHARE");
+    }
+
+    Asset asset;
+    asset.type(tlAsset.type());
+
+    switch (tlAsset.type())
+    {
+    case ASSET_TYPE_NATIVE:
+        break;
+    case ASSET_TYPE_CREDIT_ALPHANUM4:
+    {
+        asset.alphaNum4() = tlAsset.alphaNum4();
+        break;
+    }
+    case ASSET_TYPE_CREDIT_ALPHANUM12:
+    {
+        asset.alphaNum12() = tlAsset.alphaNum12();
+        break;
+    }
+    default:
+        throw std::runtime_error("Unknown asset type");
+    }
+
+    return asset;
+}
+
+TrustLineAsset
+assetToTrustLineAsset(Asset const& asset)
+{
+    TrustLineAsset tlAsset;
+    tlAsset.type(asset.type());
+
+    switch (asset.type())
+    {
+    case stellar::ASSET_TYPE_NATIVE:
+        break;
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+    {
+        tlAsset.alphaNum4() = asset.alphaNum4();
+        break;
+    }
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+    {
+        tlAsset.alphaNum12() = asset.alphaNum12();
+        break;
+    }
+    case stellar::ASSET_TYPE_POOL_SHARE:
+    {
+        throw std::runtime_error("Asset can't have type ASSET_TYPE_POOL_SHARE");
+    }
+    }
+
+    return tlAsset;
+}
+
+TrustLineAsset
+changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset)
+{
+    TrustLineAsset tlAsset;
+    tlAsset.type(ctAsset.type());
+
+    switch (ctAsset.type())
+    {
+    case stellar::ASSET_TYPE_NATIVE:
+        break;
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+    {
+        tlAsset.alphaNum4() = ctAsset.alphaNum4();
+        break;
+    }
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+    {
+        tlAsset.alphaNum12() = ctAsset.alphaNum12();
+        break;
+    }
+    case stellar::ASSET_TYPE_POOL_SHARE:
+    {
+        tlAsset.liquidityPoolID() =
+            xdrSha256(ctAsset.liquidityPool().constantProduct());
+        break;
+    }
+    }
+
+    return tlAsset;
+}
+
+ChangeTrustAsset
+assetToChangeTrustAsset(Asset const& asset)
+{
+    ChangeTrustAsset ctAsset;
+    ctAsset.type(asset.type());
+
+    switch (asset.type())
+    {
+    case stellar::ASSET_TYPE_NATIVE:
+        break;
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+    {
+        ctAsset.alphaNum4() = asset.alphaNum4();
+        break;
+    }
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+    {
+        ctAsset.alphaNum12() = asset.alphaNum12();
+        break;
+    }
+    case stellar::ASSET_TYPE_POOL_SHARE:
+    {
+        throw std::runtime_error("Asset can't have type ASSET_TYPE_POOL_SHARE");
+    }
+    }
+
+    return ctAsset;
 }
 
 namespace detail
