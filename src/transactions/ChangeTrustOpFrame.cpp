@@ -165,7 +165,15 @@ ChangeTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
         innerResult().code(CHANGE_TRUST_MALFORMED);
         return false;
     }
-    if (!isAssetValid(mChangeTrust.line))
+
+    bool isPoolLine = mChangeTrust.line.type() == ASSET_TYPE_POOL_SHARE;
+    if (ledgerVersion < 18 && isPoolLine)
+    {
+        innerResult().code(CHANGE_TRUST_MALFORMED);
+        return false;
+    }
+
+    if (!isChangeTrustAssetValid(mChangeTrust.line))
     {
         innerResult().code(CHANGE_TRUST_MALFORMED);
         return false;
