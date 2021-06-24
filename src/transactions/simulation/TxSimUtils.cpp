@@ -14,8 +14,9 @@ namespace stellar
 namespace txsimulation
 {
 
+template <typename T>
 static void
-replaceIssuer(Asset& asset, uint32_t partition)
+replaceIssuer(T& asset, uint32_t partition)
 {
     switch (asset.type())
     {
@@ -26,7 +27,8 @@ replaceIssuer(Asset& asset, uint32_t partition)
         mutateScaledAccountID(asset.alphaNum12().issuer, partition);
         break;
     case ASSET_TYPE_NATIVE:
-        // nothing to do for native assets
+    case ASSET_TYPE_POOL_SHARE:
+        // nothing to do for native assets or pool trustlines
         break;
     default:
         abort();
