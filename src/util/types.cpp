@@ -100,8 +100,9 @@ isString32Valid(std::string const& str)
     return true;
 }
 
+template <typename T>
 bool
-isAssetValid(Asset const& cur)
+isAssetValid(T const& cur)
 {
     if (cur.type() == ASSET_TYPE_NATIVE)
         return true;
@@ -163,6 +164,38 @@ isAssetValid(Asset const& cur)
         return charcount > 4;
     }
     return false;
+}
+
+bool
+isAssetValid(Asset const& cur)
+{
+    return isAssetValid<Asset>(cur);
+}
+
+bool
+isChangeTrustAssetValid(ChangeTrustAsset const& cur, uint32_t ledgerVersion)
+{
+    if (cur.type() == ASSET_TYPE_POOL_SHARE)
+    {
+        if (ledgerVersion < 18)
+        {
+            return false;
+        }
+
+        auto const& cp = cur.liquidityPool().constantProduct();
+        return isAssetValid<Asset>(cp.assetA) &&
+               isAssetValid<Asset>(cp.assetB) && cp.assetA < cp.assetB &&
+               cp.fee == LIQUIDITY_POOL_FEE_V18;
+    }
+    return isAssetValid<ChangeTrustAsset>(cur);
+}
+
+bool
+isTrustLineAssetValid(TrustLineAsset const& cur, uint32_t ledgerVersion)
+{
+    return cur.type() == ASSET_TYPE_POOL_SHARE
+               ? ledgerVersion > 17
+               : isAssetValid<TrustLineAsset>(cur);
 }
 
 AccountID

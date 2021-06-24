@@ -30,6 +30,13 @@ bool isString32Valid(std::string const& str);
 // returns true if the Asset value is well formed
 bool isAssetValid(Asset const& cur);
 
+// returns true if the ChangeTrustAsset value is well formed
+bool isChangeTrustAssetValid(ChangeTrustAsset const& cur,
+                             uint32_t ledgerVersion);
+
+// returns true if the TrustLineAsset value is well formed
+bool isTrustLineAssetValid(TrustLineAsset const& cur, uint32_t ledgerVersion);
+
 // returns the issuer for the given asset
 AccountID getIssuer(Asset const& asset);
 
