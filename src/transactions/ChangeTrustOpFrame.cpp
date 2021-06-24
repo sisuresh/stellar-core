@@ -187,7 +187,8 @@ ChangeTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
         }
     }
 
-    if (ledgerVersion > 15 && getSourceID() == getIssuer(mChangeTrust.line))
+    if (ledgerVersion > 15 && !isPoolLine &&
+        getSourceID() == getIssuer(mChangeTrust.line))
     {
         innerResult().code(CHANGE_TRUST_MALFORMED);
         return false;

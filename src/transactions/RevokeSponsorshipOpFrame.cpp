@@ -407,7 +407,8 @@ RevokeSponsorshipOpFrame::doCheckValid(uint32_t ledgerVersion)
             auto const& tl = lk.trustLine();
             if (!isAssetValid(tl.asset) ||
                 (tl.asset.type() == ASSET_TYPE_NATIVE) ||
-                (getIssuer(tl.asset) == tl.accountID))
+                (tl.asset.type() != ASSET_TYPE_POOL_SHARE &&
+                 getIssuer(tl.asset) == tl.accountID))
             {
                 innerResult().code(REVOKE_SPONSORSHIP_DOES_NOT_EXIST);
                 return false;

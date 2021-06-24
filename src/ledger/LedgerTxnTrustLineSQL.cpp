@@ -29,14 +29,10 @@ validateTrustLineKey(uint32_t ledgerVersion, LedgerKey const& key)
     {
         throw NonSociRelatedException("XLM TrustLine?");
     }
-    else if (key.trustLine().accountID == getIssuer(asset))
+    else if (asset.type() != ASSET_TYPE_POOL_SHARE &&
+             key.trustLine().accountID == getIssuer(asset))
     {
         throw NonSociRelatedException("TrustLine accountID is issuer");
-    }
-    else if (asset.type() != ASSET_TYPE_CREDIT_ALPHANUM4 &&
-             asset.type() != ASSET_TYPE_CREDIT_ALPHANUM12)
-    {
-        throw NonSociRelatedException("Unknown asset type");
     }
 }
 

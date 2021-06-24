@@ -35,8 +35,6 @@ bool isChangeTrustAssetValid(ChangeTrustAsset const& cur);
 
 // returns true if the TrustLineAsset value is well formed
 bool isTrustLineAssetValid(TrustLineAsset const& cur);
-// returns the issuer for the given asset
-AccountID getIssuer(Asset const& asset);
 
 // returns true if the currencies are the same
 bool compareAsset(Asset const& first, Asset const& second);
@@ -50,6 +48,23 @@ int32_t unsignedToSigned(uint32_t v);
 int64_t unsignedToSigned(uint64_t v);
 
 std::string formatSize(size_t size);
+
+// returns the issuer for the given asset
+template <typename T>
+AccountID
+getIssuer(T const& asset)
+{
+    switch (asset.type())
+    {
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+        return asset.alphaNum4().issuer;
+    case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+        return asset.alphaNum12().issuer;
+    case stellar::ASSET_TYPE_NATIVE:
+    case stellar::ASSET_TYPE_POOL_SHARE:
+        throw std::runtime_error("asset does not have an issuer");
+    }
+}
 
 template <uint32_t N>
 void
