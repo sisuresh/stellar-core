@@ -191,7 +191,7 @@ LedgerEntryIsValid::checkIsValid(TrustLineEntry const& tl,
     {
         return "TrustLine asset is native";
     }
-    if (!isAssetValid(tl.asset))
+    if (!isTrustLineAssetValid(tl.asset, version))
     {
         return "TrustLine asset is invalid";
     }
