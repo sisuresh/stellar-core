@@ -48,6 +48,7 @@ class TestAccount
 
     Asset asset(std::string const& name);
     void changeTrust(Asset const& asset, int64_t limit);
+    void changeTrust(ChangeTrustAsset const& asset, int64_t limit);
     void allowTrust(Asset const& asset, PublicKey const& trustor,
                     uint32_t flag);
     void allowTrust(Asset const& asset, PublicKey const& trustor,
@@ -61,7 +62,9 @@ class TestAccount
                            txtest::SetTrustLineFlagsArguments const& arguments);
 
     TrustLineEntry loadTrustLine(Asset const& asset) const;
+    TrustLineEntry loadTrustLine(TrustLineAsset const& asset) const;
     bool hasTrustLine(Asset const& asset) const;
+    bool hasTrustLine(TrustLineAsset const& asset) const;
 
     void setOptions(txtest::SetOptionsArguments const& arguments);
 
@@ -162,6 +165,7 @@ class TestAccount
     }
 
     uint32_t getTrustlineFlags(Asset const& asset) const;
+    uint32_t getTrustlineFlags(TrustLineAsset const& asset) const;
     int64_t getTrustlineBalance(Asset const& asset) const;
     int64_t getBalance() const;
     int64_t getAvailableBalance() const;

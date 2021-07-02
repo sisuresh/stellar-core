@@ -17,6 +17,9 @@ class ChangeTrustOpFrame : public OperationFrame
     }
     ChangeTrustOp const& mChangeTrust;
 
+    bool manageAssetTrustlineForPool(AbstractLedgerTxn& ltx,
+                                     Asset const& asset);
+
   public:
     ChangeTrustOpFrame(Operation const& op, OperationResult& res,
                        TransactionFrame& parentTx);

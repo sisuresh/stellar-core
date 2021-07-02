@@ -119,6 +119,7 @@ TransactionFramePtr transactionFromOperations(Application& app,
                                               int fee = 0);
 
 Operation changeTrust(Asset const& asset, int64_t limit);
+Operation changeTrust(ChangeTrustAsset const& asset, int64_t limit);
 
 Operation allowTrust(PublicKey const& trustor, Asset const& asset,
                      uint32_t authorize);
@@ -221,6 +222,8 @@ Asset makeNativeAsset();
 Asset makeInvalidAsset();
 Asset makeAsset(SecretKey const& issuer, std::string const& code);
 Asset makeAssetAlphanum12(SecretKey const& issuer, std::string const& code);
+ChangeTrustAsset makePoolShareAsset(Asset const& assetA, Asset const& assetB,
+                                    int32_t fee);
 
 OperationFrame const& getFirstOperationFrame(TransactionFrame const& tx);
 OperationResult const& getFirstResult(TransactionFrame const& tx);

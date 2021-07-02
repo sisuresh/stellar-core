@@ -122,6 +122,7 @@ void
 TestInvariantManager::handleInvariantFailure(
     std::shared_ptr<Invariant> invariant, std::string const& message) const
 {
+    std::cout << message << "\n\n";
     throw InvariantDoesNotHold{message};
 }
 
