@@ -409,6 +409,36 @@ checkLiquidityPool(Application& app, PoolID const& poolID, int64_t reserveA,
     REQUIRE(cp.poolSharesTrustLineCount == poolSharesTrustLineCount);
 }
 
+ClaimableBalanceID
+getRevokeBalanceID(TestAccount& testAccount, Asset const& asset,
+                   PoolID const& poolID, uint32_t opNum,
+                   EnvelopeType envelopeType)
+{
+    HashIDPreimage hashPreimage;
+    hashPreimage.type(envelopeType);
+
+    if (envelopeType == ENVELOPE_TYPE_POOL_REVOKE_OP_ID)
+    {
+        hashPreimage.revokeID().sourceAccount = testAccount;
+        hashPreimage.revokeID().seqNum = testAccount.getLastSequenceNumber();
+        hashPreimage.revokeID().opNum = opNum;
+        hashPreimage.revokeID().liquidityPoolID = poolID;
+        hashPreimage.revokeID().asset = asset;
+    }
+    else
+    {
+        hashPreimage.operationID().sourceAccount = testAccount;
+        hashPreimage.operationID().seqNum = testAccount.getLastSequenceNumber();
+        hashPreimage.operationID().opNum = opNum;
+    }
+
+    ClaimableBalanceID balanceID;
+    balanceID.type(CLAIMABLE_BALANCE_ID_TYPE_V0);
+    balanceID.v0() = xdrSha256(hashPreimage);
+
+    return balanceID;
+}
+
 TxSetResultMeta
 closeLedgerOn(Application& app, uint32 ledgerSeq, int day, int month, int year,
               std::vector<TransactionFrameBasePtr> const& txs, bool strictOrder)

@@ -85,6 +85,11 @@ void checkLiquidityPool(Application& app, PoolID const& poolID,
                         int64_t totalPoolShares,
                         int64_t poolSharesTrustLineCount);
 
+ClaimableBalanceID
+getRevokeBalanceID(TestAccount& testAccount, Asset const& asset,
+                   PoolID const& poolID, uint32_t opNum,
+                   EnvelopeType envelopeType = ENVELOPE_TYPE_POOL_REVOKE_OP_ID);
+
 TxSetResultMeta
 closeLedgerOn(Application& app, uint32 ledgerSeq, time_t closeTime,
               std::vector<TransactionFrameBasePtr> const& txs = {},
