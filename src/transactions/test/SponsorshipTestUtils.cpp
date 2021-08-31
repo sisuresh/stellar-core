@@ -294,9 +294,11 @@ createModifyAndRemoveSponsoredEntry(Application& app, TestAccount& sponsoredAcc,
 
 void
 tooManySponsoring(Application& app, TestAccount& sponsoredAcc,
-                  Operation const& successfulOp, Operation const& failOp)
+                  Operation const& successfulOp, Operation const& failOp,
+                  uint32_t reservesForSuccesfulOp)
 {
-    tooManySponsoring(app, sponsoredAcc, sponsoredAcc, successfulOp, failOp);
+    tooManySponsoring(app, sponsoredAcc, sponsoredAcc, successfulOp, failOp,
+                      reservesForSuccesfulOp);
 }
 
 static uint32_t
@@ -316,6 +318,13 @@ getMinProtocolVersionForTooManyTestsFromOp(Operation const& op)
                      .trustLine()
                      .asset.type() == ASSET_TYPE_POOL_SHARE)
     {
+        return 18;
+    }
+    else if (op.body.type() == ALLOW_TRUST ||
+             op.body.type() == SET_TRUST_LINE_FLAGS)
+    {
+        // An assumption is made here that if you are using one of these
+        // operations, you are testing the pool share revoke scenario.
         return 18;
     }
 
@@ -392,7 +401,7 @@ submitTooManySponsoringTxs(Application& app, TestAccount& successfulOpAcc,
 void
 tooManySponsoring(Application& app, TestAccount& successfulOpAcc,
                   TestAccount& failOpAcc, Operation const& successfulOp,
-                  Operation const& failOp)
+                  Operation const& failOp, uint32_t reservesForSuccesfulOp)
 {
     REQUIRE(failOp.body.type() == successfulOp.body.type());
 
@@ -413,8 +422,7 @@ tooManySponsoring(Application& app, TestAccount& successfulOpAcc,
 
                 // we want to be able to do one successful op before the fail op
                 ae.ext.v1().ext.v2().numSponsoring =
-                    UINT32_MAX -
-                    getNumReservesRequiredForOperation(successfulOp);
+                    UINT32_MAX - reservesForSuccesfulOp;
                 ltx.commit();
             }
 
@@ -435,8 +443,7 @@ tooManySponsoring(Application& app, TestAccount& successfulOpAcc,
 
                 // we want to be able to do one successful op before the fail op
                 ae.ext.v1().ext.v2().numSponsoring =
-                    UINT32_MAX -
-                    getNumReservesRequiredForOperation(successfulOp);
+                    UINT32_MAX - reservesForSuccesfulOp;
 
                 // make sure numSubEntry + numSponsoring limit doesn't exist pre
                 // 18
@@ -465,8 +472,7 @@ tooManySponsoring(Application& app, TestAccount& successfulOpAcc,
                 // should validate the numSponsoring + numSubEntries <=
                 // UINT32_MAX protocol v18 check.
                 ae.ext.v1().ext.v2().numSponsoring =
-                    UINT32_MAX -
-                    getNumReservesRequiredForOperation(successfulOp) - 50;
+                    UINT32_MAX - reservesForSuccesfulOp - 50;
 
                 ae.numSubEntries = 50;
 

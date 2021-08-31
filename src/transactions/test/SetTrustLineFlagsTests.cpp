@@ -12,6 +12,7 @@
 #include "test/TxTests.h"
 #include "test/test.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/test/SponsorshipTestUtils.h"
 #include "util/Timer.h"
 
 using namespace stellar;
@@ -1081,4 +1082,91 @@ TEST_CASE("revoke from pool",
             revokeTest(TrustFlagOp::ALLOW_TRUST);
         }
     });
+
+    SECTION("too many sponsoring")
+    {
+        SECTION("one claimable balance")
+        {
+            acc1.changeTrust(cur1, 10);
+            acc1.changeTrust(cur2, 10);
+            root.pay(acc1, cur1, 10);
+            root.pay(acc1, cur2, 10);
+
+            // use two assets issued by acc1. No claimable balances will be
+            // created for them on revoke
+            auto eur = makeAsset(acc1, "eur");
+            auto usd = makeAsset(acc1, "usd");
+
+            auto share1Eur = makeChangeTrustAssetPoolShare(
+                cur1, eur, LIQUIDITY_POOL_FEE_V18);
+            auto pool1Eur = xdrSha256(share1Eur.liquidityPool());
+
+            auto share2Usd = makeChangeTrustAssetPoolShare(
+                cur2, usd, LIQUIDITY_POOL_FEE_V18);
+            auto pool2Usd = xdrSha256(share2Usd.liquidityPool());
+
+            acc1.changeTrust(share1Eur, 10);
+            acc1.changeTrust(share2Usd, 10);
+            acc1.liquidityPoolDeposit(pool1Eur, 10, 10, Price{1, 1},
+                                      Price{1, 1});
+            acc1.liquidityPoolDeposit(pool2Usd, 10, 10, Price{1, 1},
+                                      Price{1, 1});
+
+            SECTION("allow trust")
+            {
+                tooManySponsoring(*app, acc1,
+                                  root.op(allowTrust(acc1, cur1, 0)),
+                                  root.op(allowTrust(acc1, cur2, 0)), 1);
+            }
+            SECTION("set trustline flags")
+            {
+                tooManySponsoring(
+                    *app, acc1,
+                    root.op(setTrustLineFlags(
+                        acc1, cur1, clearTrustLineFlags(AUTHORIZED_FLAG))),
+                    root.op(setTrustLineFlags(
+                        acc1, cur2, clearTrustLineFlags(AUTHORIZED_FLAG))),
+                    1);
+            }
+        }
+
+        SECTION("two claimable balances")
+        {
+            auto cur3 = makeAsset(root, "CUR3");
+
+            auto share23 = makeChangeTrustAssetPoolShare(
+                cur2, cur3, LIQUIDITY_POOL_FEE_V18);
+            auto pool23 = xdrSha256(share23.liquidityPool());
+
+            acc1.changeTrust(cur1, 10);
+            acc1.changeTrust(cur2, 20);
+            acc1.changeTrust(cur3, 10);
+            root.pay(acc1, cur1, 10);
+            root.pay(acc1, cur2, 20);
+            root.pay(acc1, cur3, 10);
+
+            acc1.changeTrust(share12, 10);
+            acc1.changeTrust(share23, 10);
+
+            acc1.liquidityPoolDeposit(pool12, 10, 10, Price{1, 1}, Price{1, 1});
+            acc1.liquidityPoolDeposit(pool23, 10, 10, Price{1, 1}, Price{1, 1});
+
+            SECTION("allow trust")
+            {
+                tooManySponsoring(*app, acc1,
+                                  root.op(allowTrust(acc1, cur1, 0)),
+                                  root.op(allowTrust(acc1, cur2, 0)), 2);
+            }
+            SECTION("set trustline flags")
+            {
+                tooManySponsoring(
+                    *app, acc1,
+                    root.op(setTrustLineFlags(
+                        acc1, cur1, clearTrustLineFlags(AUTHORIZED_FLAG))),
+                    root.op(setTrustLineFlags(
+                        acc1, cur2, clearTrustLineFlags(AUTHORIZED_FLAG))),
+                    2);
+            }
+        }
+    }
 }
