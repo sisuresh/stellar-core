@@ -618,6 +618,10 @@ TEST_CASE("change trust", "[tx][changetrust]")
                 acc1.changeTrust(idr, 10);
                 acc1.changeTrust(usd, 10);
 
+                // get rid of available balance so acc1 needs a sponsor for new
+                // entries
+                acc1.pay(root, acc1.getAvailableBalance() - 100);
+
                 {
                     auto tx = transactionFrameFromOps(
                         app->getNetworkID(), gateway,
@@ -640,6 +644,47 @@ TEST_CASE("change trust", "[tx][changetrust]")
                     LedgerTxn ltx(app->getLedgerTxnRoot());
                     checkSponsorship(ltx, trustlineKey(acc1, tlAsset), 1,
                                      &gateway.getPublicKey());
+                }
+
+                // give gateway enough fees for two operations
+                root.pay(gateway, 200);
+
+                SECTION("try to revoke the sponsorship but fail")
+                {
+                    auto tx = transactionFrameFromOps(
+                        app->getNetworkID(), gateway,
+                        {gateway.op(
+                            revokeSponsorship(trustlineKey(acc1, tlAsset)))},
+                        {});
+
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    TransactionMeta txm(2);
+                    REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                    REQUIRE(!tx->apply(*app, ltx, txm));
+                    REQUIRE(tx->getResultCode() == txFAILED);
+
+                    auto const& opRes = tx->getResult().result.results()[0];
+                    REQUIRE(opRes.tr().revokeSponsorshipResult().code() ==
+                            REVOKE_SPONSORSHIP_LOW_RESERVE);
+                }
+
+                SECTION("give owner enough reserves to take on the pool share "
+                        "trustline")
+                {
+                    root.pay(acc1,
+                             app->getLedgerManager().getLastMinBalance(0));
+
+                    auto tx = transactionFrameFromOps(
+                        app->getNetworkID(), gateway,
+                        {gateway.op(
+                            revokeSponsorship(trustlineKey(acc1, tlAsset)))},
+                        {});
+
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    TransactionMeta txm(2);
+                    REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                    REQUIRE(tx->apply(*app, ltx, txm));
+                    REQUIRE(tx->getResultCode() == txSUCCESS);
                 }
             }
         });
