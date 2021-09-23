@@ -16,7 +16,8 @@ class Fuzzer;
 enum class FuzzerMode
 {
     OVERLAY,
-    TRANSACTION
+    TRANSACTION,
+    LIQUIDITY_POOL_TEST
 };
 
 namespace FuzzUtils

@@ -1830,4 +1830,63 @@ OverlayFuzzer::genFuzz(std::string const& filename)
     auto bins = xdr::xdr_to_fuzzer_opaque(m);
     out.write(reinterpret_cast<char const*>(bins.data()), bins.size());
 }
+
+void
+LiquidityPoolTestFuzzer::shutdown()
+{
+}
+
+void
+LiquidityPoolTestFuzzer::initialize()
+{
+    resetRandomSeed(1);
+    mApp = createTestApplication(mClock, getFuzzConfig(0));
+    mRoot = std::make_shared<TestAccount>(TestAccount::createRoot(*mApp));
+}
+
+void
+LiquidityPoolTestFuzzer::inject(std::string const& filename)
+{
+    std::ifstream in;
+    in.exceptions(std::ios::badbit);
+    in.open(filename, std::ios::binary);
+
+    TestParams p;
+    in.read((char*)&p, sizeof(p));
+
+    txtest::depositTradeWithdrawTest(*mApp, *mRoot, p.depositSize1,
+                                     p.depositSize2,
+                                     {std::make_pair(p.sendAssetA, p.amount)});
+}
+
+int
+LiquidityPoolTestFuzzer::xdrSizeLimit()
+{
+    return 0;
+}
+
+// TODO: look at this
+#define FUZZER_INITIAL_CORPUS_MESSAGE_GEN_UPPERBOUND 16
+void
+LiquidityPoolTestFuzzer::genFuzz(std::string const& filename)
+{
+    resetRandomSeed(std::random_device()());
+    std::ofstream out;
+    out.exceptions(std::ios::failbit | std::ios::badbit);
+    out.open(filename, std::ofstream::binary | std::ofstream::trunc);
+
+    uint32_t depositSize1;
+    uint32_t depositSize2;
+    bool sendAssetA;
+    uint32_t amount;
+
+    TestParams p;
+    p.depositSize1 = autocheck::generator<uint32_t>{}();
+    p.depositSize2 = autocheck::generator<uint32_t>{}();
+    p.sendAssetA = autocheck::generator<bool>{}();
+    p.amount = autocheck::generator<uint32_t>{}();
+
+    out.write((char*)&p, sizeof(p));
+}
+
 }

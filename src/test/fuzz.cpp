@@ -41,6 +41,8 @@ createFuzzer(int processID, FuzzerMode fuzzerMode)
         return std::make_unique<OverlayFuzzer>();
     case FuzzerMode::TRANSACTION:
         return std::make_unique<TransactionFuzzer>();
+    case FuzzerMode::LIQUIDITY_POOL_TEST:
+        return std::make_unique<LiquidityPoolTestFuzzer>();
     default:
         abort();
     }

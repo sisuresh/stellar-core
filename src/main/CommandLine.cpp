@@ -1560,12 +1560,18 @@ fuzzerModeParser(std::string& fuzzerModeArg, FuzzerMode& fuzzerMode)
             return "";
         }
 
+        if (iequals(fuzzerModeArg, "liquiditypool"))
+        {
+            fuzzerMode = FuzzerMode::LIQUIDITY_POOL_TEST;
+            return "";
+        }
+
         return "Unrecognized fuzz mode. Please select a valid mode.";
     };
 
     return {clara::Opt{fuzzerModeArg, "FUZZER-MODE"}["--mode"](
                 "set the fuzzer mode. Expected modes: overlay, "
-                "tx. Defaults to overlay."),
+                "tx, liquiditypool. Defaults to overlay."),
             validateFuzzerMode};
 }
 

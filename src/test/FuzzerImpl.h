@@ -6,6 +6,7 @@
 
 #include "ledger/LedgerTxn.h"
 #include "test/Fuzzer.h"
+#include "test/TestAccount.h"
 #include "util/Timer.h"
 #include "xdr/Stellar-ledger-entries.h"
 #include "xdr/Stellar-types.h"
@@ -75,4 +76,31 @@ class OverlayFuzzer : public Fuzzer
     std::shared_ptr<Simulation> mSimulation;
     FuzzUtils::StoredLedgerKeys mStoredLedgerKeys;
 };
+
+class LiquidityPoolTestFuzzer : public Fuzzer
+{
+  public:
+    LiquidityPoolTestFuzzer()
+    {
+    }
+    void inject(std::string const& filename) override;
+    void initialize() override;
+    void shutdown() override;
+    void genFuzz(std::string const& filename) override;
+    int xdrSizeLimit() override;
+
+  private:
+    VirtualClock mClock;
+    std::shared_ptr<Application> mApp;
+    std::shared_ptr<TestAccount> mRoot;
+
+    struct TestParams
+    {
+        uint32_t depositSize1;
+        uint32_t depositSize2;
+        bool sendAssetA;
+        uint32_t amount;
+    };
+};
+
 }
