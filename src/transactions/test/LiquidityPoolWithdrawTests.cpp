@@ -346,90 +346,25 @@ TEST_CASE("liquidity pool withdraw", "[tx][liquiditypool]")
 
         SECTION("large deposit/withdraw test")
         {
-            struct Deposit
+            // balances between 1000 and 1050, with # of trades and trade sizes
+            // between 5 and 50
+            for (int i = 1000; i < 1050; ++i)
             {
-                TestAccount acc;
-                int64_t numPoolShares;
+                std::uniform_int_distribution<int64_t> dist(5, 50);
 
-                Deposit(TestAccount const& acc, int64_t numPoolShares)
-                    : acc(acc), numPoolShares(numPoolShares)
+                SECTION(fmt::format("deposit amount = {}", i))
                 {
-                }
-            };
+                    std::vector<std::pair<bool, int64_t>> trades;
+                    int64_t numTrades = dist(gRandomEngine);
+                    for (int j = 0; j < numTrades; ++j)
+                    {
+                        int64_t tradeSize = dist(gRandomEngine);
+                        trades.emplace_back(tradeSize % 2 == 0, tradeSize);
+                    }
 
-            std::vector<Deposit> deposits;
-
-            const int numAccounts = 100;
-
-            int64_t maxDeposit = INT64_MAX / numAccounts;
-            int64_t total = 0;
-
-            // deposit
-            for (int i = 0; i < numAccounts; ++i)
-            {
-                auto acc = root.create(fmt::format("account{}", i), minBal(10));
-                acc.changeTrust(cur1, INT64_MAX);
-                acc.changeTrust(cur2, INT64_MAX);
-                acc.changeTrust(share12, INT64_MAX);
-
-                std::uniform_int_distribution<int64_t> dist(1, maxDeposit);
-                int64_t size = dist(gRandomEngine);
-
-                root.pay(acc, cur1, size);
-                root.pay(acc, cur2, size);
-
-                acc.liquidityPoolDeposit(pool12, size, size, Price{1, 1},
-                                         Price{1, 1});
-
-                total += size;
-
-                checkLiquidityPool(*app, pool12, total, total, total, i + 1);
-
-                deposits.emplace_back(acc, size);
-            }
-
-            // trade through the pool
-            acc1.changeTrust(cur1, INT64_MAX);
-            acc1.changeTrust(cur2, INT64_MAX);
-            root.pay(acc1, cur1, 1000000);
-            root.pay(acc1, cur2, 1000000);
-
-            for (int i = 0; i < 100; ++i)
-            {
-                std::uniform_int_distribution<int64_t> dist(1, 1000);
-                int64_t sizeCur1 = dist(gRandomEngine);
-                int64_t sizeCur2 = dist(gRandomEngine);
-
-                acc1.pay(root, cur1, INT64_MAX, cur2, sizeCur2, {});
-                root.pay(acc1, cur2, INT64_MAX, cur1, sizeCur1, {});
-            }
-
-            // withdraw in reverse order
-            for (auto rit = deposits.rbegin(); rit != deposits.rend(); ++rit)
-            {
-                auto& deposit = *rit;
-                deposit.acc.liquidityPoolWithdraw(pool12, deposit.numPoolShares,
-                                                  0, 0);
-
-                total -= deposit.numPoolShares;
-            }
-
-            checkLiquidityPool(*app, pool12, 0, 0, 0, numAccounts);
-
-            // delete trustlines
-            int i = numAccounts;
-            for (auto& deposit : deposits)
-            {
-                deposit.acc.changeTrust(share12, 0);
-
-                if (--i > 0)
-                {
-                    checkLiquidityPool(*app, pool12, 0, 0, 0, i);
+                    depositTradeWithdrawTest(*app, root, i, i, trades);
                 }
             }
-
-            LedgerTxn ltx(app->getLedgerTxnRoot());
-            REQUIRE(!loadLiquidityPool(ltx, pool12));
         }
     });
 }
