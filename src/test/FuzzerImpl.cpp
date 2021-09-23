@@ -1854,8 +1854,7 @@ LiquidityPoolTestFuzzer::inject(std::string const& filename)
     TestParams p;
     in.read((char*)&p, sizeof(p));
 
-    txtest::depositTradeWithdrawTest(*mApp, *mRoot, p.depositSize1,
-                                     p.depositSize2,
+    txtest::depositTradeWithdrawTest(*mApp, *mRoot, p.depositSize,
                                      {std::make_pair(p.sendAssetA, p.amount)});
 }
 
@@ -1874,15 +1873,9 @@ LiquidityPoolTestFuzzer::genFuzz(std::string const& filename)
     std::ofstream out;
     out.exceptions(std::ios::failbit | std::ios::badbit);
     out.open(filename, std::ofstream::binary | std::ofstream::trunc);
-
-    uint32_t depositSize1;
-    uint32_t depositSize2;
-    bool sendAssetA;
-    uint32_t amount;
-
+ 
     TestParams p;
-    p.depositSize1 = autocheck::generator<uint32_t>{}();
-    p.depositSize2 = autocheck::generator<uint32_t>{}();
+    p.depositSize = autocheck::generator<uint32_t>{}();
     p.sendAssetA = autocheck::generator<bool>{}();
     p.amount = autocheck::generator<uint32_t>{}();
 

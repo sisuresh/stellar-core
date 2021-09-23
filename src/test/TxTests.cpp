@@ -1463,8 +1463,7 @@ executeUpgrade(Application& app, LedgerUpgrade const& lupgrade)
 // trades is a vector of pairs, where the bool indicates if assetA or assetB is
 // sent n the payment, and the int64_t is the amount
 void
-depositTradeWithdrawTest(Application& app, TestAccount& root, int depositSize1,
-                         int depositSize2,
+depositTradeWithdrawTest(Application& app, TestAccount& root, int depositSize,
                          std::vector<std::pair<bool, int64_t>> const& trades)
 {
     struct Deposit
@@ -1503,8 +1502,8 @@ depositTradeWithdrawTest(Application& app, TestAccount& root, int depositSize1,
     };
 
     // deposit
-    deposit(0, depositSize1);
-    deposit(1, depositSize2);
+    deposit(0, depositSize);
+    deposit(1, depositSize);
 
     for (auto const& trade : trades)
     {

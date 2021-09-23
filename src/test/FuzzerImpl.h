@@ -96,8 +96,7 @@ class LiquidityPoolTestFuzzer : public Fuzzer
 
     struct TestParams
     {
-        uint32_t depositSize1;
-        uint32_t depositSize2;
+        uint32_t depositSize;
         bool sendAssetA;
         uint32_t amount;
     };

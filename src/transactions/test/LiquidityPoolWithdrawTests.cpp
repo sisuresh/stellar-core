@@ -347,10 +347,10 @@ TEST_CASE("liquidity pool withdraw", "[tx][liquiditypool]")
         SECTION("large deposit/withdraw test")
         {
             // balances between 1000 and 1050, with # of trades and trade sizes
-            // between 5 and 50
+            // between 5 and 25
             for (int i = 1000; i < 1050; ++i)
             {
-                std::uniform_int_distribution<int64_t> dist(5, 50);
+                std::uniform_int_distribution<int64_t> dist(5, 25);
 
                 SECTION(fmt::format("deposit amount = {}", i))
                 {
@@ -362,7 +362,7 @@ TEST_CASE("liquidity pool withdraw", "[tx][liquiditypool]")
                         trades.emplace_back(tradeSize % 2 == 0, tradeSize);
                     }
 
-                    depositTradeWithdrawTest(*app, root, i, i, trades);
+                    depositTradeWithdrawTest(*app, root, i, trades);
                 }
             }
         }
