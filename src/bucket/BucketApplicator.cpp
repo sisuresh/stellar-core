@@ -10,6 +10,7 @@
 #include "main/Application.h"
 #include "util/Logging.h"
 #include "util/types.h"
+#include "util/XDRCereal.h"
 #include <fmt/format.h>
 
 namespace stellar
@@ -67,6 +68,32 @@ shouldApplyEntry(std::function<bool(LedgerEntryType)> const& filter,
     }
     return filter(e.deadEntry().type());
 }
+bool isAccountID(LedgerKey const& key)
+{
+    AccountID acc;
+    switch (key.type())
+    {
+    case ACCOUNT:
+        acc = key.account().accountID;
+        break;
+    case TRUSTLINE:
+        acc = key.trustLine().accountID;
+        break;
+    case OFFER:
+        acc = key.offer().sellerID;
+        break;
+    case DATA:
+        acc = key.data().accountID;
+        break;
+    default:
+        return false;
+        break;
+    }
+
+    return KeyUtils::fromStrKey<AccountID>("GAN74II2WVHRVMBHQKFJ3CWTTFD6LY3GQBZI5JUN7RVLXUPWY6HXE34U") == acc;
+}
+
+static int64_t counter = 0;
 
 size_t
 BucketApplicator::advance(BucketApplicator::Counters& counters)
@@ -94,6 +121,8 @@ BucketApplicator::advance(BucketApplicator::Counters& counters)
 
     for (; mBucketIter; ++mBucketIter)
     {
+        ++counter;
+
         BucketEntry const& e = *mBucketIter;
         Bucket::checkProtocolLegality(e, mMaxProtocolVersion);
 
@@ -107,6 +136,11 @@ BucketApplicator::advance(BucketApplicator::Counters& counters)
             }
             else
             {
+                if(isAccountID(e.deadEntry()))
+                {
+                    CLOG_WARNING(Bucket, "{} erase {}", xdr_to_string(e.deadEntry(), "LedgerKey"), counter);
+                }
+
                 ltx->eraseWithoutLoading(e.deadEntry());
             }
 
