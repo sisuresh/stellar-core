@@ -14,6 +14,7 @@
 #include "transactions/SponsorshipUtils.h"
 #include "util/XDROperators.h"
 #include "util/types.h"
+#include "util/Logging.h"
 #include <Tracy.hpp>
 
 namespace stellar
@@ -1222,6 +1223,8 @@ removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx, AccountID const& account,
 
     auto header = ltxInner.loadHeader();
     auto offers = ltxInner.loadOffersByAccountAndAsset(account, asset);
+
+    CLOG_WARNING(Tx, "REVOKE OFFERS FOUND NUM OFFERS={}", offers.size());
     for (auto& offer : offers)
     {
         auto const& oe = offer.current().data.offer();
@@ -1399,6 +1402,8 @@ removeOffersAndPoolShareTrustLines(AbstractLedgerTxn& ltx,
         return RemoveResult::SUCCESS;
     }
 
+    CLOG_WARNING(Tx, "REVOKE POOL FOUND NUM POOLTLS={}", poolTLKeys.size());
+
     for (auto const& poolTLKey : poolTLKeys)
     {
         auto poolShareTrustLine = loadPoolShareTrustLine(
@@ -1557,7 +1562,7 @@ removeOffersAndPoolShareTrustLines(AbstractLedgerTxn& ltx,
                 res != RemoveResult::SUCCESS)
             {
                 return res;
-            }
+            }  
 
             constantProduct().totalPoolShares -= balance;
             constantProduct().reserveA -= amountA;
