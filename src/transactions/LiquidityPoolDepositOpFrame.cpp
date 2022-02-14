@@ -32,9 +32,8 @@ static bool
 isBadPrice(int64_t amountA, int64_t amountB, Price const& minPrice,
            Price const& maxPrice)
 {
-    // a * d < b * n is equivalent to a/b < n/d but avoids rounding.
-    if (amountA == 0 || amountB == 0 ||
-        bigMultiply(amountA, minPrice.d) < bigMultiply(amountB, minPrice.n) ||
+    // INCORRECT. FOR TESTING
+    if (bigMultiply(amountA, minPrice.d) < bigMultiply(amountB, minPrice.n) ||
         bigMultiply(amountA, maxPrice.d) > bigMultiply(amountB, maxPrice.n))
     {
         return true;
