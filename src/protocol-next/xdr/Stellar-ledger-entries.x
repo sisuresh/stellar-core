@@ -99,7 +99,10 @@ enum LedgerEntryType
     OFFER = 2,
     DATA = 3,
     CLAIMABLE_BALANCE = 4,
-    LIQUIDITY_POOL = 5
+    LIQUIDITY_POOL = 5,
+    CONTRACT_CODE = 6,
+    CONTRACT_DATA = 7,
+    CONFIG = 8
 };
 
 struct Signer
@@ -505,7 +508,7 @@ enum ContractMetadataType
 
 union SCType switch (SCValType type)
 {
-case SCV_U63:
+case SCV_POS_I64:
 case SCV_U32:
 case SCV_I32:
 case SCV_STATIC:
@@ -575,7 +578,7 @@ enum ConfigSettingID
     CONFIG_TYPE_CONTRACT_MAX_SIZE = 1
 };
 
-struct ConfigurationEntry
+struct ConfigEntry
 {
     union switch (int v)
     {
@@ -584,7 +587,7 @@ struct ConfigurationEntry
     }
     ext;
 
-    ConfigSettingID id;
+    ConfigSettingID configID;
     ConfigSetting setting;
 };
 
@@ -623,7 +626,7 @@ struct LedgerEntry
     case CONTRACT_DATA:
         ContractDataEntry contractData;
     case CONFIG:
-        ConfigurationEntry globalContractConfig;
+        ConfigEntry config;
     }
     data;
 
@@ -683,6 +686,12 @@ case CONTRACT_CODE:
     {
         int64 contractID;
     } contractCode;
+case CONTRACT_DATA:
+    struct
+    {
+        int64 contractID;
+        SCVal key;
+    } contractData;
 case CONFIG:
     struct
     {

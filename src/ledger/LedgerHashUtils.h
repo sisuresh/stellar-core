@@ -143,16 +143,12 @@ template <> class hash<stellar::LedgerKey>
             break;
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
         case stellar::CONTRACT_CODE:
-            stellar::hashMix(res, std::hash<stellar::uint256>()(
-                                      lk.contractCode().owner.ed25519()));
             stellar::hashMix(
-                res, std::hash<uint64_t>()(lk.contractCode().contractID));
+                res, std::hash<int64_t>()(lk.contractCode().contractID));
             break;
         case stellar::CONTRACT_DATA:
-            stellar::hashMix(res, std::hash<stellar::uint256>()(
-                                      lk.contractData().owner.ed25519()));
             stellar::hashMix(
-                res, std::hash<uint64_t>()(lk.contractData().contractID));
+                res, std::hash<int64_t>()(lk.contractData().contractID));
             stellar::hashMix(
                 res, stellar::shortHash::xdrComputeHash(lk.contractData().key));
             break;
