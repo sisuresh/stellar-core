@@ -3,6 +3,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 %#include "xdr/Stellar-types.h"
+%#include "xdr/Stellar-contract.h"
 
 namespace stellar
 {
@@ -551,6 +552,13 @@ struct ContractCodeEntry {
     ContractBody body;
 };
 
+struct ContractDataEntry {
+    AccountID owner;
+    int64 contractID;
+    SCVal key;
+    SCVal val;
+};
+
 enum ConfigSettingType
 {
     CONFIG_TYPE_UINT32 = 1
@@ -612,6 +620,8 @@ struct LedgerEntry
         LiquidityPoolEntry liquidityPool;
     case CONTRACT_CODE:
         ContractCodeEntry contractCode;
+    case CONTRACT_DATA:
+        ContractDataEntry contractData;
     case CONFIG:
         ConfigurationEntry globalContractConfig;
     }
