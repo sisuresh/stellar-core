@@ -491,6 +491,95 @@ struct LiquidityPoolEntry
     body;
 };
 
+typedef opaque WASMCode<>;
+
+enum ContractCodeType {
+    CONTRACT_CODE_WASM = 0
+};
+
+enum ContractMetadataType
+{
+    METADATA_TYPE_V0 = 0
+};
+
+union SCType switch (SCValType type)
+{
+case SCV_U63:
+case SCV_U32:
+case SCV_I32:
+case SCV_STATIC:
+    void;
+case SCV_OBJECT:
+    SCObjectType objType;
+case SCV_SYMBOL:
+case SCV_BITSET:
+case SCV_STATUS:
+    void;
+};
+
+struct FunctionSignature
+{
+    SCSymbol function;
+    SCType returnType;
+    SCType argTypes<10>;
+};
+
+union ContractMetadata switch (ContractMetadataType type)
+{
+case METADATA_TYPE_V0:
+    FunctionSignature interface<10>;
+};
+
+union ContractBody switch (ContractCodeType type)
+{
+    case CONTRACT_CODE_WASM:
+        WASMCode wasm;
+};
+
+struct ContractCodeEntry {
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+
+    AccountID owner;
+    int64 contractID;
+
+    ContractMetadata metadata;
+    ContractBody body;
+};
+
+enum ConfigSettingType
+{
+    CONFIG_TYPE_UINT32 = 1
+};
+
+union ConfigSetting switch (ConfigSettingType type)
+{
+case CONFIG_TYPE_UINT32:
+    uint32 uint32Val;
+};
+
+enum ConfigSettingID
+{
+    CONFIG_TYPE_CONTRACT_MAX_SIZE = 1
+};
+
+struct ConfigurationEntry
+{
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+
+    ConfigSettingID id;
+    ConfigSetting setting;
+};
+
 struct LedgerEntryExtensionV1
 {
     SponsorshipDescriptor sponsoringID;
@@ -521,6 +610,10 @@ struct LedgerEntry
         ClaimableBalanceEntry claimableBalance;
     case LIQUIDITY_POOL:
         LiquidityPoolEntry liquidityPool;
+    case CONTRACT_CODE:
+        ContractCodeEntry contractCode;
+    case CONFIG:
+        ConfigurationEntry globalContractConfig;
     }
     data;
 
@@ -575,6 +668,16 @@ case LIQUIDITY_POOL:
     {
         PoolID liquidityPoolID;
     } liquidityPool;
+case CONTRACT_CODE:
+    struct
+    {
+        int64 contractID;
+    } contractCode;
+case CONFIG:
+    struct
+    {
+        ConfigSettingID configID;
+    } config;
 };
 
 // list of all envelope types used in the application
