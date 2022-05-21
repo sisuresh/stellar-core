@@ -271,6 +271,26 @@ poolShareTrustLineKey(AccountID const& accountID, PoolID const& poolID)
     return key;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+LedgerKey
+contractCodeKey(AccountID const& owner, uint64_t contractID)
+{
+    LedgerKey key(CONTRACT_CODE);
+    key.contractCode().owner = owner;
+    key.contractCode().contractID = contractID;
+    return key;
+}
+
+LedgerKey
+contractDataKey(AccountID const& owner, uint64_t contractID)
+{
+    LedgerKey key(CONTRACT_DATA);
+    key.contractData().owner = owner;
+    key.contractData().contractID = contractID;
+    return key;
+}
+#endif
+
 InternalLedgerKey
 sponsorshipKey(AccountID const& sponsoredID)
 {
@@ -398,6 +418,24 @@ loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID)
     ZoneScoped;
     return ltx.load(liquidityPoolKey(poolID));
 }
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+LedgerTxnEntry
+loadContractCode(AbstractLedgerTxn& ltx, AccountID const& owner,
+                 int64_t contractID)
+{
+    ZoneScoped;
+    return ltx.load(contractCodeKey(owner, contractID));
+}
+
+LedgerTxnEntry
+loadContractData(AbstractLedgerTxn& ltx, AccountID const& owner,
+                 int64_t contractID)
+{
+    ZoneScoped;
+    return ltx.load(contractDataKey(owner, contractID));
+}
+#endif
 
 static void
 acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,

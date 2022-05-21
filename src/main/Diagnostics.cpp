@@ -3,6 +3,7 @@
 #include "util/Decoder.h"
 #include "util/XDROperators.h"
 #include "util/XDRStream.h"
+#include "xdr/Stellar-ledger-entries.h"
 
 #include <map>
 #include <numeric>
@@ -56,6 +57,14 @@ bucketStats(std::string const& filename, bool aggregateAccounts)
                 case DATA:
                     k = &le.data().accountID;
                     break;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+                case CONTRACT_CODE:
+                    k = &le.contractCode().owner;
+                    break;
+                case CONTRACT_DATA:
+                    k = &le.contractData().owner;
+                    break;
+#endif
                 default:
                     break;
                 }

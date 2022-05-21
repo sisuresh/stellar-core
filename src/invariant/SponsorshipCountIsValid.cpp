@@ -44,6 +44,10 @@ getMult(LedgerEntry const& le)
                                                                          : 1;
     case OFFER:
     case DATA:
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    case CONTRACT_CODE:
+    case CONTRACT_DATA:
+#endif
         return 1;
     case CLAIMABLE_BALANCE:
         return le.data.claimableBalance().claimants.size();
@@ -67,6 +71,12 @@ getAccountID(LedgerEntry const& le)
         return le.data.offer().sellerID;
     case DATA:
         return le.data.data().accountID;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    case CONTRACT_CODE:
+        return le.data.contractCode().owner;
+    case CONTRACT_DATA:
+        return le.data.contractData().owner;
+#endif
     case CLAIMABLE_BALANCE:
     case LIQUIDITY_POOL:
         throw std::runtime_error("invalid LedgerEntry type");

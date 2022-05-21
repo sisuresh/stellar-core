@@ -62,6 +62,10 @@ LedgerKey claimableBalanceKey(ClaimableBalanceID const& balanceID);
 LedgerKey liquidityPoolKey(PoolID const& poolID);
 LedgerKey poolShareTrustLineKey(AccountID const& accountID,
                                 PoolID const& poolID);
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+LedgerKey contractCodeKey(AccountID const& owner, uint64_t contractID);
+LedgerKey contractDataKey(AccountID const& owner, uint64_t contractID);
+#endif
 InternalLedgerKey sponsorshipKey(AccountID const& sponsoredID);
 InternalLedgerKey sponsorshipCounterKey(AccountID const& sponsoringID);
 InternalLedgerKey maxSeqNumToApplyKey(AccountID const& sourceAccount);
@@ -133,6 +137,14 @@ LedgerTxnEntry loadPoolShareTrustLine(AbstractLedgerTxn& ltx,
                                       PoolID const& poolID);
 
 LedgerTxnEntry loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID);
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+LedgerTxnEntry loadContractCode(AbstractLedgerTxn& ltx, AccountID const& owner,
+                                int64_t contractID);
+
+LedgerTxnEntry loadContractData(AbstractLedgerTxn& ltx, AccountID const& owner,
+                                int64_t contractID);
+#endif
 
 void acquireLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                         LedgerTxnEntry const& offer);
