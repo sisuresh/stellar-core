@@ -287,17 +287,17 @@ BucketApplicator::Counters::logDebug(std::string const& bucketName,
 {
     uint64_t au_sec, ad_sec, tu_sec, td_sec, ou_sec, od_sec, du_sec, dd_sec,
         cu_sec, cd_sec, lu_sec, ld_sec, ccu_sec, ccd_sec, cdu_sec, cdd_sec,
-        T_sec, total;
+        cfgu_sec, cfgd_sec, T_sec, total;
     getRates(now, au_sec, ad_sec, tu_sec, td_sec, ou_sec, od_sec, du_sec,
              dd_sec, cu_sec, cd_sec, lu_sec, ld_sec, ccu_sec, ccd_sec, cdu_sec,
-             cdd_sec, T_sec, total);
+             cdd_sec, cfgu_sec, cfgd_sec, T_sec, total);
     CLOG_DEBUG(Bucket,
                "Apply-rates for {}-entry bucket {}.{} au:{} ad:{} tu:{} td:{} "
                "ou:{} od:{} du:{} dd:{} cu:{} cd:{} lu:{} ld:{} ccu:{} ccd:{} "
-               "cdu:{} cdd:{} T:{}",
+               "cdu:{} cdd:{} cfgu:{} cfgd{} T:{}",
                total, level, bucketName, au_sec, ad_sec, tu_sec, td_sec, ou_sec,
                od_sec, du_sec, dd_sec, cu_sec, cd_sec, lu_sec, ld_sec, ccu_sec,
-               ccd_sec, cdu_sec, cdd_sec, T_sec);
+               ccd_sec, cdu_sec, cdd_sec, cfgu_sec, cfgd_sec, T_sec);
 }
 
 void
