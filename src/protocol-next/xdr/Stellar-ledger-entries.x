@@ -501,39 +501,6 @@ enum ContractCodeType {
     CONTRACT_CODE_WASM = 0
 };
 
-enum ContractMetadataType
-{
-    METADATA_TYPE_V0 = 0
-};
-
-union SCType switch (SCValType type)
-{
-case SCV_POS_I64:
-case SCV_U32:
-case SCV_I32:
-case SCV_STATIC:
-    void;
-case SCV_OBJECT:
-    SCObjectType objType;
-case SCV_SYMBOL:
-case SCV_BITSET:
-case SCV_STATUS:
-    void;
-};
-
-struct FunctionSignature
-{
-    SCSymbol function;
-    SCType returnType;
-    SCType argTypes<10>;
-};
-
-union ContractMetadata switch (ContractMetadataType type)
-{
-case METADATA_TYPE_V0:
-    FunctionSignature interface<10>;
-};
-
 union ContractBody switch (ContractCodeType type)
 {
     case CONTRACT_CODE_WASM:
@@ -550,8 +517,6 @@ struct ContractCodeEntry {
 
     AccountID owner;
     int64 contractID;
-
-    ContractMetadata metadata;
     ContractBody body;
 };
 
