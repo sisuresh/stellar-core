@@ -515,13 +515,11 @@ struct ContractCodeEntry {
     }
     ext;
 
-    AccountID owner;
     int64 contractID;
     ContractBody body;
 };
 
 struct ContractDataEntry {
-    AccountID owner;
     int64 contractID;
     SCVal key;
     SCVal val;

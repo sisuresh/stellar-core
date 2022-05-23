@@ -44,14 +44,8 @@ getAccountID(LedgerEntry const& le)
         return le.data.data().accountID;
     case CLAIMABLE_BALANCE:
         return *le.ext.v1().sponsoringID;
-#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    case CONTRACT_CODE:
-        return le.data.contractCode().owner;
-    case CONTRACT_DATA:
-        return le.data.contractData().owner;
-#endif
     default:
-        abort();
+        throw std::runtime_error("invalid LedgerEntry type");
     }
 }
 
@@ -443,7 +437,8 @@ RevokeSponsorshipOpFrame::doCheckValid(uint32_t ledgerVersion)
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
         case CONTRACT_CODE:
         case CONTRACT_DATA:
-            break;
+            innerResult().code(REVOKE_SPONSORSHIP_MALFORMED);
+            return false;
 #endif
         default:
             throw std::runtime_error("unknown ledger key type");

@@ -139,10 +139,9 @@ LedgerTxnEntry loadPoolShareTrustLine(AbstractLedgerTxn& ltx,
 LedgerTxnEntry loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID);
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-LedgerTxnEntry loadContractCode(AbstractLedgerTxn& ltx, AccountID const& owner,
-                                int64_t contractID);
+LedgerTxnEntry loadContractCode(AbstractLedgerTxn& ltx, int64_t contractID);
 
-LedgerTxnEntry loadContractData(AbstractLedgerTxn& ltx, AccountID const& owner,
+LedgerTxnEntry loadContractData(AbstractLedgerTxn& ltx, SCVal dataKey,
                                 int64_t contractID);
 #endif
 

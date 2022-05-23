@@ -102,17 +102,9 @@ updateChangedSubEntriesCount(
     }
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     case CONTRACT_CODE:
-    {
-        auto accountID = valid->data.contractCode().owner;
-        subEntriesChange[accountID].calculatedSubEntries +=
-            calculateDelta(current, previous);
-        break;
-    }
     case CONTRACT_DATA:
     {
-        auto accountID = valid->data.contractData().owner;
-        subEntriesChange[accountID].calculatedSubEntries +=
-            calculateDelta(current, previous);
+        // contract entries are not subentries
         break;
     }
 #endif

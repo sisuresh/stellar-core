@@ -273,20 +273,19 @@ poolShareTrustLineKey(AccountID const& accountID, PoolID const& poolID)
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 LedgerKey
-contractCodeKey(AccountID const& owner, uint64_t contractID)
+contractCodeKey(uint64_t contractID)
 {
     LedgerKey key(CONTRACT_CODE);
-    key.contractCode().owner = owner;
     key.contractCode().contractID = contractID;
     return key;
 }
 
 LedgerKey
-contractDataKey(AccountID const& owner, uint64_t contractID)
+contractDataKey(SCVal dataKey, uint64_t contractID)
 {
     LedgerKey key(CONTRACT_DATA);
-    key.contractData().owner = owner;
     key.contractData().contractID = contractID;
+    key.contractData().key = dataKey;
     return key;
 }
 #endif
@@ -421,19 +420,17 @@ loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID)
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 LedgerTxnEntry
-loadContractCode(AbstractLedgerTxn& ltx, AccountID const& owner,
-                 int64_t contractID)
+loadContractCode(AbstractLedgerTxn& ltx, int64_t contractID)
 {
     ZoneScoped;
-    return ltx.load(contractCodeKey(owner, contractID));
+    return ltx.load(contractCodeKey(contractID));
 }
 
 LedgerTxnEntry
-loadContractData(AbstractLedgerTxn& ltx, AccountID const& owner,
-                 int64_t contractID)
+loadContractData(AbstractLedgerTxn& ltx, SCVal dataKey, int64_t contractID)
 {
     ZoneScoped;
-    return ltx.load(contractDataKey(owner, contractID));
+    return ltx.load(contractDataKey(dataKey, contractID));
 }
 #endif
 
