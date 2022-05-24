@@ -733,6 +733,37 @@ struct FeeBumpTransactionEnvelope
     DecoratedSignature signatures<20>;
 };
 
+struct CreateContractTransaction
+{
+    // sourceAccount pays the fee and provides the sequence number
+    AccountID sourceAccount;
+
+    // seqNum to be consumed on sourceAccount
+    SequenceNumber seqNum;
+
+    // fee to be paid by sourceAccount
+    int64 fee;
+
+    // contract code to be written into a ContractCodeEntry
+    ContractBody body;
+
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+struct CreateContractTransactionEnvelope
+{
+    CreateContractTransaction tx;
+
+    /* Each decorated signature is a signature over the SHA256 hash of
+    * a TransactionSignaturePayload */
+    DecoratedSignature signatures<20>;
+};
+
 /* A TransactionEnvelope wraps a transaction with signatures. */
 union TransactionEnvelope switch (EnvelopeType type)
 {
@@ -742,6 +773,8 @@ case ENVELOPE_TYPE_TX:
     TransactionV1Envelope v1;
 case ENVELOPE_TYPE_TX_FEE_BUMP:
     FeeBumpTransactionEnvelope feeBump;
+case ENVELOPE_TYPE_TX_CREATE_CONTRACT_TX:
+    CreateContractTransactionEnvelope create;
 };
 
 struct TransactionSignaturePayload
@@ -754,6 +787,8 @@ struct TransactionSignaturePayload
         Transaction tx;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
         FeeBumpTransaction feeBump;
+    case ENVELOPE_TYPE_TX_CREATE_CONTRACT_TX:
+        CreateContractTransaction create;
     }
     taggedTransaction;
 };
