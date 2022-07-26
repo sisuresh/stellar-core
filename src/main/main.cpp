@@ -165,5 +165,8 @@ main(int argc, char* const* argv)
     randHash::initialize();
     xdr::marshaling_stack_limit = 1000;
 
-    return handleCommandLine(argc, argv);
+    int *array = new int[100];
+    delete [] array;
+    return array[argc];
+    //return handleCommandLine(argc, argv);
 }
