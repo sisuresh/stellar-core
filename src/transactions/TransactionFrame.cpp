@@ -649,6 +649,17 @@ TransactionFrame::commonValidPreSeqNum(AbstractLedgerTxn& ltx, bool chargeFee,
         }
     }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    // Check that smart ops are not mixed with classic ops. Eventually we
+    // should separately classify 'smart' transactions, but for now a simple
+    // check should be sufficient.
+    if (!validateSmartOpsConsistency())
+    {
+        getResult().result.code(txMALFORMED);
+        return false;
+    }
+#endif
+
     if (getNumOperations() == 0)
     {
         getResult().result.code(txMISSING_OPERATION);
@@ -993,16 +1004,6 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
                     upperBoundCloseTimeOffset) == ValidationType::kMaybeValid;
     if (res)
     {
-#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-        // Check that smart ops are not mixed with classic ops. Eventually we
-        // should separately classify 'smart' transactions, but for now a simple
-        // check should be sufficient.
-        if (!validateSmartOpsConsistency())
-        {
-            getResult().result.code(txMALFORMED);
-            return false;
-        }
-#endif
         for (auto& op : mOperations)
         {
             if (!op->checkValid(signatureChecker, ltx, false))
