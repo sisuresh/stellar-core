@@ -118,9 +118,9 @@ TransactionFrame::clearCached()
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
-TransactionFrame::pushContractEvent(ContractEvent const& evt)
+TransactionFrame::pushContractEvents(OperationEvents const& evts)
 {
-    mEvents.emplace_back(evt);
+    mEvents.emplace_back(evts);
 }
 #endif
 
@@ -1161,6 +1161,14 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             outerMeta.pushOperationMetas(std::move(operationMetas));
             outerMeta.pushTxChangesAfter(std::move(changesAfter));
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+            // The events should have an OperationEvents for each smart op, and
+            // since smart ops can't be mixed with classic ops, mEvents should
+            // be empty if this tx has a classic op.
+            if (mOperations.size() == mEvents.size() &&
+                !mOperations.at(0)->isSmartOperation())
+            {
+                throw std::runtime_error("events mismatch");
+            }
             outerMeta.pushContractEvents(std::move(mEvents));
 #endif
         }
