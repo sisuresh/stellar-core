@@ -1013,6 +1013,25 @@ Upgrades::applyVersionUpgrade(AbstractLedgerTxn& ltx, uint32_t newVersion)
     {
         upgradeFromProtocol15To16(ltx);
     }
+    else if (protocolVersionIsBefore(prevVersion, SOROBAN_PROTOCOL_VERSION) &&
+             protocolVersionStartsFrom(newVersion, SOROBAN_PROTOCOL_VERSION))
+    {
+        DataValue value;
+        value.resize(64);
+        for (int n = 0; n < 64; n++)
+        {
+            value[n] = (unsigned char)n;
+        }
+
+        std::string t1("test2");
+
+        LedgerEntry newData;
+        newData.data.type(DATA);
+        auto& dataEntry = newData.data.data();
+        dataEntry.dataName = t1;
+        dataEntry.dataValue = value;
+        ltx.create(newData);
+    }
 }
 
 void
