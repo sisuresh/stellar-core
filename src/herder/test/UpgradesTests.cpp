@@ -2571,6 +2571,22 @@ TEST_CASE("upgrade to generalized tx set in network", "[upgrades][overlay]")
     {
         simulation->addConnection(addedKey.getPublicKey(), nodeID);
     }
+
+    /*
+    The test fails with this message because the node that was just added didn't
+    sync
+    -------------------------------------------------------------------------------
+    upgrade to generalized tx set in network
+    -------------------------------------------------------------------------------
+    herder/test/UpgradesTests.cpp:2496
+    ...............................................................................
+
+    herder/test/UpgradesTests.cpp:2563: FAILED:
+    {Unknown expression after the reported line}
+    due to unexpected exception with message:
+    Too wide spread between nodes: 12-1 > 10
+
+    */
     // Let the network to externalize 1 more ledger.
     simulation->crankUntil(
         [&]() { return simulation->haveAllExternalized(12, 10); },

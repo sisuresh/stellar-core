@@ -1023,7 +1023,7 @@ Upgrades::applyVersionUpgrade(AbstractLedgerTxn& ltx, uint32_t newVersion)
             value[n] = (unsigned char)n;
         }
 
-        std::string t1("test2");
+        std::string t1("test4");
 
         LedgerEntry newData;
         newData.data.type(DATA);
