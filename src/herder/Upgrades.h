@@ -59,6 +59,7 @@ class Upgrades
 
         std::string toJson() const;
         void fromJson(std::string const& s, stellar::AbstractLedgerTxn& ltx);
+        std::string toDebugJson() const;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
         void setConfigUpgrades(stellar::AbstractLedgerTxn& ltx,

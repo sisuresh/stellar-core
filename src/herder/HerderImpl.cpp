@@ -1197,7 +1197,7 @@ HerderImpl::setUpgrades(Upgrades::UpgradeParameters const& upgrades)
 std::string
 HerderImpl::getUpgradesJson()
 {
-    return mUpgrades.getParameters().toJson();
+    return mUpgrades.getParameters().toDebugJson();
 }
 
 void

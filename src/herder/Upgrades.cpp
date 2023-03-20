@@ -126,6 +126,32 @@ Upgrades::UpgradeParameters::toJson() const
     return out.str();
 }
 
+std::string
+Upgrades::UpgradeParameters::toDebugJson() const
+{
+    Json::Value upgradesJson;
+    Json::Reader reader;
+    reader.parse(toJson(), upgradesJson);
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    if (mConfigUpgradeSet != nullptr)
+    {
+        // combine the key and actual config upgrade set under a single Json
+        // value
+        Json::Value configUpgradeSetJson;
+        Json::Reader reader;
+        reader.parse(mConfigUpgradeSet->toJson(), configUpgradeSetJson);
+        upgradesJson["configupgradeinfo"]["configupgradeset"] =
+            configUpgradeSetJson;
+        upgradesJson["configupgradeinfo"]["configupgradesetkey"] =
+            upgradesJson["configupgradesetkey"];
+        upgradesJson.removeMember("configupgradesetkey");
+    }
+#endif
+    Json::StyledWriter writer;
+    return writer.write(upgradesJson);
+}
+
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
 Upgrades::UpgradeParameters::setConfigUpgrades(stellar::AbstractLedgerTxn& ltx,
