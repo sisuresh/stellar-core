@@ -1590,21 +1590,65 @@ makeBaseReserveUpgrade(int baseReserve)
 }
 
 LedgerHeader
-executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades)
+executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades,
+                bool upgradesIgnored)
 {
+    LedgerKey key(LedgerEntryType::CONFIG_SETTING);
+    key.configSetting().configSettingID =
+        ConfigSettingID::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES;
+    std::optional<LedgerEntry> currConfigSetting;
+    {
+        LedgerTxn ltx(app.getLedgerTxnRoot());
+        auto ltxe = ltx.load(key);
+        if (ltxe)
+        {
+            currConfigSetting = ltxe.current();
+        }
+    }
+
     auto& lm = app.getLedgerManager();
+    auto currLh = app.getLedgerManager().getLastClosedLedgerHeader().header;
+
     auto const& lcl = lm.getLastClosedLedgerHeader();
     auto txSet = TxSetFrame::makeEmpty(lcl);
     auto lastCloseTime = lcl.header.scpValue.closeTime;
     app.getHerder().externalizeValue(txSet, lcl.header.ledgerSeq + 1,
                                      lastCloseTime, upgrades);
+    if (upgradesIgnored)
+    {
+        auto const& newHeader = lm.getLastClosedLedgerHeader().header;
+        REQUIRE(currLh.baseFee == newHeader.baseFee);
+        REQUIRE(currLh.baseReserve == newHeader.baseReserve);
+        REQUIRE(currLh.ledgerVersion == newHeader.ledgerVersion);
+        REQUIRE(currLh.maxTxSetSize == newHeader.maxTxSetSize);
+        REQUIRE(currLh.ext.v() == newHeader.ext.v());
+        if (currLh.ext.v() == 1)
+        {
+            REQUIRE(currLh.ext.v1().flags == newHeader.ext.v1().flags);
+        }
+
+        {
+            LedgerTxn ltx(app.getLedgerTxnRoot());
+            auto ltxe = ltx.load(key);
+            if (currConfigSetting)
+            {
+                REQUIRE((ltxe && *currConfigSetting == ltxe.current()));
+            }
+            else
+            {
+                REQUIRE(!ltxe);
+            }
+        }
+    }
     return lm.getLastClosedLedgerHeader().header;
 };
 
 LedgerHeader
-executeUpgrade(Application& app, LedgerUpgrade const& lupgrade)
+executeUpgrade(Application& app, LedgerUpgrade const& lupgrade,
+               bool upgradeIgnored)
 {
-    return executeUpgrades(app, {LedgerTestUtils::toUpgradeType(lupgrade)});
+    return executeUpgrades(app, {LedgerTestUtils::toUpgradeType(lupgrade)},
+                           upgradeIgnored);
 };
 
 // trades is a vector of pairs, where the bool indicates if assetA or assetB is
