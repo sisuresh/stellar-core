@@ -1189,7 +1189,7 @@ static void
 initializeConfigs(AbstractLedgerTxn& ltx)
 {
     ConfigSettingEntry contractMaxSize(CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES);
-    contractMaxSize.contractMaxSizeBytes() = 16384;
+    contractMaxSize.contractMaxSizeBytes() = 65536;
     createConfigSettingEntry(contractMaxSize, ltx);
 }
 
