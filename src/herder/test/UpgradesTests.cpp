@@ -668,7 +668,7 @@ TEST_CASE("config upgrade validation", "[upgrades]")
 
             REQUIRE(Upgrades::isValidForApply(toUpgradeType(ledgerUpgrade),
                                               outUpgrade, *app, ltx, header) ==
-                    Upgrades::UpgradeValidity::XDR_INVALID);
+                    Upgrades::UpgradeValidity::INVALID);
         }
         SECTION("not valid")
         {
@@ -728,10 +728,9 @@ TEST_CASE("config upgrade validation", "[upgrades]")
                     auto upgrade = LedgerUpgrade{LEDGER_UPGRADE_CONFIG};
                     upgrade.newConfig() = upgradeKey;
 
-                    REQUIRE(Upgrades::isValidForApply(toUpgradeType(upgrade),
-                                                      outUpgrade, *app, ltx,
-                                                      header) ==
-                            Upgrades::UpgradeValidity::XDR_INVALID);
+                    REQUIRE(Upgrades::isValidForApply(
+                                toUpgradeType(upgrade), outUpgrade, *app, ltx,
+                                header) == Upgrades::UpgradeValidity::INVALID);
                 }
             }
         }

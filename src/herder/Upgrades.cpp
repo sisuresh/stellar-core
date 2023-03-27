@@ -555,19 +555,23 @@ Upgrades::isValidForApply(UpgradeType const& opaqueUpgrade,
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     case LEDGER_UPGRADE_CONFIG:
     {
+        if (protocolVersionIsBefore(header.ledgerVersion,
+                                    SOROBAN_PROTOCOL_VERSION))
+        {
+            return UpgradeValidity::INVALID;
+        }
         auto cfgUpgrade =
             ConfigUpgradeSetFrame::makeFromKey(ltx, upgrade.newConfig());
         if (!cfgUpgrade)
         {
-            return UpgradeValidity::XDR_INVALID;
+            return UpgradeValidity::INVALID;
         }
-
         auto configUpgradeValid = cfgUpgrade->isValidForApply();
         if (configUpgradeValid == UpgradeValidity::XDR_INVALID)
         {
             return UpgradeValidity::XDR_INVALID;
         }
-        res &= configUpgradeValid == UpgradeValidity::VALID;
+        res = res && (configUpgradeValid == UpgradeValidity::VALID);
         break;
     }
 #endif
