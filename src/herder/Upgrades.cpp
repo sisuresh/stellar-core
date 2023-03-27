@@ -295,7 +295,9 @@ Upgrades::createUpgradesFor(LedgerHeader const& lclHeader,
     }
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     auto cfgUpgrade = mParams.getConfigUpgradeSet();
-    if (cfgUpgrade != nullptr && cfgUpgrade->upgradeNeeded(ltx))
+    if (cfgUpgrade != nullptr &&
+        cfgUpgrade->isValidForApply() == UpgradeValidity::VALID &&
+        cfgUpgrade->upgradeNeeded(ltx))
     {
         result.emplace_back(LEDGER_UPGRADE_CONFIG);
         result.back().newConfig() = cfgUpgrade->getKey();
