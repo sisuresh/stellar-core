@@ -115,6 +115,10 @@ namespace stellar
 
 std::chrono::hours const Upgrades::UPDGRADE_EXPIRATION_HOURS(12);
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+uint32_t const Upgrades::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES_V20(65536);
+#endif
+
 std::string
 Upgrades::UpgradeParameters::toJson() const
 {
@@ -1193,7 +1197,8 @@ static void
 initializeConfigs(AbstractLedgerTxn& ltx)
 {
     ConfigSettingEntry contractMaxSize(CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES);
-    contractMaxSize.contractMaxSizeBytes() = 65536;
+    contractMaxSize.contractMaxSizeBytes() =
+        Upgrades::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES_V20;
     createConfigSettingEntry(contractMaxSize, ltx);
 }
 

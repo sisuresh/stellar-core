@@ -809,7 +809,8 @@ TEST_CASE("config upgrades applied to ledger", "[upgrades]")
             ltx.load(getMaxContractSizeKey()).current().data.configSetting();
         REQUIRE(maxContractSizeEntry.configSettingID() ==
                 CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES);
-        REQUIRE(maxContractSizeEntry.contractMaxSizeBytes() == 65536);
+        REQUIRE(maxContractSizeEntry.contractMaxSizeBytes() ==
+                Upgrades::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES_V20);
     }
 
     SECTION("known config upgrade set is applied")
@@ -1972,7 +1973,8 @@ TEST_CASE("configuration initialized in version upgrade", "[upgrades]")
         ltx.load(getMaxContractSizeKey()).current().data.configSetting();
     REQUIRE(maxContractSizeEntry.configSettingID() ==
             CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES);
-    REQUIRE(maxContractSizeEntry.contractMaxSizeBytes() == 65536);
+    REQUIRE(maxContractSizeEntry.contractMaxSizeBytes() ==
+            Upgrades::CONFIG_SETTING_CONTRACT_MAX_SIZE_BYTES_V20);
 }
 #endif
 
