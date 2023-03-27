@@ -1406,7 +1406,7 @@ ConfigUpgradeSetFrame::isConsistentWith(
         // We don't have any config upgrades scheduled.
         return false;
     }
-    return getHash() == scheduledUpgrade->getHash();
+    return mKey == scheduledUpgrade->getKey();
 }
 
 Upgrades::UpgradeValidity
