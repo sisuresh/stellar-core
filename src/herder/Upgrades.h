@@ -162,7 +162,7 @@ class Upgrades
 // was retrieved from the ledger given a ConfigUpgradeSetKey. The
 // ConfigUpgradeSetKey will be converted to a ContractData LedgerKey, and the
 // ContractData LedgerEntry retreived with that will have a val of SCV_BYTES
-// containing a serialzied ConfigUpgradeSet. The ConfigUpgradeSetKey is what
+// containing a serialized ConfigUpgradeSet. The ConfigUpgradeSetKey is what
 // validators vote on during upgrades. The hash in the key must match the sha256
 // hash of the ConfigUpgradeSet.
 class ConfigUpgradeSetFrame
