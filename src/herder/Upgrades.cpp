@@ -1379,7 +1379,8 @@ ConfigUpgradeSetFrame::upgradeNeeded(AbstractLedgerTxn& ltx,
         LedgerKey key(LedgerEntryType::CONFIG_SETTING);
         key.configSetting().configSettingID = updatedEntry.configSettingID();
         bool isSame =
-            ltx.load(key).current().data.configSetting() == updatedEntry;
+            ltx.loadWithoutRecord(key).current().data.configSetting() ==
+            updatedEntry;
         if (!isSame)
         {
             return true;
