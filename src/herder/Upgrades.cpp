@@ -51,11 +51,10 @@ save(Archive& ar, stellar::Upgrades::UpgradeParameters const& p)
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     std::optional<std::string> configUpgradeKeyStr;
-    auto configUpgrade = p.getConfigUpgradeSet();
-    if (configUpgrade)
+    if (p.mConfigUpgradeSetKey)
     {
         configUpgradeKeyStr = stellar::decoder::encode_b64(
-            xdr::xdr_to_opaque(configUpgrade->getKey()));
+            xdr::xdr_to_opaque(*p.mConfigUpgradeSetKey));
     }
     ar(make_nvp("configupgradesetkey", configUpgradeKeyStr));
 #endif
@@ -91,11 +90,11 @@ load(Archive& ar, stellar::Upgrades::UpgradeParameters& o,
             stellar::ConfigUpgradeSetKey key;
             xdr::xdr_from_opaque(buffer, key);
 
-            o.setConfigUpgrades(ltx, key);
+            o.mConfigUpgradeSetKey = key;
         }
         else
         {
-            o.clearConfigUpgrades();
+            o.mConfigUpgradeSetKey.reset();
         }
 #endif
     }
@@ -131,52 +130,37 @@ Upgrades::UpgradeParameters::toJson() const
 }
 
 std::string
-Upgrades::UpgradeParameters::toDebugJson() const
+Upgrades::UpgradeParameters::toDebugJson(stellar::AbstractLedgerTxn& ltx) const
 {
     Json::Value upgradesJson;
     Json::Reader reader;
     reader.parse(toJson(), upgradesJson);
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    if (mConfigUpgradeSet != nullptr)
+    if (mConfigUpgradeSetKey)
     {
         // combine the key and actual config upgrade set under a single Json
         // value
-        Json::Value configUpgradeSetJson;
-        Json::Reader reader;
-        reader.parse(mConfigUpgradeSet->toJson(), configUpgradeSetJson);
-        upgradesJson["configupgradeinfo"]["configupgradeset"] =
-            configUpgradeSetJson;
         upgradesJson["configupgradeinfo"]["configupgradesetkey"] =
             upgradesJson["configupgradesetkey"];
         upgradesJson.removeMember("configupgradesetkey");
+
+        auto upgradeSetPtr =
+            ConfigUpgradeSetFrame::makeFromKey(ltx, *mConfigUpgradeSetKey);
+        if (upgradeSetPtr)
+        {
+            Json::Value configUpgradeSetJson;
+            Json::Reader reader;
+            reader.parse(upgradeSetPtr->toJson(), configUpgradeSetJson);
+            upgradesJson["configupgradeinfo"]["configupgradeset"] =
+                configUpgradeSetJson;
+        }
     }
 #endif
     Json::StyledWriter writer;
     return writer.write(upgradesJson);
 }
 
-#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-void
-Upgrades::UpgradeParameters::setConfigUpgrades(stellar::AbstractLedgerTxn& ltx,
-                                               ConfigUpgradeSetKey const& key)
-{
-    mConfigUpgradeSet = ConfigUpgradeSetFrame::makeFromKey(ltx, key);
-}
-
-void
-Upgrades::UpgradeParameters::clearConfigUpgrades()
-{
-    mConfigUpgradeSet.reset();
-}
-
-ConfigUpgradeSetFrameConstPtr
-Upgrades::UpgradeParameters::getConfigUpgradeSet() const
-{
-    return mConfigUpgradeSet;
-}
-
-#endif
 static std::string
 rewriteOptionalFieldKeys(std::string s)
 {
@@ -294,13 +278,17 @@ Upgrades::createUpgradesFor(LedgerHeader const& lclHeader,
         }
     }
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    auto cfgUpgrade = mParams.getConfigUpgradeSet();
-    if (cfgUpgrade != nullptr &&
-        cfgUpgrade->isValidForApply() == UpgradeValidity::VALID &&
-        cfgUpgrade->upgradeNeeded(ltx, lclHeader))
+    auto key = mParams.mConfigUpgradeSetKey;
+    if (key)
     {
-        result.emplace_back(LEDGER_UPGRADE_CONFIG);
-        result.back().newConfig() = cfgUpgrade->getKey();
+        auto cfgUpgrade = ConfigUpgradeSetFrame::makeFromKey(ltx, *key);
+        if (cfgUpgrade != nullptr &&
+            cfgUpgrade->isValidForApply() == UpgradeValidity::VALID &&
+            cfgUpgrade->upgradeNeeded(ltx, lclHeader))
+        {
+            result.emplace_back(LEDGER_UPGRADE_CONFIG);
+            result.back().newConfig() = cfgUpgrade->getKey();
+        }
     }
 #endif
     return result;
@@ -413,13 +401,12 @@ Upgrades::toString() const
     appendInfo("maxtxsetsize", mParams.mMaxTxSetSize);
     appendInfo("flags", mParams.mFlags);
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    auto cfgUpgradeSet = mParams.getConfigUpgradeSet();
-    if (cfgUpgradeSet)
+    if (mParams.mConfigUpgradeSetKey)
     {
         maybePrintUpgradeTime();
-        r << fmt::format(
-            FMT_STRING(", {}"),
-            xdr::xdr_to_string(cfgUpgradeSet->getKey(), "configupgradesetkey"));
+        r << fmt::format(FMT_STRING(", {}"),
+                         xdr::xdr_to_string(*mParams.mConfigUpgradeSetKey,
+                                            "configupgradesetkey"));
     }
 #endif
     return r.str();
@@ -452,10 +439,9 @@ Upgrades::removeUpgrades(std::vector<UpgradeType>::const_iterator beginUpdates,
         resetParamIfSet(res.mMaxTxSetSize);
         resetParamIfSet(res.mBaseReserve);
         resetParamIfSet(res.mFlags);
-
-        if (res.getConfigUpgradeSet())
+        if (res.mConfigUpgradeSetKey)
         {
-            res.clearConfigUpgrades();
+            res.mConfigUpgradeSetKey.reset();
             updated = true;
         }
 
@@ -501,11 +487,11 @@ Upgrades::removeUpgrades(std::vector<UpgradeType>::const_iterator beginUpdates,
             break;
         case LEDGER_UPGRADE_CONFIG:
         {
-            auto const& configUpgradeSet = res.getConfigUpgradeSet();
-            if (configUpgradeSet &&
-                configUpgradeSet->getKey() == lu.newConfig())
+            if (res.mConfigUpgradeSetKey &&
+                *res.mConfigUpgradeSetKey == lu.newConfig())
             {
-                res.clearConfigUpgrades();
+                res.mConfigUpgradeSetKey.reset();
+                updated = true;
             }
             break;
         }
@@ -616,10 +602,16 @@ Upgrades::isValidForNomination(LedgerUpgrade const& upgrade, Application& app,
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     case LEDGER_UPGRADE_CONFIG:
     {
+        if (!mParams.mConfigUpgradeSetKey)
+        {
+            return false;
+        }
+
         auto cfgUpgrade =
             ConfigUpgradeSetFrame::makeFromKey(ltx, upgrade.newConfig());
         return cfgUpgrade &&
-               cfgUpgrade->isConsistentWith(mParams.getConfigUpgradeSet());
+               cfgUpgrade->isConsistentWith(ConfigUpgradeSetFrame::makeFromKey(
+                   ltx, *mParams.mConfigUpgradeSetKey));
     }
 #endif
     default:

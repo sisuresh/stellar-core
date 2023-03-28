@@ -641,7 +641,7 @@ TEST_CASE("config upgrade validation", "[upgrades]")
         configUpgradeSet = makeMaxContractSizeBytesTestUpgrade(ltx, 32768);
 
         scheduledUpgrades.mUpgradeTime = genesis(0, 1);
-        scheduledUpgrades.setConfigUpgrades(ltx, configUpgradeSet->getKey());
+        scheduledUpgrades.mConfigUpgradeSetKey = configUpgradeSet->getKey();
         app->getHerder().setUpgrades(scheduledUpgrades);
         ltx.commit();
     }
@@ -2696,7 +2696,7 @@ TEST_CASE("upgrades serialization roundtrip", "[upgrades]")
     {
         LedgerTxn ltx(app->getLedgerTxnRoot());
         auto configUpgradeSet = makeMaxContractSizeBytesTestUpgrade(ltx, 32768);
-        initUpgrades.setConfigUpgrades(ltx, configUpgradeSet->getKey());
+        initUpgrades.mConfigUpgradeSetKey = configUpgradeSet->getKey();
         ltx.commit();
     }
     {
@@ -2715,8 +2715,8 @@ TEST_CASE("upgrades serialization roundtrip", "[upgrades]")
 
         REQUIRE(!restoredUpgrades.mFlags);
 
-        REQUIRE(restoredUpgrades.getConfigUpgradeSet()->toXDR() ==
-                initUpgrades.getConfigUpgradeSet()->toXDR());
+        REQUIRE(restoredUpgrades.mConfigUpgradeSetKey ==
+                initUpgrades.mConfigUpgradeSetKey);
     }
 
     {

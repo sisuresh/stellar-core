@@ -62,16 +62,10 @@ class Upgrades
 
         std::string toJson() const;
         void fromJson(std::string const& s, stellar::AbstractLedgerTxn& ltx);
-        std::string toDebugJson() const;
+        std::string toDebugJson(stellar::AbstractLedgerTxn& ltx) const;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-        void setConfigUpgrades(stellar::AbstractLedgerTxn& ltx,
-                               ConfigUpgradeSetKey const& key);
-        void clearConfigUpgrades();
-        ConfigUpgradeSetFrameConstPtr getConfigUpgradeSet() const;
-
-      private:
-        ConfigUpgradeSetFrameConstPtr mConfigUpgradeSet;
+        std::optional<ConfigUpgradeSetKey> mConfigUpgradeSetKey;
 #endif
     };
 

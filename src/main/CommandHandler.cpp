@@ -578,12 +578,16 @@ CommandHandler::upgrades(std::string const& params, std::string& retStr)
             xdr::xdr_from_opaque(buffer, key);
             LedgerTxn ltx(mApp.getLedgerTxnRoot());
 
-            p.setConfigUpgrades(ltx, key);
-            if (!p.getConfigUpgradeSet())
+            auto ptr = ConfigUpgradeSetFrame::makeFromKey(ltx, key);
+
+            if (!ptr ||
+                ptr->isValidForApply() != Upgrades::UpgradeValidity::VALID)
             {
                 retStr = "Error setting configUpgradeSet";
                 return;
             }
+
+            p.mConfigUpgradeSetKey = key;
         }
 #endif
         mApp.getHerder().setUpgrades(p);
