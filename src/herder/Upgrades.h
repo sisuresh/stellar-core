@@ -173,7 +173,6 @@ class ConfigUpgradeSetFrame
 
     ConfigUpgradeSet const& toXDR() const;
 
-    Hash const& getHash() const;
     ConfigUpgradeSetKey const& getKey() const;
 
     bool upgradeNeeded(AbstractLedgerTxn& ltx,

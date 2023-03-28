@@ -1365,12 +1365,6 @@ ConfigUpgradeSetFrame::getLedgerKey(ConfigUpgradeSetKey const& upgradeKey)
     return lk;
 }
 
-Hash const&
-ConfigUpgradeSetFrame::getHash() const
-{
-    return mKey.contentHash;
-}
-
 bool
 ConfigUpgradeSetFrame::upgradeNeeded(AbstractLedgerTxn& ltx,
                                      LedgerHeader const& lclHeader) const
