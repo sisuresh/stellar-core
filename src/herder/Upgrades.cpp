@@ -297,7 +297,7 @@ Upgrades::createUpgradesFor(LedgerHeader const& lclHeader,
     auto cfgUpgrade = mParams.getConfigUpgradeSet();
     if (cfgUpgrade != nullptr &&
         cfgUpgrade->isValidForApply() == UpgradeValidity::VALID &&
-        cfgUpgrade->upgradeNeeded(ltx))
+        cfgUpgrade->upgradeNeeded(ltx, lclHeader))
     {
         result.emplace_back(LEDGER_UPGRADE_CONFIG);
         result.back().newConfig() = cfgUpgrade->getKey();
@@ -1372,8 +1372,14 @@ ConfigUpgradeSetFrame::getHash() const
 }
 
 bool
-ConfigUpgradeSetFrame::upgradeNeeded(AbstractLedgerTxn& ltx) const
+ConfigUpgradeSetFrame::upgradeNeeded(AbstractLedgerTxn& ltx,
+                                     LedgerHeader const& lclHeader) const
 {
+    if (protocolVersionIsBefore(lclHeader.ledgerVersion,
+                                SOROBAN_PROTOCOL_VERSION))
+    {
+        return false;
+    }
     for (auto const& updatedEntry : mConfigUpgradeSet.updatedEntry)
     {
         LedgerKey key(LedgerEntryType::CONFIG_SETTING);

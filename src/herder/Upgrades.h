@@ -176,7 +176,8 @@ class ConfigUpgradeSetFrame
     Hash const& getHash() const;
     ConfigUpgradeSetKey const& getKey() const;
 
-    bool upgradeNeeded(AbstractLedgerTxn& ltx) const;
+    bool upgradeNeeded(AbstractLedgerTxn& ltx,
+                       LedgerHeader const& lclHeader) const;
 
     void applyTo(AbstractLedgerTxn& ltx) const;
 
