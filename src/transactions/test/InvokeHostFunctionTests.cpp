@@ -564,44 +564,44 @@ TEST_CASE("contract storage", "[tx][soroban]")
             true, type);
     };
 
-    auto delWithFootprint =
-        [&](std::string const& key, xdr::xvector<LedgerKey> const& readOnly,
-            xdr::xvector<LedgerKey> const& readWrite, bool expectSuccess,
-            ContractDataType type) {
-            auto keySymbol = makeSymbol(key);
+    auto delWithFootprint = [&](std::string const& key,
+                                xdr::xvector<LedgerKey> const& readOnly,
+                                xdr::xvector<LedgerKey> const& readWrite,
+                                bool expectSuccess, ContractDataType type) {
+        auto keySymbol = makeSymbol(key);
 
-            std::string funcStr;
-            switch (type)
-            {
-            case TEMPORARY:
-                funcStr = "del_temporary";
-                break;
-            case RECREATABLE:
-                funcStr = "del_recreatable";
-                break;
-            case UNIQUE:
-                funcStr = "del_unique";
-                break;
-            }
+        std::string funcStr;
+        switch (type)
+        {
+        case TEMPORARY:
+            funcStr = "del_temporary";
+            break;
+        case RECREATABLE:
+            funcStr = "del_recreatable";
+            break;
+        case UNIQUE:
+            funcStr = "del_unique";
+            break;
+        }
 
-            // TODO: Better bytes to write value
-            auto [tx, ltx, txm] =
-                createTx(readOnly, readWrite, 1000,
-                         {makeBinary(contractID.begin(), contractID.end()),
-                          makeSymbol(funcStr), keySymbol});
+        // TODO: Better bytes to write value
+        auto [tx, ltx, txm] =
+            createTx(readOnly, readWrite, 1000,
+                     {makeBinary(contractID.begin(), contractID.end()),
+                      makeSymbol(funcStr), keySymbol});
 
-            if (expectSuccess)
-            {
-                REQUIRE(tx->apply(*app, *ltx, *txm));
-                ltx->commit();
-                checkContractData(keySymbol, type, nullptr);
-            }
-            else
-            {
-                REQUIRE(!tx->apply(*app, *ltx, *txm));
-                ltx->commit();
-            }
-        };
+        if (expectSuccess)
+        {
+            REQUIRE(tx->apply(*app, *ltx, *txm));
+            ltx->commit();
+            checkContractData(keySymbol, type, nullptr);
+        }
+        else
+        {
+            REQUIRE(!tx->apply(*app, *ltx, *txm));
+            ltx->commit();
+        }
+    };
 
     auto del = [&](std::string const& key, ContractDataType type) {
         delWithFootprint(
