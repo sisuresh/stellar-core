@@ -420,12 +420,14 @@ TEST_CASE("contract storage", "[tx][soroban]")
 
     auto checkContractDataLifetime = [&](std::string const& key,
                                          ContractDataType type,
-                                         uint32_t expectedExpiration) {
+                                         uint32_t expectedExpiration,
+                                         uint32_t flags = 0) {
         auto keySymbol = makeSymbol(key);
         LedgerTxn ltx(app->getLedgerTxnRoot());
         auto ltxe = loadContractData(ltx, contractID, keySymbol, type);
         REQUIRE(ltxe);
         REQUIRE(getExpirationLedger(ltxe.current()) == expectedExpiration);
+        REQUIRE(ltxe.current().data.contractData().body.data().flags == flags);
     };
 
     auto checkContractLifetime = [&](uint32_t expectedExpiration) {
@@ -457,7 +459,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
         resources.extendedMetaDataSizeBytes = 3000;
 
         auto tx = sorobanTransactionFrameFromOps(
-            app->getNetworkID(), root, {op}, {}, resources, 100'000, 1200);
+            app->getNetworkID(), root, {op}, {}, resources, 120'000, 1200);
         auto ltx = std::make_shared<LedgerTxn>(app->getLedgerTxnRoot());
         auto txm = std::make_shared<TransactionMetaFrame>(
             ltx->loadHeader().current().ledgerVersion);
@@ -703,25 +705,22 @@ TEST_CASE("contract storage", "[tx][soroban]")
         checkContractDataLifetime("temp", TEMPORARY, expectedTempLifetime);
     }
 
-    // Flags are currently broken in the host. Once the issue is
-    // resolved, you should be able to uncomment the flag related lines of
-    // this test
     SECTION("autobump")
     {
         put("rw", 0, UNIQUE);
         put("ro", 0, UNIQUE);
 
-        // uint32_t flags = NO_AUTOBUMP;
-        // put("no-bump", 0, UNIQUE, std::make_optional(flags));
+        uint32_t flags = NO_AUTOBUMP;
+        put("nobump", 0, UNIQUE, flags);
 
         auto readOnlySet = contractKeys;
         readOnlySet.emplace_back(
             contractDataKey(contractID, makeSymbol("ro"), UNIQUE, DATA_ENTRY));
 
         auto readWriteSet = {
+            contractDataKey(contractID, makeSymbol("nobump"), UNIQUE,
+                            DATA_ENTRY),
             contractDataKey(contractID, makeSymbol("rw"), UNIQUE, DATA_ENTRY)};
-        // contractDataKey(contractID, makeSymbol("no-bump"), UNIQUE,
-        //                 DATA_ENTRY)};
 
         // Invoke contract with all keys in footprint
         putWithFootprint("rw", 1, readOnlySet, readWriteSet, 1000, true, UNIQUE,
@@ -734,14 +733,12 @@ TEST_CASE("contract storage", "[tx][soroban]")
                                   expectedInitialLifetime + autoBump);
         checkContractDataLifetime("ro", UNIQUE,
                                   expectedInitialLifetime + autoBump);
-        // checkContractDataLifetime("no-bump", UNIQUE,
-        // expectedInitialLifetime);
+        checkContractDataLifetime("nobump", UNIQUE, expectedInitialLifetime,
+                                  flags);
 
         // Contract instance and WASM should have minimum life and 4 invocations
         // worth of autobumps
-        // checkContractLifetime(expectedInitialLifetime + (autoBump * 4));
-
-        checkContractLifetime(expectedInitialLifetime + (autoBump * 3));
+        checkContractLifetime(expectedInitialLifetime + (autoBump * 4));
     }
 
     SECTION("manual bump")
@@ -1051,7 +1048,7 @@ TEST_CASE("Stellar asset contract XLM transfer", "[tx][soroban]")
     SorobanResources resources;
     resources.instructions = 2'000'000;
     resources.readBytes = 2000;
-    resources.writeBytes = 1000;
+    resources.writeBytes = 1072;
     resources.extendedMetaDataSizeBytes = 3000;
     {
         auto key1 = LedgerKey(CONTRACT_DATA);
