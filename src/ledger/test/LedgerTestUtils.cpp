@@ -345,10 +345,10 @@ makeValid(ConfigSettingEntry& ce)
 void
 makeValid(ContractDataEntry& cde)
 {
-    cde.body.leType(ContractLedgerEntryType::DATA_ENTRY);
+    cde.body.leType(ContractEntryBodyType::DATA_ENTRY);
     cde.body.data().flags = 0;
     int t = cde.type;
-    cde.type = static_cast<ContractDataType>(std::abs(t % 3));
+    cde.type = static_cast<ContractDataDurability>(std::abs(t % 3));
 
     LedgerEntry le;
     le.data.type(CONTRACT_DATA);
@@ -372,7 +372,7 @@ makeValid(ContractDataEntry& cde)
 void
 makeValid(ContractCodeEntry& cce)
 {
-    cce.body.leType(ContractLedgerEntryType::DATA_ENTRY);
+    cce.body.leType(ContractEntryBodyType::DATA_ENTRY);
 }
 #endif
 
