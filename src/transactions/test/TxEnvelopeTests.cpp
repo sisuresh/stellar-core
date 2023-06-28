@@ -32,7 +32,6 @@
 #include "util/Logging.h"
 #include "util/ProtocolVersion.h"
 #include "util/Timer.h"
-#include "util/XDRCereal.h"
 
 using namespace stellar;
 using namespace stellar::txbridge;
@@ -1306,7 +1305,7 @@ TEST_CASE_VERSIONS("txenvelope", "[tx][envelope]")
                                 setMedThreshold(2) | setHighThreshold(3))});
                             tx2 = root.tx(
                                 {b.op(payment(root, 100)), payment(b, 100)},
-                                b.getLastSequenceNumber() + 1);
+                                root.getLastSequenceNumber() + 2);
 
                             SignerKey sk = alternative.createSigner(*tx2);
                             Signer sk1(sk, 100); // high rights account
@@ -1337,7 +1336,7 @@ TEST_CASE_VERSIONS("txenvelope", "[tx][envelope]")
                                 setMedThreshold(2) | setHighThreshold(3))});
                             tx2 = root.tx(
                                 {payment(b, 100), b.op(payment(root, 100))},
-                                b.getLastSequenceNumber() + 1);
+                                root.getLastSequenceNumber() + 2);
 
                             SignerKey sk = alternative.createSigner(*tx2);
                             Signer sk1(sk, 100); // high rights account
