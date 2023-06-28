@@ -25,6 +25,7 @@
 #include "xdr/Stellar-ledger-entries.h"
 #include <random>
 #include <vector>
+#include "xdrpp/printer.h"
 
 using namespace stellar;
 
@@ -55,9 +56,17 @@ struct BucketListGenerator
         // those entries.
         for (auto t : xdr::xdr_traits<ConfigSettingID>::enum_values())
         {
+            
             LedgerKey ckey(CONFIG_SETTING);
             ckey.configSetting().configSettingID =
                 static_cast<ConfigSettingID>(t);
+
+            // This entry has not been hooked up yet. Remove this branch when it's added
+            if(t == CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW) {
+                LedgerTxn ltx(mAppGenerate->getLedgerTxnRoot(), false);
+                REQUIRE(!ltx.loadWithoutRecord(ckey, false));
+                continue;
+            }
             mLiveKeys.insert(ckey);
         }
 #endif
