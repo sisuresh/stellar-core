@@ -231,10 +231,7 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
 
         thisConfig.INVARIANT_CHECKS = {".*"};
 
-        // Enabling this config causes a major fallout in the test suite, as
-        // many test use account chains We'll deal with this later - tests that
-        // mix Soroban and classic txs enable this flag manually anyway
-        thisConfig.LIMIT_TX_QUEUE_SOURCE_ACCOUNT = false;
+        thisConfig.LIMIT_TX_QUEUE_SOURCE_ACCOUNT = true;
 
         thisConfig.ALLOW_LOCALHOST_FOR_TESTING = true;
 
@@ -313,7 +310,7 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
         thisConfig.PEER_READING_CAPACITY = 20;
         thisConfig.PEER_FLOOD_READING_CAPACITY = 20;
         thisConfig.FLOW_CONTROL_SEND_MORE_BATCH_SIZE = 10;
-        thisConfig.PEER_FLOOD_READING_CAPACITY_BYTES = 3000;
+        thisConfig.PEER_FLOOD_READING_CAPACITY_BYTES = 50000;
         thisConfig.FLOW_CONTROL_SEND_MORE_BATCH_SIZE_BYTES = 1000;
 #ifdef BEST_OFFER_DEBUGGING
         thisConfig.BEST_OFFER_DEBUGGING_ENABLED = true;
