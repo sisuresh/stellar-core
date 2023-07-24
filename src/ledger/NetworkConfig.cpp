@@ -323,7 +323,7 @@ initialCpuCostParamsEntry(Config const& cfg)
 }
 
 ConfigSettingEntry
-initialStateExpirationSettings()
+initialStateExpirationSettings(Config const& cfg)
 {
     ConfigSettingEntry entry(CONFIG_SETTING_STATE_EXPIRATION);
 
@@ -331,8 +331,12 @@ initialStateExpirationSettings()
         InitialSorobanNetworkConfig::AUTO_BUMP_NUM_LEDGERS;
     entry.stateExpirationSettings().maxEntryExpiration =
         InitialSorobanNetworkConfig::MAXIMUM_ENTRY_LIFETIME;
+
+    // TESTING_MINIMUM_PERSISTENT_ENTRY_LIFETIME defaults to
+    // InitialSorobanNetworkConfig::MINIMUM_PERSISTENT_ENTRY_LIFETIME
     entry.stateExpirationSettings().minPersistentEntryExpiration =
-        InitialSorobanNetworkConfig::MINIMUM_PERSISTENT_ENTRY_LIFETIME;
+        cfg.TESTING_MINIMUM_PERSISTENT_ENTRY_LIFETIME;
+
     entry.stateExpirationSettings().minTempEntryExpiration =
         InitialSorobanNetworkConfig::MINIMUM_TEMP_ENTRY_LIFETIME;
 
@@ -472,7 +476,7 @@ SorobanNetworkConfig::createLedgerEntriesForV20(AbstractLedgerTxn& ltx,
                              ltx);
     createConfigSettingEntry(initialCpuCostParamsEntry(cfg), ltx);
     createConfigSettingEntry(initialMemCostParamsEntry(cfg), ltx);
-    createConfigSettingEntry(initialStateExpirationSettings(), ltx);
+    createConfigSettingEntry(initialStateExpirationSettings(cfg), ltx);
 #endif
 }
 
