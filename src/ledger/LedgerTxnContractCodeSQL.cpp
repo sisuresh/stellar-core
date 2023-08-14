@@ -4,6 +4,7 @@
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 #include "ledger/LedgerTxnImpl.h"
+#include "ledger/LedgerTypeUtils.h"
 #include "ledger/NonSociRelatedException.h"
 #include "main/Application.h"
 #include "util/GlobalChecks.h"
@@ -288,14 +289,40 @@ class BulkUpsertContractCodeOperation
     {
         for (auto const& e : entryIter)
         {
+            if (isSorobanExtEntry(e.entry().ledgerEntry().data))
+            {
+                continue;
+            }
+
             releaseAssert(e.entryExists());
             accumulateEntry(e.entry().ledgerEntry());
+        }
+    }
+
+    BulkUpsertContractCodeOperation(Database& Db,
+                                    std::vector<LedgerEntry> const& entries)
+        : mDb(Db)
+    {
+        for (auto const& e : entries)
+        {
+            if (isSorobanExtEntry(e.data))
+            {
+                continue;
+            }
+
+            accumulateEntry(e);
         }
     }
 
     void
     doSociGenericOperation()
     {
+        // This can happen if the only upserts are for extensions.
+        if (mHashes.empty())
+        {
+            return;
+        }
+
         std::string sql = "INSERT INTO contractCode "
                           "(hash, ledgerentry, lastmodified) "
                           "VALUES "
@@ -364,6 +391,14 @@ class BulkUpsertContractCodeOperation
     }
 #endif
 };
+
+void
+LedgerTxnRoot::Impl::bulkUpsertContractCode(
+    std::vector<LedgerEntry> const& entries)
+{
+    BulkUpsertContractCodeOperation op(mApp.getDatabase(), entries);
+    mApp.getDatabase().doDatabaseTypeSpecificOperation(op);
+}
 
 void
 LedgerTxnRoot::Impl::bulkUpsertContractCode(

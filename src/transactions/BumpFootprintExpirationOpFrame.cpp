@@ -5,6 +5,9 @@
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 #include "transactions/BumpFootprintExpirationOpFrame.h"
 
+#include "xdrpp/marshal.h"
+#include "xdrpp/printer.h"
+
 namespace stellar
 {
 
@@ -66,17 +69,30 @@ BumpFootprintExpirationOpFrame::doApply(Application& app,
     // to be bump-able, hence don't include it.
     uint32_t bumpLedger =
         ledgerSeq + mBumpFootprintExpirationOp.ledgersToExpire;
+    std::cout << "readOnly size " << footprint.readOnly.size() << "\n\n";
     for (auto const& lk : footprint.readOnly)
     {
         // TODO: when we move to use EXPIRATION_EXTENSIONS, this should become a
         // loadWithoutRecord, and the metrics should be updated.
-        auto ltxe = ltx.load(lk);
+        auto ltxe = ltx.loadWithoutRecord(lk);
         if (!ltxe || !isLive(ltxe.current(), ledgerSeq))
         {
             // Skip the missing entries. Since this happens at apply
             // time and we refund the unspent fees, it is more beneficial
             // to bump as many entries as possible.
+            std::cout << "NOT LIFE OR EXISTING\n\n";
             continue;
+        }
+
+        auto ext_le = expirationExtensionFromDataEntry(ltxe.current());
+        auto ext_lk = LedgerEntryKey(ext_le);
+        auto const_ext_ltxe = ltx.loadWithoutRecord(ext_lk);
+        if (const_ext_ltxe)
+        {
+            auto extKeySize = static_cast<uint32>(xdr::xdr_size(ext_lk));
+            auto extEntrySize =
+                static_cast<uint32>(xdr::xdr_size(const_ext_ltxe.current()));
+            metrics.mLedgerReadByte += extKeySize + extEntrySize;
         }
 
         auto keySize = static_cast<uint32>(xdr::xdr_size(lk));
@@ -85,15 +101,40 @@ BumpFootprintExpirationOpFrame::doApply(Application& app,
         metrics.mLedgerReadByte += keySize + entrySize;
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
+            // std::cout << "low read \n\n";
             innerResult().code(
                 BUMP_FOOTPRINT_EXPIRATION_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
-        uint32_t currExpiration = getExpirationLedger(ltxe.current());
+        uint32_t currExpiration =
+            const_ext_ltxe
+                ? std::max(getExpirationLedger(ltxe.current()),
+                           getExpirationLedger(const_ext_ltxe.current()))
+                : getExpirationLedger(ltxe.current());
 
         if (currExpiration >= bumpLedger)
         {
+            // std::cout << "low bump " << currExpiration << "   " << bumpLedger
+            // << "\n\n";
             continue;
+        }
+
+        // We now know we need to write a bump, so load/create the extension now
+
+        // std::cout << xdr::xdr_to_string(ext_lk, "ext_lk") << "\n\n";
+        auto ext_ltxe = ltx.load(ext_lk);
+        if (ext_ltxe)
+        {
+            // std::cout << "UPDATING EXT\n\n\n";
+            setExpirationLedger(ext_ltxe.current(), bumpLedger);
+        }
+        else
+        {
+            // std::cout << "CREATING NEW EXT\n\n\n";
+            setExpirationLedger(ext_le, bumpLedger);
+            // if(ext_lk.type() != CONTRACT_CODE) // REMOVE
+            std::cout << xdr::xdr_to_string(ext_le, "ext_le") << "\n\n";
+            ltx.create(ext_le);
         }
 
         rustEntryRentChanges.emplace_back();
@@ -103,7 +144,6 @@ BumpFootprintExpirationOpFrame::doApply(Application& app,
         rustChange.new_size_bytes = rustChange.old_size_bytes;
         rustChange.old_expiration_ledger = currExpiration;
         rustChange.new_expiration_ledger = bumpLedger;
-        setExpirationLedger(ltxe.current(), bumpLedger);
     }
     uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
     // This may throw, but only in case of the Core version misconfiguration.

@@ -13,6 +13,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/LedgerTxnImpl.h"
+#include "ledger/LedgerTypeUtils.h"
 #include "ledger/NonSociRelatedException.h"
 #include "main/Application.h"
 #include "transactions/TransactionUtils.h"
@@ -23,6 +24,9 @@
 #include "xdrpp/marshal.h"
 #include <Tracy.hpp>
 #include <soci.h>
+
+#include "xdrpp/marshal.h"
+#include "xdrpp/printer.h"
 
 namespace stellar
 {
@@ -701,6 +705,14 @@ LedgerTxn::deactivate(InternalLedgerKey const& key)
 void
 LedgerTxn::Impl::deactivate(InternalLedgerKey const& key)
 {
+    std::cout << xdr::xdr_to_string(key.ledgerKey(), "search key lk") << "\n\n";
+
+    for (auto const& kvp : mActive)
+    {
+        std::cout << xdr::xdr_to_string(kvp.first.ledgerKey(), "deactivate lk")
+                  << "\n\n";
+    }
+
     auto iter = mActive.find(key);
     if (iter == mActive.end())
     {
@@ -1861,6 +1873,8 @@ LedgerTxn::Impl::loadWithoutRecord(LedgerTxn& self,
         return {};
     }
 
+    std::cout << "newest " << newest->toString() << "\n\n\n";
+
     auto impl = ConstLedgerTxnEntry::makeSharedImpl(self, *newest);
 
     // Set the key to active before constructing the ConstLedgerTxnEntry, as
@@ -1869,6 +1883,12 @@ LedgerTxn::Impl::loadWithoutRecord(LedgerTxn& self,
     // still exception safe.
     mActive.emplace(key, toEntryImplBase(impl));
     ConstLedgerTxnEntry ltxe(impl);
+
+    for (auto const& kvp : mActive)
+    {
+        std::cout << xdr::xdr_to_string(kvp.first.ledgerKey(), "mActive lk")
+                  << "\n\n";
+    }
 
     // If this throws, the order book will not be modified because of the strong
     // exception safety guarantee. Furthermore, ltxe will be destructed leading
@@ -2723,6 +2743,10 @@ LedgerTxnRoot::Impl::commitChild(EntryIterator iter,
     // guarantee, so use std::unique_ptr<...>::swap to achieve it
     auto childHeader = std::make_unique<LedgerHeader>(mChild->getHeader());
 
+    UnorderedMap<LedgerKey, LedgerEntry> expirationExtensions;
+    UnorderedSet<LedgerKey> dataEntryKeysFromExpirationExtensionsData;
+    UnorderedSet<LedgerKey> dataEntryKeysFromExpirationExtensionsCode;
+
     auto bucketListDBEnabled = mApp.getConfig().isUsingBucketListDB();
     auto bleca = BulkLedgerEntryChangeAccumulator();
     [[maybe_unused]] int64_t counter{0};
@@ -2730,6 +2754,38 @@ LedgerTxnRoot::Impl::commitChild(EntryIterator iter,
     {
         while ((bool)iter)
         {
+            if (iter.key().type() == InternalLedgerEntryType::LEDGER_ENTRY &&
+                isSorobanExtEntry(iter.key().ledgerKey()))
+            {
+                std::cout << "EXT FOUND\n\n\n";
+                // std::cout << xdr::xdr_to_string(iter.key().ledgerKey(), "ext
+                // key") << "\n\n";
+                // TODO:: assert entryExists
+                LedgerKey dataEntryKey = dataEntryKeyFromExpirationExtensionKey(
+                    iter.key().ledgerKey());
+                if (dataEntryKey.type() == CONTRACT_CODE)
+                {
+                    dataEntryKeysFromExpirationExtensionsCode.emplace(
+                        dataEntryKey);
+                }
+                else
+                {
+                    dataEntryKeysFromExpirationExtensionsData.emplace(
+                        dataEntryKey);
+                }
+
+                auto it = expirationExtensions.emplace(
+                    iter.key().ledgerKey(), iter.entry().ledgerEntry());
+                if (!it.second)
+                {
+                    auto existing = getExpirationLedger(it.first->second);
+                    auto newExp =
+                        getExpirationLedger(iter.entry().ledgerEntry());
+
+                    setExpirationLedger(it.first->second,
+                                        std::max(existing, newExp));
+                }
+            }
             if (bleca.accumulate(iter, bucketListDBEnabled))
             {
                 ++counter;
@@ -2740,6 +2796,111 @@ LedgerTxnRoot::Impl::commitChild(EntryIterator iter,
                 (bool)iter ? LEDGER_ENTRY_BATCH_COMMIT_SIZE : 0;
             bulkApply(bleca, bufferThreshold, cons);
         }
+
+        // TODO:write in batches
+        if (!dataEntryKeysFromExpirationExtensionsData.empty())
+        {
+            std::vector<LedgerEntry> entriesToWrite;
+            auto contractDataDataEntries =
+                bulkLoadContractData(dataEntryKeysFromExpirationExtensionsData);
+            std::cout << "contractDataDataEntries   contractDataDataEntries  "
+                      << contractDataDataEntries.size() << std::endl;
+            for (auto& kvp : contractDataDataEntries)
+            {
+                auto it = expirationExtensions.find(
+                    expirationExtensionKeyFromDataEntryKey(kvp.first));
+                if (it != expirationExtensions.end())
+                {
+                    if (!kvp.second)
+                    {
+                        // std::cout << xdr::xdr_to_string(kvp.first, "lkey") <<
+                        // "\n\n";
+                        std::cout << "SKIP ENTRY\n\n\n";
+                        continue;
+                    }
+
+                    auto existing = getExpirationLedger(*kvp.second);
+                    auto extension = getExpirationLedger(it->second);
+                    if (extension > existing)
+                    {
+
+                        auto le = *kvp.second;
+                        setExpirationLedger(le, extension);
+                        entriesToWrite.emplace_back(le);
+                    }
+                    else
+                    {
+                        std::cout << "skip   " << extension << "<=" << existing
+                                  << "\n\n";
+                    }
+                }
+                else
+                {
+                    std::cout << "not found\n\n\n";
+                    // this shouldn't happen
+                }
+            }
+
+            if (!entriesToWrite.empty())
+            {
+                std::cout << "entriesToWrite   entriesToWrite  "
+                          << entriesToWrite.size() << std::endl;
+                bulkUpsertContractData(entriesToWrite);
+            }
+        }
+
+        // TODO: DEDUPLICATE
+        if (!dataEntryKeysFromExpirationExtensionsCode.empty())
+        {
+            std::vector<LedgerEntry> entriesToWrite;
+            auto contractDataDataEntries =
+                bulkLoadContractCode(dataEntryKeysFromExpirationExtensionsCode);
+            std::cout << "contractDataDataEntries   contractDataDataEntries  "
+                      << contractDataDataEntries.size() << std::endl;
+            for (auto& kvp : contractDataDataEntries)
+            {
+                auto it = expirationExtensions.find(
+                    expirationExtensionKeyFromDataEntryKey(kvp.first));
+                if (it != expirationExtensions.end())
+                {
+                    if (!kvp.second)
+                    {
+                        // std::cout << xdr::xdr_to_string(kvp.first, "lkey") <<
+                        // "\n\n";
+                        std::cout << "SKIP ENTRY\n\n\n";
+                        continue;
+                    }
+
+                    auto existing = getExpirationLedger(*kvp.second);
+                    auto extension = getExpirationLedger(it->second);
+                    if (extension > existing)
+                    {
+
+                        auto le = *kvp.second;
+                        setExpirationLedger(le, extension);
+                        entriesToWrite.emplace_back(le);
+                    }
+                    else
+                    {
+                        std::cout << "skip   " << extension << "<=" << existing
+                                  << "\n\n";
+                    }
+                }
+                else
+                {
+                    std::cout << "not found\n\n\n";
+                    // this shouldn't happen
+                }
+            }
+
+            if (!entriesToWrite.empty())
+            {
+                std::cout << "hhhentriesToWrite   entriesToWrite  "
+                          << entriesToWrite.size() << std::endl;
+                bulkUpsertContractCode(entriesToWrite);
+            }
+        }
+
         // FIXME: there is no medida historgram for this presently,
         // but maybe we would like one?
         TracyPlot("ledger.entry.commit", counter);
@@ -3661,6 +3822,8 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
     putInEntryCache(key, entry, LoadType::IMMEDIATE);
     if (entry)
     {
+        std::cout << xdr::xdr_to_string(key, "root newest key") << "\n\n";
+        std::cout << xdr::xdr_to_string(*entry, "root newest entry") << "\n\n";
         return std::make_shared<InternalLedgerEntry const>(*entry);
     }
     else

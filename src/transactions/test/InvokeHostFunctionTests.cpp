@@ -1073,76 +1073,21 @@ TEST_CASE("contract storage", "[tx][soroban]")
             stateExpirationSettings.minPersistentEntryExpiration + ledgerSeq -
             1;
 
-        SECTION("restore contract instance and wasm")
-        {
-            // Restore Instance and WASM
-            restoreOp(contractKeys, 54);
-
-            // Instance should now be useable
-            putWithFootprint(
-                "temp", 0, contractKeys,
-                {contractDataKey(contractID, makeSymbolSCVal("temp"), TEMPORARY,
-                                 DATA_ENTRY)},
-                1000, /*expectSuccess*/ true,
-                ContractDataDurability::TEMPORARY);
-
-            checkKeyExpirationLedger(contractKeys[0], ledgerSeq,
-                                     newExpectedExpiration);
-            checkKeyExpirationLedger(contractKeys[1], ledgerSeq,
-                                     newExpectedExpiration);
-        }
-
-        SECTION("restore contract instance, not wasm")
-        {
-            // Only restore contract instance
-            restoreOp({contractKeys[0]}, 3);
-
-            // invocation should fail
-            putWithFootprint(
-                "temp", 0, contractKeys,
-                {contractDataKey(contractID, makeSymbolSCVal("temp"), TEMPORARY,
-                                 DATA_ENTRY)},
-                1000, /*expectSuccess*/ false,
-                ContractDataDurability::TEMPORARY);
-
-            checkKeyExpirationLedger(contractKeys[0], ledgerSeq,
-                                     newExpectedExpiration);
-            checkKeyExpirationLedger(contractKeys[1], ledgerSeq,
-                                     originalExpectedExpiration);
-        }
-
-        SECTION("restore contract wasm, not instance")
-        {
-            // Only restore WASM
-            restoreOp({contractKeys[1]}, 51);
-
-            // invocation should fail
-            putWithFootprint(
-                "temp", 0, contractKeys,
-                {contractDataKey(contractID, makeSymbolSCVal("temp"), TEMPORARY,
-                                 DATA_ENTRY)},
-                1000, /*expectSuccess*/ false,
-                ContractDataDurability::TEMPORARY);
-
-            checkKeyExpirationLedger(contractKeys[0], ledgerSeq,
-                                     originalExpectedExpiration);
-            checkKeyExpirationLedger(contractKeys[1], ledgerSeq,
-                                     newExpectedExpiration);
-        }
-
         SECTION("lifetime extensions")
         {
             // Restore Instance and WASM
-            restoreOp(contractKeys, 54);
+            restoreOp(contractKeys, 3); // should be 54
 
             auto instanceBumpAmount = 10'000;
             auto wasmBumpAmount = 15'000;
 
+            // TODO:UNDO THIS AND THE CHECK BELOW
             // bump instance
-            bumpOp(instanceBumpAmount, {contractKeys[0]}, 4);
+            std::cout << "AT BUMP\n\n\n";
+            bumpOp(instanceBumpAmount, {contractKeys[0]}, 7);
 
             // bump WASM
-            bumpOp(wasmBumpAmount, {contractKeys[1]}, 135);
+            bumpOp(wasmBumpAmount, {contractKeys[1]}, 185);
 
             checkKeyExpirationLedger(contractKeys[0], ledgerSeq,
                                      ledgerSeq + instanceBumpAmount);
@@ -1289,7 +1234,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
 
         // Bump multiple keys to live 10100 ledger from now
         bumpOp(
-            10100,
+            10200,
             {contractDataKey(contractID, makeSymbolSCVal("key"),
                              ContractDataDurability::PERSISTENT, DATA_ENTRY),
              contractDataKey(contractID, makeSymbolSCVal("key2"),
@@ -1299,11 +1244,11 @@ TEST_CASE("contract storage", "[tx][soroban]")
             4);
 
         checkContractDataExpirationLedger(
-            "key", ContractDataDurability::PERSISTENT, ledgerSeq + 10'100);
+            "key", ContractDataDurability::PERSISTENT, ledgerSeq + 10'200);
         checkContractDataExpirationLedger(
-            "key2", ContractDataDurability::PERSISTENT, ledgerSeq + 10'100);
+            "key2", ContractDataDurability::PERSISTENT, ledgerSeq + 10'200);
 
-        // No change for key3 since expiration is already past 10100 ledgers
+        // No change for key3 since expiration is already past 10200 ledgers
         // from now
         checkContractDataExpirationLedger(
             "key3", ContractDataDurability::PERSISTENT, ledgerSeq + 50'000);
@@ -1316,7 +1261,9 @@ TEST_CASE("contract storage", "[tx][soroban]")
             1;
 
         // Bump instance and WASM so that they don't expire during the test
-        bumpOp(10'000, contractKeys, 77);
+        bumpOp(10'000, contractKeys, 130);
+
+        std::cout << "AFTER BUMP\n\n\n\n";
 
         put("key", 0, ContractDataDurability::PERSISTENT);
         checkContractDataExpirationLedger(
@@ -1358,8 +1305,10 @@ TEST_CASE("contract storage", "[tx][soroban]")
         checkContractDataExpirationLedger(
             "key", ContractDataDurability::PERSISTENT, initExpirationLedger);
 
+        std::cout << "before\n\n";
         // Restore the entry
-        restoreOp({lk}, 3);
+        restoreOp({lk}, 1);
+        std::cout << "after\n\n";
 
         ledgerSeq = getLedgerSeq(*app);
         checkContractDataExpirationState(

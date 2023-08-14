@@ -404,6 +404,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             uint32 entrySize = 0u;
             // Load without record for readOnly to avoid writing them later
             auto ltxe = ltx.loadWithoutRecord(lk);
+            std::cout << xdr::xdr_to_string(lk, "lk") << "\n\n";
             if (ltxe)
             {
                 auto const& le = ltxe.current();
