@@ -8,6 +8,8 @@
 #include "main/Application.h"
 #include "util/GlobalChecks.h"
 #include "util/types.h"
+#include "xdrpp/marshal.h"
+#include "xdrpp/printer.h"
 
 namespace stellar
 {
@@ -353,14 +355,41 @@ class BulkUpsertContractDataOperation
         // TODO: Update query for EXPIRATION_EXTENSION entries
         for (auto const& e : entryIter)
         {
+            if (isSorobanExtEntry(e.entry().ledgerEntry().data))
+            {
+                continue;
+            }
+
             releaseAssert(e.entryExists());
             accumulateEntry(e.entry().ledgerEntry());
+        }
+    }
+
+    BulkUpsertContractDataOperation(Database& Db,
+                                    std::vector<LedgerEntry> const& entries)
+        : mDb(Db)
+    {
+
+        // TODO: Update query for EXPIRATION_EXTENSION entries
+        for (auto const& e : entries)
+        {
+            if (isSorobanExtEntry(e.data))
+            {
+                continue;
+            }
+
+            accumulateEntry(e);
         }
     }
 
     void
     doSociGenericOperation()
     {
+        // This can happen if the only upserts are for extensions.
+        if (mContractIDs.empty())
+        {
+            return;
+        }
         // TODO: Update query for EXPIRATION_EXTENSION entries
         std::string sql = "INSERT INTO contractData "
                           "(contractid, key, type, ledgerentry, lastmodified) "
@@ -438,6 +467,18 @@ class BulkUpsertContractDataOperation
     }
 #endif
 };
+
+void
+LedgerTxnRoot::Impl::bulkUpsertContractData(
+    std::vector<LedgerEntry> const& entries)
+{
+    for (auto const& a : entries)
+    {
+        std::cout << xdr::xdr_to_string(a, "a") << std::endl;
+    }
+    BulkUpsertContractDataOperation op(mApp.getDatabase(), entries);
+    mApp.getDatabase().doDatabaseTypeSpecificOperation(op);
+}
 
 void
 LedgerTxnRoot::Impl::bulkUpsertContractData(

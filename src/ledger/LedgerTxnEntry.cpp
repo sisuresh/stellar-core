@@ -390,6 +390,7 @@ ConstLedgerTxnEntry::deactivate()
 void
 ConstLedgerTxnEntry::Impl::deactivate()
 {
+    std::cout << "MCURRENT" << mCurrent.toString() << "\n\n\n";
     auto key = mCurrent.toKey();
     mLedgerTxn.deactivate(key);
 }

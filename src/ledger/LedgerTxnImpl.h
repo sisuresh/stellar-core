@@ -796,9 +796,11 @@ class LedgerTxnRoot::Impl
     void bulkDeleteLiquidityPool(std::vector<EntryIterator> const& entries,
                                  LedgerTxnConsistency cons);
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    void bulkUpsertContractData(std::vector<LedgerEntry> const& entries);
     void bulkUpsertContractData(std::vector<EntryIterator> const& entries);
     void bulkDeleteContractData(std::vector<EntryIterator> const& entries,
                                 LedgerTxnConsistency cons);
+    void bulkUpsertContractCode(std::vector<LedgerEntry> const& entries);
     void bulkUpsertContractCode(std::vector<EntryIterator> const& entries);
     void bulkDeleteContractCode(std::vector<EntryIterator> const& entries,
                                 LedgerTxnConsistency cons);

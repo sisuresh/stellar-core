@@ -21,6 +21,8 @@ ContractEntryBodyType getLeType(LedgerKey const& k);
 void setLeType(LedgerEntry& e, ContractEntryBodyType leType);
 void setLeType(LedgerKey& k, ContractEntryBodyType leType);
 
+LedgerKey expirationExtensionKeyFromDataEntryKey(LedgerKey const& lk);
+LedgerKey dataEntryKeyFromExpirationExtensionKey(LedgerKey const& lk);
 LedgerEntry expirationExtensionFromDataEntry(LedgerEntry const& le);
 #endif
 

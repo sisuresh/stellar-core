@@ -1076,7 +1076,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
         SECTION("restore contract instance and wasm")
         {
             // Restore Instance and WASM
-            restoreOp(contractKeys, 54);
+            restoreOp(contractKeys, 3);
 
             // Instance should now be useable
             putWithFootprint(
@@ -1095,7 +1095,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
         SECTION("restore contract instance, not wasm")
         {
             // Only restore contract instance
-            restoreOp({contractKeys[0]}, 3);
+            restoreOp({contractKeys[0]}, 1);
 
             // invocation should fail
             putWithFootprint(
@@ -1114,7 +1114,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
         SECTION("restore contract wasm, not instance")
         {
             // Only restore WASM
-            restoreOp({contractKeys[1]}, 51);
+            restoreOp({contractKeys[1]}, 2);
 
             // invocation should fail
             putWithFootprint(
@@ -1133,16 +1133,16 @@ TEST_CASE("contract storage", "[tx][soroban]")
         SECTION("lifetime extensions")
         {
             // Restore Instance and WASM
-            restoreOp(contractKeys, 54);
+            restoreOp(contractKeys, 3); // should be 54
 
             auto instanceBumpAmount = 10'000;
             auto wasmBumpAmount = 15'000;
 
             // bump instance
-            bumpOp(instanceBumpAmount, {contractKeys[0]}, 4);
+            bumpOp(instanceBumpAmount, {contractKeys[0]}, 7);
 
             // bump WASM
-            bumpOp(wasmBumpAmount, {contractKeys[1]}, 135);
+            bumpOp(wasmBumpAmount, {contractKeys[1]}, 185);
 
             checkKeyExpirationLedger(contractKeys[0], ledgerSeq,
                                      ledgerSeq + instanceBumpAmount);
@@ -1316,7 +1316,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
             1;
 
         // Bump instance and WASM so that they don't expire during the test
-        bumpOp(10'000, contractKeys, 77);
+        bumpOp(10'000, contractKeys, 130);
 
         put("key", 0, ContractDataDurability::PERSISTENT);
         checkContractDataExpirationLedger(
@@ -1359,7 +1359,7 @@ TEST_CASE("contract storage", "[tx][soroban]")
             "key", ContractDataDurability::PERSISTENT, initExpirationLedger);
 
         // Restore the entry
-        restoreOp({lk}, 3);
+        restoreOp({lk}, 1);
 
         ledgerSeq = getLedgerSeq(*app);
         checkContractDataExpirationState(

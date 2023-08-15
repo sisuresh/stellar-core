@@ -12,7 +12,7 @@ namespace stellar
 uint32_t
 getExpirationLedger(LedgerEntry const& e)
 {
-    releaseAssert(isSorobanEntry(e.data));
+    releaseAssertOrThrow(isSorobanEntry(e.data));
     if (e.data.type() == CONTRACT_DATA)
     {
         return e.data.contractData().expirationLedgerSeq;
@@ -24,7 +24,7 @@ getExpirationLedger(LedgerEntry const& e)
 void
 setExpirationLedger(LedgerEntry& e, uint32_t expiration)
 {
-    releaseAssert(isSorobanEntry(e.data));
+    releaseAssertOrThrow(isSorobanEntry(e.data));
     if (e.data.type() == CONTRACT_DATA)
     {
         e.data.contractData().expirationLedgerSeq = expiration;
@@ -38,7 +38,7 @@ setExpirationLedger(LedgerEntry& e, uint32_t expiration)
 void
 setLeType(LedgerEntry& e, ContractEntryBodyType leType)
 {
-    releaseAssert(isSorobanEntry(e.data));
+    releaseAssertOrThrow(isSorobanEntry(e.data));
     if (e.data.type() == CONTRACT_DATA)
     {
         e.data.contractData().body.bodyType(leType);
@@ -52,7 +52,7 @@ setLeType(LedgerEntry& e, ContractEntryBodyType leType)
 void
 setLeType(LedgerKey& k, ContractEntryBodyType leType)
 {
-    releaseAssert(isSorobanEntry(k));
+    releaseAssertOrThrow(isSorobanEntry(k));
     if (k.type() == CONTRACT_DATA)
     {
         k.contractData().bodyType = leType;
@@ -66,7 +66,7 @@ setLeType(LedgerKey& k, ContractEntryBodyType leType)
 ContractEntryBodyType
 getLeType(LedgerKey const& k)
 {
-    releaseAssert(isSorobanEntry(k));
+    releaseAssertOrThrow(isSorobanEntry(k));
     if (k.type() == CONTRACT_CODE)
     {
         return k.contractCode().bodyType;
@@ -78,7 +78,7 @@ getLeType(LedgerKey const& k)
 ContractEntryBodyType
 getLeType(LedgerEntry::_data_t const& e)
 {
-    releaseAssert(isSorobanEntry(e));
+    releaseAssertOrThrow(isSorobanEntry(e));
     if (e.type() == CONTRACT_CODE)
     {
         return e.contractCode().body.bodyType();
@@ -86,11 +86,11 @@ getLeType(LedgerEntry::_data_t const& e)
 
     return e.contractData().body.bodyType();
 }
-
+/*
 LedgerEntry
-expirationExtensionFromDataEntry(LedgerEntry const& le)
+expirationExtensionKeyFromDataEntryKey(LedgerKey const& le)
 {
-    releaseAssert(isSorobanDataEntry(le.data));
+    releaseAssertOrThrow(isSorobanDataEntry(le.data));
     LedgerEntry extLe;
     if (le.data.type() == CONTRACT_CODE)
     {
@@ -102,6 +102,58 @@ expirationExtensionFromDataEntry(LedgerEntry const& le)
     {
         extLe.data.type(CONTRACT_DATA);
         extLe.data.contractData().expirationLedgerSeq = getExpirationLedger(le);
+        extLe.data.contractData().body.bodyType(EXPIRATION_EXTENSION);
+    }
+
+    return extLe;
+}
+ */
+
+LedgerKey
+dataEntryKeyFromExpirationExtensionKey(LedgerKey const& lk)
+{
+    releaseAssertOrThrow(isSorobanExtEntry(lk));
+    LedgerKey extLk = lk;
+    if (extLk.type() == CONTRACT_CODE)
+    {
+        extLk.contractCode().bodyType = DATA_ENTRY;
+    }
+    else
+    {
+        extLk.contractData().bodyType = DATA_ENTRY;
+    }
+
+    return extLk;
+}
+
+LedgerKey
+expirationExtensionKeyFromDataEntryKey(LedgerKey const& lk)
+{
+    releaseAssertOrThrow(isSorobanDataEntry(lk));
+    LedgerKey extLk = lk;
+    if (extLk.type() == CONTRACT_CODE)
+    {
+        extLk.contractCode().bodyType = EXPIRATION_EXTENSION;
+    }
+    else
+    {
+        extLk.contractData().bodyType = EXPIRATION_EXTENSION;
+    }
+
+    return extLk;
+}
+
+LedgerEntry
+expirationExtensionFromDataEntry(LedgerEntry const& le)
+{
+    releaseAssertOrThrow(isSorobanDataEntry(le.data));
+    LedgerEntry extLe = le;
+    if (le.data.type() == CONTRACT_CODE)
+    {
+        extLe.data.contractCode().body.bodyType(EXPIRATION_EXTENSION);
+    }
+    else
+    {
         extLe.data.contractData().body.bodyType(EXPIRATION_EXTENSION);
     }
 
