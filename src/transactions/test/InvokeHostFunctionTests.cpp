@@ -1107,19 +1107,17 @@ TEST_CASE("buying liabilities plus refund is greater than INT64_MAX",
                                        uploadResources, 200'000, 100'000);
 
     auto offer =
-        manageOffer(0, cur1, native, Price{1, 1}, INT64_MAX - a1.getBalance());
+        manageOffer(0, cur1, native, Price{1, 1}, (INT64_MAX - a1.getBalance()) + 196886);
     offer.sourceAccount.activate() = toMuxedAccount(a1);
 
-    auto offerTx = b1.tx({offer, payment(a1, 117'000)});
+    auto offerTx = b1.tx({offer});
     offerTx->addSignature(a1.getSecretKey());
 
     auto r = closeLedger(*app, {offerTx, tx});
     checkTx(0, r, txSUCCESS);
     checkTx(1, r, txSUCCESS);
 
-    REQUIRE(a1PreBalance + 41 - 79927 /*what would have been the refund if
-                                         liabilities hadn't gotten in the way*/
-            == a1.getBalance());
+    REQUIRE(a1PreBalance - a1.getBalance() == 196886);
 }
 
 TEST_CASE("contract storage", "[tx][soroban]")

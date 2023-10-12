@@ -767,6 +767,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter)
     if (!addBalance(header, sourceAccount, mFeeRefund))
     {
         // Liabilities in the way of the refund, just skip.
+        std::cout << "SKIP SKIP SKIP SKIP SKIP SKIP SKIP SKIP \n\n\n\n"; 
         return;
     }
 
