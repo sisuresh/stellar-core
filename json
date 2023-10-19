@@ -1,0 +1,15 @@
+{
+  "updated_entry": [
+    {
+      "contract_max_size_bytes": 2011
+    },
+    {
+      "contract_compute_v0": {
+        "ledger_max_instructions": 2500011,
+        "tx_max_instructions": 2500011,
+        "fee_rate_per_instructions_increment": 111,
+        "tx_memory_limit": 2000011
+      }
+    }
+  ]
+}
