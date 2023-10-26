@@ -257,6 +257,7 @@ mod rust_bridge {
         ) -> Result<i64>;
 
         fn json_to_config_upgrade_set(file_name: &CxxString) -> Result<RustBuf>;
+        fn config_upgrade_set_to_json(buf: &CxxBuf) -> Result<String>;
     }
 
     // And the extern "C++" block declares C++ stuff we're going to import to
@@ -328,11 +329,6 @@ use rust_bridge::RustBuf;
 use rust_bridge::VersionNumPair;
 use rust_bridge::VersionStringPair;
 use rust_bridge::XDRHashesPair;
-
-#[cfg(not(feature = "core-vnext"))]
-use soroban_env_common_curr::xdr as xdr;
-#[cfg(feature = "next")]
-use soroban_env_common_prev::xdr as xdr;
 
 mod log;
 use crate::log::init_logging;
@@ -783,6 +779,8 @@ pub(crate) fn compute_write_fee_per_1kb(
 
 pub fn json_to_config_upgrade_set(file_name: &CxxString) -> Result<RustBuf, Box<dyn std::error::Error>>
 {
+    use soroban_env_common_curr::xdr as xdr;
+
     let file = fs::File::open(file_name.to_str()?).expect("file should open read only");
 
     let upgradeSet: xdr::ConfigUpgradeSet = serde_json::from_reader(file)
@@ -794,6 +792,19 @@ pub fn json_to_config_upgrade_set(file_name: &CxxString) -> Result<RustBuf, Box<
         soroban_curr::contract::MARSHALLING_STACK_LIMIT,
     )).expect("Error converting XDR to RustBuf");
     Ok(vec.into())
+}
+
+pub fn config_upgrade_set_to_json(buf: &CxxBuf) -> Result<String, Box<dyn std::error::Error>>
+{
+    use soroban_env_common_curr::xdr as xdr;
+
+    let upgradeSet: xdr::ConfigUpgradeSet = xdr::ReadXdr::read_xdr(&mut xdr::DepthLimitedRead::new(
+        Cursor::new(buf.data.as_slice()),
+        soroban_curr::contract::MARSHALLING_STACK_LIMIT,
+    ))
+    .expect("Error converting buffer to ConfigUpgradeSet");
+
+    Ok(serde_json::to_string_pretty(&upgradeSet).unwrap())
 }
 
 fn start_tracy() {

@@ -116,6 +116,7 @@ CommandHandler::CommandHandler(Application& app) : mApp(app)
     addRoute("getledgerentry", &CommandHandler::getLedgerEntry);
     addRoute("upgrades", &CommandHandler::upgrades);
     addRoute("self-check", &CommandHandler::selfCheck);
+    addRoute("dumpsorobansettings", &CommandHandler::dumpSorobanSettings);
 
 #ifdef BUILD_TESTS
     addRoute("generateload", &CommandHandler::generateLoad);
@@ -957,6 +958,38 @@ CommandHandler::getSurveyResult(std::string const&, std::string& retStr)
     ZoneScoped;
     auto& surveyManager = mApp.getOverlayManager().getSurveyManager();
     retStr = surveyManager.getJsonResults().toStyledString();
+}
+
+void
+CommandHandler::dumpSorobanSettings(std::string const&, std::string& retStr)
+{
+    auto lhhe = mApp.getLedgerManager().getLastClosedLedgerHeader();
+    if (protocolVersionIsBefore(lhhe.header.ledgerVersion,
+                                SOROBAN_PROTOCOL_VERSION))
+    {
+        retStr = "";
+        return;
+    }
+
+    xdr::xvector<ConfigSettingEntry> updatedEntries;
+    for (uint32_t i = 0;
+         i < static_cast<uint32_t>(CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW); ++i)
+    {
+        LedgerTxn ltx(mApp.getLedgerTxnRoot());
+        auto costEntry =
+            ltx.load(configSettingKey(static_cast<ConfigSettingID>(i)));
+        updatedEntries.emplace_back(costEntry.current().data.configSetting());
+    }
+
+    ConfigUpgradeSet upgradeSet;
+    upgradeSet.updatedEntry = updatedEntries;
+
+    auto cxxBuf = CxxBuf{std::make_unique<std::vector<uint8_t>>(
+        std::vector<uint8_t>(xdr::xdr_to_opaque(upgradeSet)))};
+    auto rustStr = rust_bridge::config_upgrade_set_to_json(cxxBuf);
+    std::string cppString(rustStr.begin(), rustStr.end());
+
+    retStr = cppString;
 }
 
 #ifdef BUILD_TESTS
