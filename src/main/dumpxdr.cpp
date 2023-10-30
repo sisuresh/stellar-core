@@ -375,7 +375,7 @@ readSecret(const std::string& prompt, bool force_tty)
 
 void
 signtxns(std::vector<TransactionEnvelope>& txEnvs, std::string netId,
-         bool base64, bool txn_stdin, bool dump_txid)
+         bool base64, bool txn_stdin, bool dump_hex_txid)
 {
     SecretKey sk(SecretKey::fromStrKeySeed(readSecret(
         fmt::format(FMT_STRING("Secret key seed [network id: '{}']: "), netId),
@@ -424,14 +424,9 @@ signtxns(std::vector<TransactionEnvelope>& txEnvs, std::string netId,
         else
             std::cout.write(reinterpret_cast<char*>(out.data()), out.size());
 
-        if (dump_txid)
+        if (dump_hex_txid)
         {
-            auto out_hash = xdr::xdr_to_opaque(payloadHash);
-            if (base64)
-                std::cout << decoder::encode_b64(out_hash) << std::endl;
-            else
-                std::cout.write(reinterpret_cast<char*>(out_hash.data()),
-                                out_hash.size());
+            std::cout << binToHex(xdr::xdr_to_opaque(payloadHash)) << std::endl;
         }
     }
 }
