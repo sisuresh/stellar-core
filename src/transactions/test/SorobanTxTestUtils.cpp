@@ -211,9 +211,9 @@ ContractInvocationTest::computeFeePerIncrement(int64_t resourceVal,
 void
 ContractInvocationTest::invokeArchivalOp(TransactionFrameBasePtr tx,
                                          int64_t expectedRefundableFeeCharged,
-                                         bool expectSuccess)
+                                         int32_t opResultCode)
 {
-    if (!expectSuccess)
+    if (opResultCode != 0)
     {
         REQUIRE(!isTxValid(tx));
         return;
@@ -245,7 +245,7 @@ ContractInvocationTest::invokeArchivalOp(TransactionFrameBasePtr tx,
     auto expectedChargedAfterRefund =
         nonRefundableResourceFee + expectedRefundableFeeCharged + 300;
 
-    auto txm = invokeTx(tx, /*expectSuccess=*/true);
+    auto txm = invokeTx(tx, /*opResultCode=*/true);
     auto changesAfter = txm->getChangesAfter();
     REQUIRE(changesAfter.size() == 2);
     REQUIRE(changesAfter[1].updated().data.account().balance -
@@ -759,7 +759,7 @@ AssetContractInvocationTest::getBalance(SCAddress const& addr)
 void
 AssetContractInvocationTest::transfer(TestAccount& fromAcc,
                                       SCAddress const& toAddr, int64_t amount,
-                                      bool expectSuccess)
+                                      int32_t opResultCode)
 {
     SCVal toVal(SCV_ADDRESS);
     toVal.address() = toAddr;
@@ -830,8 +830,8 @@ AssetContractInvocationTest::transfer(TestAccount& fromAcc,
     auto tx = sorobanTransactionFrameFromOps(mApp->getNetworkID(), fromAcc,
                                              {transfer}, {}, resources, 100,
                                              DEFAULT_TEST_RESOURCE_FEE);
-    invokeTx(tx, expectSuccess, false);
-    if (expectSuccess)
+    invokeTx(tx, opResultCode, false);
+    if (opResultCode == 0)
     {
         auto postTransferFromBalance =
             mAsset.type() == ASSET_TYPE_NATIVE
@@ -863,7 +863,7 @@ AssetContractInvocationTest::transfer(TestAccount& fromAcc,
 
 void
 AssetContractInvocationTest::mint(TestAccount& admin, SCAddress const& toAddr,
-                                  int64_t amount, bool expectSuccess)
+                                  int64_t amount, int32_t opResultCode)
 {
     SCVal toVal(SCV_ADDRESS);
     toVal.address() = toAddr;
@@ -905,8 +905,8 @@ AssetContractInvocationTest::mint(TestAccount& admin, SCAddress const& toAddr,
                                              {mint}, {}, resources, 100,
                                              DEFAULT_TEST_RESOURCE_FEE);
 
-    invokeTx(tx, expectSuccess, false);
-    if (expectSuccess)
+    invokeTx(tx, opResultCode, false);
+    if (opResultCode == 0)
     {
         auto postMintBalance = getBalance(toAddr);
         REQUIRE(postMintBalance - amount == preMintBalance);
@@ -915,7 +915,7 @@ AssetContractInvocationTest::mint(TestAccount& admin, SCAddress const& toAddr,
 
 void
 AssetContractInvocationTest::burn(TestAccount& from, int64_t amount,
-                                  bool expectSuccess)
+                                  int32_t opResultCode)
 {
     auto fromAddr = makeAccountAddress(from.getPublicKey());
 
@@ -967,9 +967,9 @@ AssetContractInvocationTest::burn(TestAccount& from, int64_t amount,
                                              {}, resources, 100,
                                              DEFAULT_TEST_RESOURCE_FEE);
 
-    invokeTx(tx, expectSuccess, false);
+    invokeTx(tx, opResultCode, false);
 
-    if (expectSuccess)
+    if (opResultCode == 0)
     {
         auto postBurnBalance = getBalance(fromAddr);
         REQUIRE(preBurnBalance - amount == postBurnBalance);
@@ -979,7 +979,7 @@ AssetContractInvocationTest::burn(TestAccount& from, int64_t amount,
 void
 AssetContractInvocationTest::clawback(TestAccount& admin,
                                       SCAddress const& fromAddr, int64_t amount,
-                                      bool expectSuccess)
+                                      int32_t opResultCode)
 {
     SCVal fromVal(SCV_ADDRESS);
     fromVal.address() = fromAddr;
@@ -1020,8 +1020,8 @@ AssetContractInvocationTest::clawback(TestAccount& admin,
                                              {clawback}, {}, resources, 100,
                                              DEFAULT_TEST_RESOURCE_FEE);
 
-    invokeTx(tx, expectSuccess, false);
-    if (expectSuccess)
+    invokeTx(tx, opResultCode, false);
+    if (opResultCode == 0)
     {
         auto postClawbackBalance = getBalance(fromAddr);
         REQUIRE(preClawbackBalance - amount == postClawbackBalance);
@@ -1091,7 +1091,7 @@ ContractInvocationTest::isTxValid(TransactionFrameBasePtr tx)
 }
 
 std::shared_ptr<TransactionMetaFrame>
-ContractInvocationTest::invokeTx(TransactionFrameBasePtr tx, bool expectSuccess,
+ContractInvocationTest::invokeTx(TransactionFrameBasePtr tx, int32_t opResultCode,
                                  bool processPostApply)
 {
     LedgerTxn ltx(mApp->getLedgerTxnRoot());
@@ -1099,13 +1099,26 @@ ContractInvocationTest::invokeTx(TransactionFrameBasePtr tx, bool expectSuccess,
         ltx.loadHeader().current().ledgerVersion);
 
     REQUIRE(tx->checkValid(*mApp, ltx, 0, 0, 0));
-    if (expectSuccess)
+    if (opResultCode == 0)
     {
         REQUIRE(tx->apply(*mApp, ltx, *txm));
     }
     else
     {
         REQUIRE(!tx->apply(*mApp, ltx, *txm));
+        auto const& res = tx->getResult().result.results()[0];
+        if (res.tr().type() == INVOKE_HOST_FUNCTION)
+        {
+            REQUIRE(res.tr().invokeHostFunctionResult().code() == opResultCode);
+        }
+        else if (res.tr().type() == EXTEND_FOOTPRINT_TTL)
+        {
+            REQUIRE(res.tr().extendFootprintTTLResult().code() == opResultCode);
+        }
+        else
+        {
+            REQUIRE(res.tr().restoreFootprintResult().code() == opResultCode);
+        }
     }
 
     if (processPostApply)
@@ -1145,7 +1158,7 @@ ContractInvocationTest::isEntryLive(LedgerKey const& k, uint32_t ledgerSeq)
 void
 ContractInvocationTest::restoreOp(xdr::xvector<LedgerKey> const& readWrite,
                                   int64_t expectedRefundableFeeCharged,
-                                  bool expectSuccess)
+                                  int32_t opResultCode)
 {
     SorobanResources resources;
     resources.footprint.readWrite = readWrite;
@@ -1155,13 +1168,13 @@ ContractInvocationTest::restoreOp(xdr::xvector<LedgerKey> const& readWrite,
 
     auto resourceFee = 300'000 + 40'000 * readWrite.size();
     auto tx = createRestoreTx(resources, 1'000, resourceFee);
-    invokeArchivalOp(tx, expectedRefundableFeeCharged, expectSuccess);
+    invokeArchivalOp(tx, expectedRefundableFeeCharged, opResultCode);
 }
 
 void
 ContractInvocationTest::extendOp(
     xdr::xvector<LedgerKey> const& readOnly, uint32_t extendTo,
-    bool expectSuccess,
+    int32_t opResultCode,
     std::optional<uint32_t> expectedRefundableChargeOverride)
 {
     int64_t expectedRefundableFeeCharged = 0;
@@ -1183,24 +1196,24 @@ ContractInvocationTest::extendOp(
 
     auto resourceFee = DEFAULT_TEST_RESOURCE_FEE * readOnly.size();
     auto tx = createExtendOpTx(extendResources, extendTo, 1'000, resourceFee);
-    invokeArchivalOp(tx, expectedRefundableFeeCharged, expectSuccess);
+    invokeArchivalOp(tx, expectedRefundableFeeCharged, opResultCode);
 }
 
 void
 ContractStorageInvocationTest::put(std::string const& key,
                                    ContractDataDurability type, uint64_t val,
-                                   bool expectSuccess)
+                                   int32_t opResultCode)
 {
     auto keySymbol = makeSymbolSCVal(key);
     auto storageLK = contractDataKey(mContractID, keySymbol, type);
-    putWithFootprint(key, type, val, mContractKeys, {storageLK}, expectSuccess);
+    putWithFootprint(key, type, val, mContractKeys, {storageLK}, opResultCode);
 }
 
 void
 ContractStorageInvocationTest::putWithFootprint(
     std::string const& key, ContractDataDurability type, uint64_t val,
     xdr::xvector<LedgerKey> const& readOnly,
-    xdr::xvector<LedgerKey> const& readWrite, bool expectSuccess,
+    xdr::xvector<LedgerKey> const& readWrite, int32_t opResultCode,
     uint32_t writeBytes, uint32_t refundableFee)
 {
     std::string funcStr = type == ContractDataDurability::TEMPORARY
@@ -1223,25 +1236,25 @@ ContractStorageInvocationTest::putWithFootprint(
     resourceFee += refundableFee;
     auto tx = createInvokeTx(resources, makeSymbol(funcStr),
                              {keySymbol, valU64}, 1'000, resourceFee);
-    invokeTx(tx, /*expectSuccess=*/expectSuccess, false);
+    invokeTx(tx, /*opResultCode=*/opResultCode, false);
 }
 
 uint64_t
 ContractStorageInvocationTest::get(std::string const& key,
                                    ContractDataDurability type,
-                                   bool expectSuccess)
+                                   int32_t opResultCode)
 {
     auto lk = contractDataKey(mContractID, makeSymbolSCVal(key), type);
     auto readOnly = mContractKeys;
     readOnly.emplace_back(lk);
-    return getWithFootprint(key, type, readOnly, {}, expectSuccess);
+    return getWithFootprint(key, type, readOnly, {}, opResultCode);
 }
 
 uint64_t
 ContractStorageInvocationTest::getWithFootprint(
     std::string const& key, ContractDataDurability type,
     xdr::xvector<LedgerKey> const& readOnly,
-    xdr::xvector<LedgerKey> const& readWrite, bool expectSuccess,
+    xdr::xvector<LedgerKey> const& readWrite, int32_t opResultCode,
     uint32_t readBytes)
 {
     std::string funcStr = type == ContractDataDurability::TEMPORARY
@@ -1264,8 +1277,8 @@ ContractStorageInvocationTest::getWithFootprint(
     resourceFee += 40'000;
     auto tx = createInvokeTx(resources, makeSymbol(funcStr), {keySymbol}, 1'000,
                              resourceFee);
-    auto txm = invokeTx(tx, expectSuccess, false);
-    if (expectSuccess)
+    auto txm = invokeTx(tx, opResultCode, false);
+    if (opResultCode == 0)
     {
         return txm->getXDR().v3().sorobanMeta->returnValue.u64();
     }
@@ -1276,19 +1289,19 @@ ContractStorageInvocationTest::getWithFootprint(
 bool
 ContractStorageInvocationTest::has(std::string const& key,
                                    ContractDataDurability type,
-                                   bool expectSuccess)
+                                   int32_t opResultCode)
 {
     auto lk = contractDataKey(mContractID, makeSymbolSCVal(key), type);
     auto readOnly = mContractKeys;
     readOnly.emplace_back(lk);
-    return hasWithFootprint(key, type, readOnly, {}, expectSuccess);
+    return hasWithFootprint(key, type, readOnly, {}, opResultCode);
 }
 
 bool
 ContractStorageInvocationTest::hasWithFootprint(
     std::string const& key, ContractDataDurability type,
     xdr::xvector<LedgerKey> const& readOnly,
-    xdr::xvector<LedgerKey> const& readWrite, bool expectSuccess)
+    xdr::xvector<LedgerKey> const& readWrite, int32_t opResultCode)
 {
     std::string funcStr = type == ContractDataDurability::TEMPORARY
                               ? "has_temporary"
@@ -1311,8 +1324,8 @@ ContractStorageInvocationTest::hasWithFootprint(
 
     auto tx = createInvokeTx(resources, makeSymbol(funcStr), {keySymbol}, 1'000,
                              resourceFee);
-    auto txm = invokeTx(tx, /*expectSuccess=*/expectSuccess, false);
-    if (expectSuccess)
+    auto txm = invokeTx(tx, /*opResultCode=*/opResultCode, false);
+    if (opResultCode == 0)
     {
         return txm->getXDR().v3().sorobanMeta->returnValue.b();
     }
@@ -1332,7 +1345,7 @@ void
 ContractStorageInvocationTest::delWithFootprint(
     std::string const& key, ContractDataDurability type,
     xdr::xvector<LedgerKey> const& readOnly,
-    xdr::xvector<LedgerKey> const& readWrite, bool expectSuccess)
+    xdr::xvector<LedgerKey> const& readWrite, int32_t opResultCode)
 {
     std::string funcStr = type == ContractDataDurability::TEMPORARY
                               ? "del_temporary"
@@ -1354,7 +1367,7 @@ ContractStorageInvocationTest::delWithFootprint(
     resourceFee += 40'000;
     auto tx = createInvokeTx(resources, makeSymbol(funcStr), {keySymbol}, 1'000,
                              resourceFee);
-    invokeTx(tx, expectSuccess, false);
+    invokeTx(tx, opResultCode, false);
 }
 
 void
@@ -1382,7 +1395,7 @@ ContractStorageInvocationTest::extendHostFunction(std::string const& key,
                                                   ContractDataDurability type,
                                                   uint32_t threshold,
                                                   uint32_t extendTo,
-                                                  bool expectSuccess)
+                                                  int32_t opResultCode)
 {
     auto keySymbol = makeSymbolSCVal(key);
     auto thresholdU32 = makeU32(threshold);
@@ -1408,14 +1421,14 @@ ContractStorageInvocationTest::extendHostFunction(std::string const& key,
     auto tx = createInvokeTx(resources, makeSymbol(funcStr),
                              {keySymbol, thresholdU32, extendToU32}, 1'000,
                              resourceFee);
-    invokeTx(tx, expectSuccess, /*processPostApply=*/false);
+    invokeTx(tx, opResultCode, /*processPostApply=*/false);
 }
 
 void
 ContractStorageInvocationTest::resizeStorageAndExtend(
     std::string const& key, uint32_t numKiloBytes, uint32_t thresh,
     uint32_t extendTo, uint32_t writeBytes, uint32_t refundableFee,
-    bool expectSuccess)
+    int32_t opResultCode)
 {
     auto keySymbol = makeSymbolSCVal(key);
     auto storageLK = contractDataKey(mContractID, keySymbol,
@@ -1443,7 +1456,7 @@ ContractStorageInvocationTest::resizeStorageAndExtend(
         createInvokeTx(resources, makeSymbol(funcStr),
                        {keySymbol, numKiloBytesU32, threshU32, extendToU32},
                        1'000, resourceFee);
-    invokeTx(tx, /*expectSuccess=*/expectSuccess, false);
+    invokeTx(tx, /*opResultCode=*/opResultCode, false);
 }
 }
 }

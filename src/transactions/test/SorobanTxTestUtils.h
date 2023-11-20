@@ -59,7 +59,7 @@ class ContractInvocationTest
 
     void invokeArchivalOp(TransactionFrameBasePtr tx,
                           int64_t expectedRefundableFeeCharged,
-                          bool expectSuccess);
+                          int32_t opResultCode);
 
   protected:
     VirtualClock mClock;
@@ -142,7 +142,7 @@ class ContractInvocationTest
     bool isTxValid(TransactionFrameBasePtr tx);
 
     std::shared_ptr<TransactionMetaFrame>
-    invokeTx(TransactionFrameBasePtr tx, bool expectSuccess,
+    invokeTx(TransactionFrameBasePtr tx, int32_t opResultCode,
              bool processPostApply = true);
 
     void checkTTL(LedgerKey const& k, uint32_t expectedLiveUntilLedger);
@@ -150,9 +150,9 @@ class ContractInvocationTest
 
     void restoreOp(xdr::xvector<LedgerKey> const& readWrite,
                    int64_t expectedRefundableFeeCharged,
-                   bool expectSuccess = true);
+                   int32_t opResultCode = true);
     void extendOp(xdr::xvector<LedgerKey> const& readOnly, uint32_t extendTo,
-                  bool expectSuccess = true,
+                  int32_t opResultCode = true,
                   std::optional<uint32_t> expectedRefundableChargeOverride =
                       std::nullopt);
 };
@@ -198,12 +198,12 @@ class AssetContractInvocationTest : public ContractInvocationTest
             [](SorobanNetworkConfig&) {});
 
     void transfer(TestAccount& from, SCAddress const& toAddr, int64_t amount,
-                  bool expectSuccess);
+                  int32_t opResultCode);
     void mint(TestAccount& admin, SCAddress const& toAddr, int64_t amount,
-              bool expectSuccess);
-    void burn(TestAccount& from, int64_t amount, bool expectSuccess);
+              int32_t opResultCode);
+    void burn(TestAccount& from, int64_t amount, int32_t opResultCode);
     void clawback(TestAccount& admin, SCAddress const& fromAddr, int64_t amount,
-                  bool expectSuccess);
+                  int32_t opResultCode);
 };
 
 class ContractStorageInvocationTest : public WasmContractInvocationTest
@@ -216,33 +216,33 @@ class ContractStorageInvocationTest : public WasmContractInvocationTest
     }
 
     void put(std::string const& key, ContractDataDurability type, uint64_t val,
-             bool expectSuccess = true);
+             int32_t opResultCode = true);
     void putWithFootprint(std::string const& key, ContractDataDurability type,
                           uint64_t val, xdr::xvector<LedgerKey> const& readOnly,
                           xdr::xvector<LedgerKey> const& readWrite,
-                          bool expectSuccess, uint32_t writeBytes = 1000,
+                          int32_t opResultCode, uint32_t writeBytes = 1000,
                           uint32_t refundableFee = 40'000);
 
     uint64_t get(std::string const& key, ContractDataDurability type,
-                 bool expectSuccess = true);
+                 int32_t opResultCode = true);
     uint64_t getWithFootprint(std::string const& key,
                               ContractDataDurability type,
                               xdr::xvector<LedgerKey> const& readOnly,
                               xdr::xvector<LedgerKey> const& readWrite,
-                              bool expectSuccess, uint32_t readBytes = 10'000);
+                              int32_t opResultCode, uint32_t readBytes = 10'000);
 
     bool has(std::string const& key, ContractDataDurability type,
-             bool expectSuccess = true);
+             int32_t opResultCode = true);
     bool hasWithFootprint(std::string const& key, ContractDataDurability type,
                           xdr::xvector<LedgerKey> const& readOnly,
                           xdr::xvector<LedgerKey> const& readWrite,
-                          bool expectSuccess);
+                          int32_t opResultCode);
 
     void del(std::string const& key, ContractDataDurability type);
     void delWithFootprint(std::string const& key, ContractDataDurability type,
                           xdr::xvector<LedgerKey> const& readOnly,
                           xdr::xvector<LedgerKey> const& readWrite,
-                          bool expectSuccess);
+                          int32_t opResultCode);
 
     using ContractInvocationTest::checkTTL;
     void checkTTL(std::string const& key, ContractDataDurability type,
@@ -254,12 +254,12 @@ class ContractStorageInvocationTest : public WasmContractInvocationTest
 
     void extendHostFunction(std::string const& key, ContractDataDurability type,
                             uint32_t threshold, uint32_t extendTo,
-                            bool expectSuccess = true);
+                            int32_t opResultCode = true);
 
     void resizeStorageAndExtend(std::string const& key, uint32_t numKiloBytes,
                                 uint32_t thresh, uint32_t extendTo,
                                 uint32_t writeBytes, uint32_t refundableFee,
-                                bool expectSuccess);
+                                int32_t opResultCode);
 };
 }
 }
