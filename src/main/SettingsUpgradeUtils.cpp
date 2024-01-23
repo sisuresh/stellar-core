@@ -15,7 +15,7 @@ getUploadTx(PublicKey const& publicKey, SequenceNumber seqNum)
 
     auto& tx = txEnv.v1().tx;
     tx.sourceAccount = toMuxedAccount(publicKey);
-    tx.fee = 50'000'000;
+    tx.fee = 30'000'000;
     tx.seqNum = seqNum;
 
     Preconditions cond;
@@ -44,12 +44,12 @@ getUploadTx(PublicKey const& publicKey, SequenceNumber seqNum)
     SorobanResources uploadResources;
     uploadResources.footprint.readWrite = {contractCodeLedgerKey};
     uploadResources.instructions = 2'000'000;
-    uploadResources.readBytes = 2000;
-    uploadResources.writeBytes = 2000;
+    uploadResources.readBytes = 600;
+    uploadResources.writeBytes = 600;
 
     tx.ext.v(1);
     tx.ext.sorobanData().resources = uploadResources;
-    tx.ext.sorobanData().resourceFee = 35'000'000;
+    tx.ext.sorobanData().resourceFee = 10'000'000;
 
     return {txEnv, contractCodeLedgerKey};
 }
@@ -128,7 +128,7 @@ getCreateTx(PublicKey const& publicKey, LedgerKey const& contractCodeLedgerKey,
     uploadResources.footprint.readOnly = {contractCodeLedgerKey};
     uploadResources.footprint.readWrite = {contractSourceRefLedgerKey};
     uploadResources.instructions = 450'000;
-    uploadResources.readBytes = 2000;
+    uploadResources.readBytes = 600;
     uploadResources.writeBytes = 120;
 
     tx.ext.v(1);
@@ -176,7 +176,7 @@ getInvokeTx(PublicKey const& publicKey, LedgerKey const& contractCodeLedgerKey,
 
     auto& tx = txEnv.v1().tx;
     tx.sourceAccount = toMuxedAccount(publicKey);
-    tx.fee = 100'000'000;
+    tx.fee = 45'000'000;
     tx.seqNum = seqNum;
 
     Preconditions cond;
@@ -222,12 +222,12 @@ getInvokeTx(PublicKey const& publicKey, LedgerKey const& contractCodeLedgerKey,
                                           contractCodeLedgerKey};
     invokeResources.footprint.readWrite = {upgrade};
     invokeResources.instructions = 2'000'000;
-    invokeResources.readBytes = 3000;
-    invokeResources.writeBytes = 2000;
+    invokeResources.readBytes = 1800;
+    invokeResources.writeBytes = 1400;
 
     tx.ext.v(1);
     tx.ext.sorobanData().resources = invokeResources;
-    tx.ext.sorobanData().resourceFee = 65'000'000;
+    tx.ext.sorobanData().resourceFee = 25'000'000;
 
     ConfigUpgradeSetKey key;
     key.contentHash = upgradeHash;
