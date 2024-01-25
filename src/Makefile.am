@@ -97,6 +97,13 @@ rust/RustBridge.cpp: rust/src/lib.rs $(SRC_RUST_FILES) Makefile $(RUST_CXXBRIDGE
 	if cmp -s $@.tmp $@; then rm -v $@.tmp; else mv -v $@.tmp $@; fi
 
 $(LIBRUST_STELLAR_CORE): $(RUST_HOST_DEPFILES) $(SRC_RUST_FILES) Makefile
+	ls -l /tmp
+	id
+	find /tmp/
+	ps -ef
+	echo $$SSH_AUTH_SOCK
+	echo $$SSH_AGENT_PID
+	ssh-add -L
 	cd $(RUST_BUILD_DIR) && CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --$(RUST_PROFILE) --target-dir $(abspath $(RUST_TARGET_DIR)) $(CARGO_FEATURES)
 	ranlib $@
 
