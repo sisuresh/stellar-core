@@ -47,6 +47,7 @@ impl From<CxxLedgerInfo> for LedgerInfo {
             min_temp_entry_ttl: c.min_temp_entry_ttl,
             min_persistent_entry_ttl: c.min_persistent_entry_ttl,
             max_entry_ttl: c.max_entry_ttl,
+            new_field: c.max_entry_ttl,
         }
     }
 }
