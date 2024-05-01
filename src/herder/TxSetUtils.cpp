@@ -182,6 +182,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
         auto iter = accountQueue->mTxs.begin();
         while (iter != accountQueue->mTxs.end())
         {
+            TransactionResultPayload txPayload;
             auto tx = *iter;
             // In addition to checkValid, we also want to make sure that all but
             // the transaction with the lowest seqNum on a given sourceAccount
@@ -190,7 +191,8 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                 iter != accountQueue->mTxs.begin() &&
                 (tx->getMinSeqAge() != 0 || tx->getMinSeqLedgerGap() != 0);
             if (minSeqCheckIsInvalid ||
-                !tx->checkValid(app, ltx, lastSeq, lowerBoundCloseTimeOffset,
+                !tx->checkValid(app, ltx, txPayload, lastSeq,
+                                lowerBoundCloseTimeOffset,
                                 upperBoundCloseTimeOffset))
             {
                 invalidTxs.emplace_back(tx);
@@ -213,8 +215,8 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                             "result: {}",
                             lastSeq,
                             xdrToCerealString(tx->getEnvelope(),
-                                              "TransactionEnvelope"),
-                            tx->getResultCode());
+                                          "TransactionEnvelope"),
+                            txPayload.txResult.result.code());
                     }
                     return invalidTxs;
                 }
