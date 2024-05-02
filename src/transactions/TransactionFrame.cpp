@@ -59,6 +59,28 @@ int64_t const MAX_RESOURCE_FEE = 1LL << 50;
 using namespace std;
 using namespace stellar::txbridge;
 
+TransactionResultPayload::TransactionResultPayload(TransactionFrame const& tx)
+{
+    auto const& envelope = tx.getEnvelope();
+    auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
+                          ? envelope.v0().tx.operations
+                          : envelope.v1().tx.operations;
+    txResult.result.code(txFAILED);
+    txResult.result.results().resize(static_cast<uint32_t>(ops.size()));
+
+    // TODO: Remove mOperations from tx frame and build op pointers here
+    for (size_t i = 0; i < ops.size(); i++)
+    {
+        opFrames.push_back(tx.mOperations[i]);
+    }
+}
+
+TransactionResultPayloadPtr
+TransactionResultPayload::create(TransactionFrame const& tx)
+{
+    return TransactionResultPayloadPtr(new TransactionResultPayload(tx));
+}
+
 TransactionFrame::TransactionFrame(Hash const& networkID,
                                    TransactionEnvelope const& envelope)
     : mEnvelope(envelope), mNetworkID(networkID)
@@ -121,32 +143,48 @@ TransactionFrame::getContentsHash() const
 }
 
 void
-TransactionFrame::pushContractEvents(xdr::xvector<ContractEvent>&& evts)
+TransactionFrame::pushContractEvents(xdr::xvector<ContractEvent> const& evts,
+                                     TransactionResultPayload& resPayload)
 {
+    releaseAssertOrThrow(resPayload.sorobanExtension);
+    resPayload.sorobanExtension->mEvents = evts;
+
+    // TODO: Remove
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mEvents = evts;
 }
 
 void
-TransactionFrame::pushDiagnosticEvents(xdr::xvector<DiagnosticEvent>&& evts)
+TransactionFrame::pushDiagnosticEvents(
+    xdr::xvector<DiagnosticEvent> const& evts,
+    TransactionResultPayload& resPayload)
 {
-    releaseAssertOrThrow(mSorobanExtension);
-    auto& des = mSorobanExtension->mDiagnosticEvents;
+    releaseAssertOrThrow(resPayload.sorobanExtension);
+    auto& des = resPayload.sorobanExtension->mDiagnosticEvents;
     des.insert(des.end(), evts.begin(), evts.end());
+
+    // TODO: Remove
+    releaseAssertOrThrow(mSorobanExtension);
+    auto& des2 = mSorobanExtension->mDiagnosticEvents;
+    des2.insert(des2.end(), evts.begin(), evts.end());
 }
 
 void
-TransactionFrame::pushDiagnosticEvent(DiagnosticEvent&& evt)
+TransactionFrame::pushDiagnosticEvent(DiagnosticEvent const& evt,
+                                      TransactionResultPayload& resPayload)
 {
+    releaseAssertOrThrow(resPayload.sorobanExtension);
+    resPayload.sorobanExtension->mDiagnosticEvents.emplace_back(evt);
+
+    // TODO: Remove
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mDiagnosticEvents.emplace_back(evt);
 }
 
 void
-TransactionFrame::pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
-                                            SCErrorCode code,
-                                            std::string&& message,
-                                            xdr::xvector<SCVal>&& args)
+TransactionFrame::pushSimpleDiagnosticError(
+    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
+    xdr::xvector<SCVal>&& args, TransactionResultPayload& resPayload)
 {
     ContractEvent ce;
     ce.type = DIAGNOSTIC;
@@ -174,41 +212,43 @@ TransactionFrame::pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
                   std::back_inserter(*ce.body.v0().data.vec()));
     }
     DiagnosticEvent evt(false, std::move(ce));
-    pushDiagnosticEvent(std::move(evt));
+    pushDiagnosticEvent(evt, resPayload);
 }
 
 void
-TransactionFrame::pushApplyTimeDiagnosticError(Config const& cfg,
-                                               SCErrorType ty, SCErrorCode code,
-                                               std::string&& message,
-                                               xdr::xvector<SCVal>&& args)
+TransactionFrame::pushApplyTimeDiagnosticError(
+    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
+    TransactionResultPayload& resPayload, xdr::xvector<SCVal>&& args)
 {
     if (!cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
     {
         return;
     }
     pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args));
+                              std::move(args), resPayload);
 }
 
 void
-TransactionFrame::pushValidationTimeDiagnosticError(Config const& cfg,
-                                                    SCErrorType ty,
-                                                    SCErrorCode code,
-                                                    std::string&& message,
-                                                    xdr::xvector<SCVal>&& args)
+TransactionFrame::pushValidationTimeDiagnosticError(
+    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
+    TransactionResultPayload& resPayload, xdr::xvector<SCVal>&& args)
 {
     if (!cfg.ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION)
     {
         return;
     }
     pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args));
+                              std::move(args), resPayload);
 }
 
 void
-TransactionFrame::setReturnValue(SCVal&& returnValue)
+TransactionFrame::setReturnValue(SCVal const& returnValue,
+                                 TransactionResultPayload& resPayload)
 {
+    releaseAssertOrThrow(resPayload.sorobanExtension);
+    resPayload.sorobanExtension->mReturnValue = returnValue;
+
+    // TODO: Remove
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mReturnValue = returnValue;
 }
@@ -694,7 +734,8 @@ TransactionFrame::validateSorobanOpsConsistency() const
 bool
 TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
                                            Config const& appConfig,
-                                           uint32_t protocolVersion)
+                                           uint32_t protocolVersion,
+                                           TransactionResultPayload& resPayload)
 {
     auto const& resources = sorobanResources();
     auto const& readEntries = resources.footprint.readOnly;
@@ -704,6 +745,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushValidationTimeDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "transaction instructions resources exceed network config limit",
+            resPayload,
             {makeU64SCVal(resources.instructions),
              makeU64SCVal(config.txMaxInstructions())});
         return false;
@@ -713,6 +755,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-read resources exceed network config limit",
+            resPayload,
             {makeU64SCVal(resources.readBytes),
              makeU64SCVal(config.txMaxReadBytes())});
         return false;
@@ -722,6 +765,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-write resources exceed network config limit",
+            resPayload,
             {makeU64SCVal(resources.writeBytes),
              makeU64SCVal(config.txMaxWriteBytes())});
         return false;
@@ -732,6 +776,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-read resources exceed network config limit",
+            resPayload,
             {makeU64SCVal(readEntries.size() + writeEntries.size()),
              makeU64SCVal(config.txMaxReadLedgerEntries())});
         return false;
@@ -741,6 +786,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-write resources exceed network config limit",
+            resPayload,
             {makeU64SCVal(writeEntries.size()),
              makeU64SCVal(config.txMaxWriteLedgerEntries())});
         return false;
@@ -761,7 +807,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
             {
                 pushValidationTimeDiagnosticError(
                     appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
-                    "transaction footprint contains invalid trustline asset");
+                    "transaction footprint contains invalid trustline asset",
+                    resPayload);
                 return false;
             }
             break;
@@ -775,7 +822,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
             pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_UNEXPECTED_TYPE,
                 "transaction footprint contains unsupported ledger key type",
-                {makeU64SCVal(key.type())});
+                resPayload, {makeU64SCVal(key.type())});
             return false;
         default:
             throw std::runtime_error("unknown ledger key type");
@@ -786,6 +833,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
             pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction footprint key exceeds network config limit",
+                resPayload,
                 {makeU64SCVal(xdr::xdr_size(key)),
                  makeU64SCVal(config.maxContractDataKeySizeBytes())});
             return false;
@@ -813,7 +861,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         pushSimpleDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "total transaction size exceeds network config limit",
-            {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())});
+            {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())},
+            resPayload);
         return false;
     }
     return true;
@@ -934,7 +983,8 @@ TransactionFrame::computePreApplySorobanResourceFee(
 bool
 TransactionFrame::consumeRefundableSorobanResources(
     uint32_t contractEventSizeBytes, int64_t rentFee, uint32_t protocolVersion,
-    SorobanNetworkConfig const& sorobanConfig, Config const& cfg)
+    SorobanNetworkConfig const& sorobanConfig, Config const& cfg,
+    TransactionResultPayload& resPayload)
 {
     ZoneScoped;
     releaseAssertOrThrow(isSoroban());
@@ -956,6 +1006,7 @@ TransactionFrame::consumeRefundableSorobanResources(
             cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "refundable resource fee was not sufficient to cover the ledger "
             "storage rent: {} > {}",
+            resPayload,
             {makeU64SCVal(consumedRentFee), makeU64SCVal(feeRefund)});
         return false;
     }
@@ -973,6 +1024,7 @@ TransactionFrame::consumeRefundableSorobanResources(
             cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "refundable resource fee was not sufficient to cover the events "
             "fee after paying for ledger storage rent: {} > {}",
+            resPayload,
             {makeU64SCVal(consumedFee.refundable_fee),
              makeU64SCVal(feeRefund)});
         return false;
@@ -1170,8 +1222,7 @@ TransactionFrame::commonValidPreSeqNum(
             return false;
         }
 
-        if (!checkSorobanResourceAndSetError(app, ledgerVersion,
-                                             resPayload.txResult))
+        if (!checkSorobanResourceAndSetError(app, ledgerVersion, resPayload))
         {
             return false;
         }
@@ -1184,6 +1235,7 @@ TransactionFrame::commonValidPreSeqNum(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is higher than the "
                 "full transaction fee",
+                resPayload,
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(getFullFee())});
 
@@ -1199,7 +1251,7 @@ TransactionFrame::commonValidPreSeqNum(
         {
             pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
-                "transaction resource fees cannot be added",
+                "transaction resource fees cannot be added", resPayload,
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
 
@@ -1217,6 +1269,7 @@ TransactionFrame::commonValidPreSeqNum(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is lower than the "
                 "actual Soroban resource fee",
+                resPayload,
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(resourceFees)});
 
@@ -1240,7 +1293,7 @@ TransactionFrame::commonValidPreSeqNum(
                         "Found duplicate key in the Soroban footprint; every "
                         "key across read-only and read-write footprints has to "
                         "be unique.",
-                        {});
+                        resPayload, {});
 
                     resPayload.txResult.result.code(txSOROBAN_INVALID);
 
@@ -1695,7 +1748,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     {
         for (auto& op : mOperations)
         {
-            if (!op->checkValid(app, signatureChecker, ltx, false))
+            if (!op->checkValid(app, signatureChecker, ltx, false, resPayload))
             {
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
@@ -1730,16 +1783,16 @@ TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 }
 
 bool
-TransactionFrame::checkSorobanResourceAndSetError(Application& app,
-                                                  uint32_t ledgerVersion,
-                                                  TransactionResult& txResult)
+TransactionFrame::checkSorobanResourceAndSetError(
+    Application& app, uint32_t ledgerVersion,
+    TransactionResultPayload& resPayload)
 {
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
-    if (!validateSorobanResources(sorobanConfig, app.getConfig(),
-                                  ledgerVersion))
+    if (!validateSorobanResources(sorobanConfig, app.getConfig(), ledgerVersion,
+                                  resPayload))
     {
-        txResult.result.code(txSOROBAN_INVALID);
+        resPayload.txResult.result.code(txSOROBAN_INVALID);
 
         // TODO: Remove
         getResult().result.code(txSOROBAN_INVALID);
@@ -1791,6 +1844,7 @@ bool
 TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   Application& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& outerMeta,
+                                  TransactionResultPayload& resPayload,
                                   Hash const& sorobanBasePrngSeed)
 {
     ZoneScoped;
@@ -1817,7 +1871,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         uint64_t opNum{0};
-        for (auto& op : mOperations)
+        for (auto& op : resPayload.opFrames)
         {
             auto time = opTimer.TimeScope();
             LedgerTxn ltxOp(ltxTx);
@@ -1833,7 +1887,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             }
             ++opNum;
 
-            bool txRes = op->apply(app, signatureChecker, ltxOp, subSeed);
+            bool txRes =
+                op->apply(app, signatureChecker, ltxOp, subSeed, resPayload);
 
             if (!txRes)
             {
@@ -1865,6 +1920,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             {
                 if (!signatureChecker.checkAllSignaturesUsed())
                 {
+                    resPayload.txResult.result.code(txBAD_AUTH_EXTRA);
+
+                    // TODO: Remove
                     getResult().result.code(txBAD_AUTH_EXTRA);
                     // this should never happen: malformed transaction
                     // should not be accepted by nodes
@@ -1882,6 +1940,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                                ProtocolVersion::V_14) &&
                      ltxTx.hasSponsorshipEntry())
             {
+                resPayload.txResult.result.code(txBAD_SPONSORSHIP);
+
+                // TODO: Remove
                 getResult().result.code(txBAD_SPONSORSHIP);
                 return false;
             }
@@ -1925,6 +1986,12 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                     ledgerVersion,
                     app.getLedgerManager().getSorobanNetworkConfig(),
                     app.getConfig());
+
+                resPayload.sorobanExtension->mFeeRefund =
+                    declaredSorobanResourceFee() -
+                    preApplyFee.non_refundable_fee;
+
+                // TODO: Remove
                 mSorobanExtension->mFeeRefund = declaredSorobanResourceFee() -
                                                 preApplyFee.non_refundable_fee;
                 outerMeta.pushDiagnosticEvents(
@@ -1992,6 +2059,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                            "operations, see logs for details.");
     }
     // This is only reachable if an exception is thrown
+    resPayload.txResult.result.code(txINTERNAL_ERROR);
+
+    // TODO: Remove
     getResult().result.code(txINTERNAL_ERROR);
 
     // We only increase the internal-error metric count if the ledger is a
@@ -2029,10 +2099,21 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                                       SOROBAN_PROTOCOL_VERSION) &&
             isSoroban())
         {
+            // TODO: Remove
             releaseAssertOrThrow(mSorobanExtension);
+            releaseAssertOrThrow(resPayload.sorobanExtension);
+
             sorobanResourceFee = computePreApplySorobanResourceFee(
                 ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
                 app.getConfig());
+
+            resPayload.sorobanExtension->mConsumedNonRefundableFee =
+                sorobanResourceFee->non_refundable_fee;
+            resPayload.sorobanExtension->mFeeRefund =
+                declaredSorobanResourceFee() -
+                sorobanResourceFee->non_refundable_fee;
+
+            // TODO: Remove
             mSorobanExtension->mConsumedNonRefundableFee =
                 sorobanResourceFee->non_refundable_fee;
             mSorobanExtension->mFeeRefund =
@@ -2040,8 +2121,6 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                 sorobanResourceFee->non_refundable_fee;
         }
         LedgerTxn ltxTx(ltx);
-        // TODO: Fix
-        TransactionResultPayload resPayload;
         auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
                               0, 0, sorobanResourceFee, resPayload);
         if (cv >= ValidationType::kInvalidUpdateSeqNum)
@@ -2068,7 +2147,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                 }
 
                 ok = applyOperations(signatureChecker, app, ltx, meta,
-                                     sorobanBasePrngSeed);
+                                     resPayload, sorobanBasePrngSeed);
             }
             return ok;
         }
@@ -2167,12 +2246,10 @@ TransactionFrame::getSize() const
 
 #ifdef BUILD_TESTS
 TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
-    : mTransactionFrame(tx)
+    : mTransactionFrame(tx), mTransactionResultPayload(tx->toTransactionFrame())
 {
     releaseAssert(mTransactionFrame);
     releaseAssert(!mTransactionFrame->isTestTx());
-
-    // TODO: Properly initialize mTransactionResultPayload
 }
 
 TransactionTestFramePtr
@@ -2275,10 +2352,11 @@ TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 
 bool
 TransactionTestFrame::checkSorobanResourceAndSetError(
-    Application& app, uint32_t ledgerVersion, TransactionResult& txResult)
+    Application& app, uint32_t ledgerVersion,
+    TransactionResultPayload& resPayload)
 {
     return mTransactionFrame->checkSorobanResourceAndSetError(
-        app, ledgerVersion, txResult);
+        app, ledgerVersion, resPayload);
 }
 
 TransactionEnvelope const&

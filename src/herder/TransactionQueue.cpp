@@ -230,13 +230,14 @@ TransactionQueue::sourceAccountPending(AccountID const& accountID) const
     return mAccountStates.find(accountID) != mAccountStates.end();
 }
 
-std::pair<TransactionQueue::AddResult, TransactionResultPayload>
+std::pair<TransactionQueue::AddResult, TransactionResultPayloadPtr>
 TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                          AccountStates::iterator& stateIter,
                          std::vector<std::pair<TxStackPtr, bool>>& txsToEvict)
 {
     ZoneScoped;
-    TransactionResultPayload resPayload;
+    TransactionResultPayloadPtr resPayload =
+        TransactionResultPayload::create(tx->toTransactionFrame());
     if (isBanned(tx->getFullHash()))
     {
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
@@ -253,7 +254,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         // TODO: Remove
         tx->getResult().result.code(txMALFORMED);
 
-        resPayload.txResult.result.code(txMALFORMED);
+        resPayload->txResult.result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 
@@ -282,7 +283,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 // TODO: Remove
                 tx->getResult().result.code(txBAD_SEQ);
 
-                resPayload.txResult.result.code(txBAD_SEQ);
+                resPayload->txResult.result.code(txBAD_SEQ);
                 return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                         resPayload};
             }
@@ -297,7 +298,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                         mApp.getLedgerManager()
                             .getLastClosedLedgerHeader()
                             .header.ledgerVersion,
-                        resPayload.txResult))
+                        *resPayload))
                 {
                     return {AddResult::ADD_STATUS_ERROR, resPayload};
                 }
@@ -327,8 +328,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                     tx->getResult().result.code(txINSUFFICIENT_FEE);
                     tx->getResult().feeCharged = minFee;
 
-                    resPayload.txResult.result.code(txINSUFFICIENT_FEE);
-                    resPayload.txResult.feeCharged = minFee;
+                    resPayload->txResult.result.code(txINSUFFICIENT_FEE);
+                    resPayload->txResult.feeCharged = minFee;
                     return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                             resPayload};
                 }
@@ -359,8 +360,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             tx->getResult().result.code(txINSUFFICIENT_FEE);
             tx->getResult().feeCharged = canAddRes.second;
 
-            resPayload.txResult.result.code(txINSUFFICIENT_FEE);
-            resPayload.txResult.feeCharged = canAddRes.second;
+            resPayload->txResult.result.code(txINSUFFICIENT_FEE);
+            resPayload->txResult.feeCharged = canAddRes.second;
             return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
         }
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
@@ -378,7 +379,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
     }
 
-    if (!tx->checkValid(mApp, ltx, resPayload, 0, 0,
+    if (!tx->checkValid(mApp, ltx, *resPayload, 0, 0,
                         getUpperBoundCloseTimeOffset(mApp, closeTime)))
     {
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
@@ -397,7 +398,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         // TODO: Remove
         tx->getResult().result.code(txINSUFFICIENT_BALANCE);
 
-        resPayload.txResult.result.code(txINSUFFICIENT_BALANCE);
+        resPayload->txResult.result.code(txINSUFFICIENT_BALANCE);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 
@@ -540,7 +541,7 @@ TransactionQueue::findAllAssetPairsInvolvedInPaymentLoops(
     return ret;
 }
 
-std::pair<TransactionQueue::AddResult, TransactionResultPayload>
+std::pair<TransactionQueue::AddResult, TransactionResultPayloadPtr>
 TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
 {
     ZoneScoped;
@@ -558,8 +559,9 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
         // TODO: Remove
         tx->getResult().result.code(txMALFORMED);
 
-        TransactionResultPayload resPayload;
-        resPayload.txResult.result.code(txMALFORMED);
+        auto resPayload =
+            TransactionResultPayload::create(tx->toTransactionFrame());
+        resPayload->txResult.result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 

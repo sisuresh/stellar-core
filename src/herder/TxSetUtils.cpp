@@ -182,8 +182,8 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
         auto iter = accountQueue->mTxs.begin();
         while (iter != accountQueue->mTxs.end())
         {
-            TransactionResultPayload txPayload;
             auto tx = *iter;
+            TransactionResultPayload txPayload(tx->toTransactionFrame());
             // In addition to checkValid, we also want to make sure that all but
             // the transaction with the lowest seqNum on a given sourceAccount
             // do not have minSeqAge and minSeqLedgerGap set
