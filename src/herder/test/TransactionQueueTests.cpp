@@ -1251,7 +1251,7 @@ TEST_CASE("Soroban TransactionQueue limits",
         auto [status, txPayload] =
             app->getHerder().recvTransaction(badTx, false);
         REQUIRE(status == TransactionQueue::AddResult::ADD_STATUS_ERROR);
-        REQUIRE(txPayload.txResult.result.code() == txMALFORMED);
+        REQUIRE(txPayload->txResult.result.code() == txMALFORMED);
         // TODO: Remove
         REQUIRE(badTx->getResult().result.code() == txMALFORMED);
     }
@@ -1364,9 +1364,9 @@ TEST_CASE("Soroban TransactionQueue limits",
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
 
-                REQUIRE(resPayload.txResult.result.code() ==
+                REQUIRE(resPayload->txResult.result.code() ==
                         TransactionResultCode::txINSUFFICIENT_FEE);
-                REQUIRE(resPayload.txResult.feeCharged == expectedFeeCharged);
+                REQUIRE(resPayload->txResult.feeCharged == expectedFeeCharged);
 
                 // TODO: Remove
                 REQUIRE(tx2->getResultCode() ==
@@ -1385,7 +1385,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                 REQUIRE(status ==
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
-                REQUIRE(resPayload.txResult.result.code() ==
+                REQUIRE(resPayload->txResult.result.code() ==
                         TransactionResultCode::txINSUFFICIENT_BALANCE);
 
                 // TODO: Remove
@@ -1418,7 +1418,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                 REQUIRE(status ==
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
-                REQUIRE(resPayload.txResult.result.code() ==
+                REQUIRE(resPayload->txResult.result.code() ==
                         TransactionResultCode::txSOROBAN_INVALID);
 
                 // TODO: Remove
@@ -1437,7 +1437,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
 
-                REQUIRE(resPayload.txResult.result.code() ==
+                REQUIRE(resPayload->txResult.result.code() ==
                         TransactionResultCode::txMALFORMED);
 
                 // TODO: Remove
