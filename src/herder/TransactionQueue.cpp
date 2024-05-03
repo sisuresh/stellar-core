@@ -237,7 +237,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
 {
     ZoneScoped;
     TransactionResultPayloadPtr resPayload =
-        TransactionResultPayload::create(tx->toTransactionFrame());
+        std::make_shared<TransactionResultPayload>(tx->toTransactionFrame());
     if (isBanned(tx->getFullHash()))
     {
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
@@ -559,8 +559,8 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
         // TODO: Remove
         tx->getResult().result.code(txMALFORMED);
 
-        auto resPayload =
-            TransactionResultPayload::create(tx->toTransactionFrame());
+        auto resPayload = std::make_shared<TransactionResultPayload>(
+            tx->toTransactionFrame());
         resPayload->txResult.result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
