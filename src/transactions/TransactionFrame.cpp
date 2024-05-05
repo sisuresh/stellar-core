@@ -75,6 +75,46 @@ TransactionResultPayload::TransactionResultPayload(TransactionFrame& tx)
     }
 }
 
+bool
+TransactionResultPayload::isFeeBump() const
+{
+    return outerFeeBumpResult.has_value();
+}
+
+TransactionResult&
+TransactionResultPayload::getResult()
+{
+    if (outerFeeBumpResult)
+    {
+        return *outerFeeBumpResult;
+    }
+
+    return txResult;
+}
+
+TransactionResult const&
+TransactionResultPayload::getResult() const
+{
+    if (outerFeeBumpResult)
+    {
+        return *outerFeeBumpResult;
+    }
+
+    return txResult;
+}
+
+TransactionResultCode
+TransactionResultPayload::getResultCode() const
+{
+    return getResult().result.code();
+}
+
+void
+TransactionResultPayload::initializeFeeBumpResult()
+{
+    outerFeeBumpResult = std::make_optional<TransactionResult>();
+}
+
 TransactionFrame::TransactionFrame(Hash const& networkID,
                                    TransactionEnvelope const& envelope)
     : mEnvelope(envelope), mNetworkID(networkID)
@@ -569,8 +609,8 @@ TransactionFrame::resetResults(LedgerHeader const& header,
                     : mEnvelope.v1().tx.operations;
 
     // pre-allocates the results for all operations
-    resPayload.txResult.result.code(txSUCCESS);
-    resPayload.txResult.result.results().resize(
+    resPayload.getInnerResult().result.code(txSUCCESS);
+    resPayload.getInnerResult().result.results().resize(
         static_cast<uint32_t>(ops.size()));
 
     // TODO: Remove
@@ -592,7 +632,7 @@ TransactionFrame::resetResults(LedgerHeader const& header,
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
-    resPayload.txResult.feeCharged = getFee(header, baseFee, applying);
+    resPayload.getInnerResult().feeCharged = getFee(header, baseFee, applying);
 
     // TODO: Remove
     getResult().feeCharged = getFee(header, baseFee, applying);
@@ -892,7 +932,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
         return 0;
     }
 
-    resPayload.getResult().feeCharged -= feeRefund;
+    resPayload.getInnerResult().feeCharged -= feeRefund;
     // TODO: Remove
     getResult().feeCharged -= feeRefund;
 
@@ -1145,7 +1185,7 @@ TransactionFrame::commonValidPreSeqNum(
         (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_13) &&
          mEnvelope.type() == ENVELOPE_TYPE_TX_V0))
     {
-        resPayload.txResult.result.code(txNOT_SUPPORTED);
+        resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
 
         // TODO: Remove
         getResult().result.code(txNOT_SUPPORTED);
@@ -1156,7 +1196,7 @@ TransactionFrame::commonValidPreSeqNum(
         mEnvelope.type() == ENVELOPE_TYPE_TX &&
         mEnvelope.v1().tx.cond.type() == PRECOND_V2)
     {
-        resPayload.txResult.result.code(txNOT_SUPPORTED);
+        resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
 
         // TODO: Remove
         getResult().result.code(txNOT_SUPPORTED);
@@ -1170,7 +1210,7 @@ TransactionFrame::commonValidPreSeqNum(
         static_assert(decltype(PreconditionsV2::extraSigners)::max_size() == 2);
         if (extraSigners.size() == 2 && extraSigners[0] == extraSigners[1])
         {
-            resPayload.txResult.result.code(txMALFORMED);
+            resPayload.getInnerResult().result.code(txMALFORMED);
 
             // TODO: Remove
             getResult().result.code(txMALFORMED);
@@ -1182,7 +1222,7 @@ TransactionFrame::commonValidPreSeqNum(
             if (signer.type() == SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD &&
                 signer.ed25519SignedPayload().payload.empty())
             {
-                resPayload.txResult.result.code(txMALFORMED);
+                resPayload.getInnerResult().result.code(txMALFORMED);
 
                 // TODO: Remove
                 getResult().result.code(txMALFORMED);
@@ -1193,7 +1233,7 @@ TransactionFrame::commonValidPreSeqNum(
 
     if (getNumOperations() == 0)
     {
-        resPayload.txResult.result.code(txMISSING_OPERATION);
+        resPayload.getInnerResult().result.code(txMISSING_OPERATION);
 
         // TODO: Remove
         getResult().result.code(txMISSING_OPERATION);
@@ -1202,7 +1242,7 @@ TransactionFrame::commonValidPreSeqNum(
 
     if (!validateSorobanOpsConsistency())
     {
-        resPayload.txResult.result.code(txMALFORMED);
+        resPayload.getInnerResult().result.code(txMALFORMED);
 
         // TODO: Remove
         getResult().result.code(txMALFORMED);
@@ -1212,7 +1252,7 @@ TransactionFrame::commonValidPreSeqNum(
     {
         if (protocolVersionIsBefore(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
         {
-            resPayload.txResult.result.code(txMALFORMED);
+            resPayload.getInnerResult().result.code(txMALFORMED);
 
             // TODO: Remove
             getResult().result.code(txMALFORMED);
@@ -1236,7 +1276,7 @@ TransactionFrame::commonValidPreSeqNum(
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(getFullFee())});
 
-            resPayload.txResult.result.code(txSOROBAN_INVALID);
+            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
 
             // TODO: Remove
             getResult().result.code(txSOROBAN_INVALID);
@@ -1252,7 +1292,7 @@ TransactionFrame::commonValidPreSeqNum(
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
 
-            resPayload.txResult.result.code(txSOROBAN_INVALID);
+            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
 
             // TODO: Remove
             getResult().result.code(txSOROBAN_INVALID);
@@ -1270,7 +1310,7 @@ TransactionFrame::commonValidPreSeqNum(
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(resourceFees)});
 
-            resPayload.txResult.result.code(txSOROBAN_INVALID);
+            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
 
             // TODO: Remove
             getResult().result.code(txSOROBAN_INVALID);
@@ -1292,7 +1332,7 @@ TransactionFrame::commonValidPreSeqNum(
                         "be unique.",
                         resPayload, {});
 
-                    resPayload.txResult.result.code(txSOROBAN_INVALID);
+                    resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
 
                     // TODO: Remove
                     getResult().result.code(txSOROBAN_INVALID);
@@ -1325,7 +1365,7 @@ TransactionFrame::commonValidPreSeqNum(
     if (isTooEarly(header, lowerBoundCloseTimeOffset))
     {
 
-        resPayload.txResult.result.code(txTOO_EARLY);
+        resPayload.getInnerResult().result.code(txTOO_EARLY);
 
         // TODO: Remove
         getResult().result.code(txTOO_EARLY);
@@ -1334,7 +1374,7 @@ TransactionFrame::commonValidPreSeqNum(
     if (isTooLate(header, upperBoundCloseTimeOffset))
     {
 
-        resPayload.txResult.result.code(txTOO_LATE);
+        resPayload.getInnerResult().result.code(txTOO_LATE);
 
         // TODO: Remove
         getResult().result.code(txTOO_LATE);
@@ -1344,7 +1384,7 @@ TransactionFrame::commonValidPreSeqNum(
     if (chargeFee &&
         getInclusionFee() < getMinInclusionFee(*this, header.current()))
     {
-        resPayload.txResult.result.code(txINSUFFICIENT_FEE);
+        resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
 
         // TODO: Remove
         getResult().result.code(txINSUFFICIENT_FEE);
@@ -1353,7 +1393,7 @@ TransactionFrame::commonValidPreSeqNum(
     if (!chargeFee && getInclusionFee() < 0)
     {
 
-        resPayload.txResult.result.code(txINSUFFICIENT_FEE);
+        resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
 
         // TODO: Remove
         getResult().result.code(txINSUFFICIENT_FEE);
@@ -1363,7 +1403,7 @@ TransactionFrame::commonValidPreSeqNum(
     if (!loadSourceAccount(ltx, header))
     {
 
-        resPayload.txResult.result.code(txNO_ACCOUNT);
+        resPayload.getInnerResult().result.code(txNO_ACCOUNT);
 
         // TODO: Remove
         getResult().result.code(txNO_ACCOUNT);
@@ -1443,7 +1483,7 @@ TransactionFrame::processSignatures(ValidationType cv,
 
     if (!signatureChecker.checkAllSignaturesUsed())
     {
-        resPayload.txResult.result.code(txBAD_AUTH_EXTRA);
+        resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
 
         // TODO: Remove
         getResult().result.code(txBAD_AUTH_EXTRA);
@@ -1523,7 +1563,7 @@ TransactionFrame::commonValid(Application& app,
         }
         if (isBadSeq(header, current))
         {
-            resPayload.txResult.result.code(txBAD_SEQ);
+            resPayload.getInnerResult().result.code(txBAD_SEQ);
 
             // TODO: Remove
             getResult().result.code(txBAD_SEQ);
@@ -1535,7 +1575,7 @@ TransactionFrame::commonValid(Application& app,
 
     if (isTooEarlyForAccount(header, sourceAccount, lowerBoundCloseTimeOffset))
     {
-        resPayload.txResult.result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
+        resPayload.getInnerResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
 
         // TODO: Remove
         getResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
@@ -1546,7 +1586,7 @@ TransactionFrame::commonValid(Application& app,
             signatureChecker, sourceAccount,
             sourceAccount.current().data.account().thresholds[THRESHOLD_LOW]))
     {
-        resPayload.txResult.result.code(txBAD_AUTH);
+        resPayload.getInnerResult().result.code(txBAD_AUTH);
 
         // TODO: Remove
         getResult().result.code(txBAD_AUTH);
@@ -1557,7 +1597,7 @@ TransactionFrame::commonValid(Application& app,
                                   ProtocolVersion::V_19) &&
         !checkExtraSigners(signatureChecker))
     {
-        resPayload.txResult.result.code(txBAD_AUTH);
+        resPayload.getInnerResult().result.code(txBAD_AUTH);
 
         // TODO: Remove
         getResult().result.code(txBAD_AUTH);
@@ -1578,7 +1618,7 @@ TransactionFrame::commonValid(Application& app,
     // liabilities
     if (chargeFee && getAvailableBalance(header, sourceAccount) < feeToPay)
     {
-        resPayload.txResult.result.code(txINSUFFICIENT_BALANCE);
+        resPayload.getInnerResult().result.code(txINSUFFICIENT_BALANCE);
 
         // TODO: Remove
         getResult().result.code(txINSUFFICIENT_BALANCE);
@@ -1607,7 +1647,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 
     auto& acc = sourceAccount.current().data.account();
 
-    int64_t& fee = resPayload.txResult.feeCharged;
+    int64_t& fee = resPayload.getInnerResult().feeCharged;
     if (fee > 0)
     {
         fee = std::min(acc.balance, fee);
@@ -1631,7 +1671,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
     }
 
     // TODO: remove
-    getResult().feeCharged = resPayload.txResult.feeCharged;
+    getResult().feeCharged = resPayload.getInnerResult().feeCharged;
 }
 
 bool
@@ -1713,7 +1753,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
 
     if (!XDRProvidesValidFee())
     {
-        resPayload.txResult.result.code(txMALFORMED);
+        resPayload.getInnerResult().result.code(txMALFORMED);
 
         // TODO: Remove
         getResult().result.code(txMALFORMED);
@@ -1762,7 +1802,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         if (!signatureChecker.checkAllSignaturesUsed())
         {
             res = false;
-            resPayload.txResult.result.code(txBAD_AUTH_EXTRA);
+            resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
 
             // TODO: Remove
             getResult().result.code(txBAD_AUTH_EXTRA);
@@ -1793,7 +1833,7 @@ TransactionFrame::checkSorobanResourceAndSetError(
     if (!validateSorobanResources(sorobanConfig, app.getConfig(), ledgerVersion,
                                   resPayload))
     {
-        resPayload.txResult.result.code(txSOROBAN_INVALID);
+        resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
 
         // TODO: Remove
         getResult().result.code(txSOROBAN_INVALID);
@@ -1829,7 +1869,7 @@ TransactionFrame::markResultFailed(TransactionResultPayload& resPayload)
     // then a different XDR structure is constructed. However, txFAILED and
     // txSUCCESS have the same underlying field number so this does not
     // occur.
-    resPayload.txResult.result.code(txFAILED);
+    resPayload.getInnerResult().result.code(txFAILED);
 
     // TODO: REMOVE
     getResult().result.code(txFAILED);
@@ -1924,7 +1964,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             {
                 if (!signatureChecker.checkAllSignaturesUsed())
                 {
-                    resPayload.txResult.result.code(txBAD_AUTH_EXTRA);
+                    resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
 
                     // TODO: Remove
                     getResult().result.code(txBAD_AUTH_EXTRA);
@@ -1944,7 +1984,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                                ProtocolVersion::V_14) &&
                      ltxTx.hasSponsorshipEntry())
             {
-                resPayload.txResult.result.code(txBAD_SPONSORSHIP);
+                resPayload.getInnerResult().result.code(txBAD_SPONSORSHIP);
 
                 // TODO: Remove
                 getResult().result.code(txBAD_SPONSORSHIP);
@@ -2063,7 +2103,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                            "operations, see logs for details.");
     }
     // This is only reachable if an exception is thrown
-    resPayload.txResult.result.code(txINTERNAL_ERROR);
+    resPayload.getInnerResult().result.code(txINTERNAL_ERROR);
 
     // TODO: Remove
     getResult().result.code(txINTERNAL_ERROR);

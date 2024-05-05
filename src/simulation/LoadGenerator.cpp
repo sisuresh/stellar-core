@@ -2156,10 +2156,10 @@ LoadGenerator::execute(TransactionTestFramePtr& txf, LoadGenMode mode,
                   txf->isSoroban() ? "soroban"
                                    : xdrToCerealString(txf->getEnvelope(),
                                                    "TransactionEnvelope"),
-                  xdrToCerealString(resPayload->txResult, "TransactionResult"));
+                  xdrToCerealString(resPayload->getResult(), "TransactionResult"));
         if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
         {
-            code = resPayload->txResult.result.code();
+            code = resPayload->getResultCode();
         }
         txm.mTxnRejected.Mark();
     }
