@@ -88,9 +88,6 @@ class TransactionFrameBase
 
     virtual std::vector<Operation> const& getRawOperations() const = 0;
 
-    virtual TransactionResult& getResult() = 0;
-    virtual TransactionResultCode getResultCode() const = 0;
-
     virtual SequenceNumber getSeqNum() const = 0;
     virtual AccountID getFeeSourceID() const = 0;
     virtual AccountID getSourceID() const = 0;

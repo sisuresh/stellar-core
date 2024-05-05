@@ -546,8 +546,7 @@ std::pair<TransactionQueue::AddResult, TransactionResultPayloadPtr>
 HerderImpl::recvTransaction(TransactionFrameBasePtr tx, bool submittedFromSelf)
 {
     ZoneScoped;
-    auto payload =
-        std::make_shared<TransactionResultPayload>(tx->toTransactionFrame());
+    auto payload = TransactionResultPayload::create(tx->toTransactionFrame());
     std::pair<TransactionQueue::AddResult, TransactionResultPayloadPtr> result{
         TransactionQueue::AddResult::ADD_STATUS_COUNT, payload};
 

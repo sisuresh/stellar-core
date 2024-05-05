@@ -900,8 +900,8 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     std::vector<TransactionResultPayloadPtr> txResults;
     for (auto tx : txs)
     {
-        txResults.emplace_back(std::make_shared<TransactionResultPayload>(
-            tx->toTransactionFrame()));
+        txResults.emplace_back(
+            TransactionResultPayload::create(tx->toTransactionFrame()));
     }
 
     // first, prefetch source accounts for txset, then charge fees
@@ -1547,7 +1547,7 @@ LedgerManagerImpl::applyTransactions(
         tx->processPostApply(mApp, ltx, tm, txResult);
         TransactionResultPair results;
         results.transactionHash = tx->getContentsHash();
-        results.result = tx->getResult();
+        results.result = txResult.getResult();
         if (results.result.result.code() == TransactionResultCode::txSUCCESS)
         {
             if (tx->isSoroban())

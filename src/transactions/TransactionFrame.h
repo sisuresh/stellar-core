@@ -65,15 +65,18 @@ struct SorobanData
     }
 };
 
-class TransactionResultPayload : NonMovableOrCopyable
+class TransactionResultPayload
+    : public NonMovableOrCopyable,
+      public std::enable_shared_from_this<TransactionResultPayload>
 {
   private:
     TransactionResult txResult;
     std::optional<TransactionResult> outerFeeBumpResult;
 
-  public:
     TransactionResultPayload(TransactionFrame& tx);
 
+  public:
+    static TransactionResultPayloadPtr create(TransactionFrame& tx);
     void initializeFeeBumpResult();
 
     bool isFeeBump() const;
@@ -86,6 +89,12 @@ class TransactionResultPayload : NonMovableOrCopyable
     TransactionResult& getResult();
     TransactionResult const& getResult() const;
     TransactionResultCode getResultCode() const;
+
+    TransactionResultPayloadPtr
+    getShared()
+    {
+        return shared_from_this();
+    }
 
     // TODO: Make private
     std::vector<std::shared_ptr<OperationFrame>> opFrames;
@@ -214,24 +223,6 @@ class TransactionFrame : public TransactionFrameBase
 
     Hash const& getFullHash() const override;
     Hash const& getContentsHash() const override;
-
-    TransactionResult const&
-    getResult() const
-    {
-        return mResult;
-    }
-
-    TransactionResult&
-    getResult() override
-    {
-        return mResult;
-    }
-
-    TransactionResultCode
-    getResultCode() const override
-    {
-        return getResult().result.code();
-    }
 
     void pushContractEvents(xdr::xvector<ContractEvent> const& evts,
                             TransactionResultPayload& resPayload);
@@ -394,9 +385,10 @@ class TransactionTestFrame : public TransactionFrameBase
   private:
     // TODO: Make const
     TransactionFrameBasePtr mTransactionFrame;
-    TransactionResultPayload mTransactionResultPayload;
+    TransactionResultPayloadPtr mTransactionResultPayload;
 
     TransactionTestFrame(TransactionFrameBasePtr tx);
+    void updateResultPayload(TransactionResultPayload& resPayload);
 
   public:
     static TransactionTestFramePtr fromTxFrame(TransactionFrameBasePtr txFrame);
@@ -465,8 +457,8 @@ class TransactionTestFrame : public TransactionFrameBase
 
     std::vector<Operation> const& getRawOperations() const override;
 
-    TransactionResult& getResult() override;
-    TransactionResultCode getResultCode() const override;
+    TransactionResult& getResult();
+    TransactionResultCode getResultCode() const;
 
     SequenceNumber getSeqNum() const override;
     AccountID getFeeSourceID() const override;
