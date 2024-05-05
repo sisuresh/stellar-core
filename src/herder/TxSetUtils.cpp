@@ -216,7 +216,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                             lastSeq,
                             xdrToCerealString(tx->getEnvelope(),
                                           "TransactionEnvelope"),
-                            txPayload.txResult.result.code());
+                            txPayload.getResultCode());
                     }
                     return invalidTxs;
                 }

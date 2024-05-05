@@ -65,15 +65,30 @@ struct SorobanData
     }
 };
 
-// TODO: Make proper class
 class TransactionResultPayload : NonMovableOrCopyable
 {
+  private:
+    TransactionResult txResult;
+    std::optional<TransactionResult> outerFeeBumpResult;
+
   public:
     TransactionResultPayload(TransactionFrame& tx);
 
-    TransactionResult txResult;
+    void initializeFeeBumpResult();
+
+    bool isFeeBump() const;
+
+    // Returns the inner most result.
+    TransactionResult& getInnerResult();
+
+    // Returns the outer most result. If payload refers to a Fee Bump TX, the
+    // fee bump result is returned. Otherwise, the inner TX result is returned.
+    TransactionResult& getResult();
+    TransactionResult const& getResult() const;
+    TransactionResultCode getResultCode() const;
+
+    // TODO: Make private
     std::vector<std::shared_ptr<OperationFrame>> opFrames;
-    std::optional<TransactionResult> outerFeeBumpResult;
     std::optional<SorobanData> sorobanExtension;
 };
 
