@@ -82,6 +82,12 @@ TransactionResultPayload::isFeeBump() const
 }
 
 TransactionResult&
+TransactionResultPayload::getInnerResult()
+{
+    return txResult;
+}
+
+TransactionResult&
 TransactionResultPayload::getResult()
 {
     if (outerFeeBumpResult)
@@ -109,6 +115,13 @@ TransactionResultPayload::getResultCode() const
     return getResult().result.code();
 }
 
+TransactionResultPayloadPtr
+TransactionResultPayload::create(TransactionFrame& tx)
+{
+    return std::shared_ptr<TransactionResultPayload>(
+        new TransactionResultPayload(tx));
+}
+
 void
 TransactionResultPayload::initializeFeeBumpResult()
 {
@@ -126,13 +139,15 @@ TransactionFrame::TransactionFrame(Hash const& networkID,
     auto& ops = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
                     ? mEnvelope.v0().tx.operations
                     : mEnvelope.v1().tx.operations;
-    getResult().result.code(txFAILED);
-    getResult().result.results().resize(static_cast<uint32_t>(ops.size()));
 
+    mResult.result.code(txFAILED);
+    mResult.result.results().resize(static_cast<uint32_t>(ops.size()));
+
+    // TODO: Immutable mOperations for static queries only
     for (size_t i = 0; i < ops.size(); i++)
     {
         mOperations.push_back(
-            makeOperation(ops[i], getResult().result.results()[i], i));
+            makeOperation(ops[i], mResult.result.results()[i], i));
     }
 }
 
@@ -613,17 +628,14 @@ TransactionFrame::resetResults(LedgerHeader const& header,
     resPayload.getInnerResult().result.results().resize(
         static_cast<uint32_t>(ops.size()));
 
-    // TODO: Remove
-    getResult().result.code(txSUCCESS);
-    getResult().result.results().resize(static_cast<uint32_t>(ops.size()));
-
     mOperations.clear();
     resPayload.opFrames.clear();
 
     // bind operations to the results
     for (size_t i = 0; i < ops.size(); i++)
     {
-        auto op = makeOperation(ops[i], getResult().result.results()[i], i);
+        auto op = makeOperation(
+            ops[i], resPayload.getInnerResult().result.results()[i], i);
         resPayload.opFrames.push_back(op);
 
         // TODO: Remove
@@ -633,9 +645,6 @@ TransactionFrame::resetResults(LedgerHeader const& header,
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
     resPayload.getInnerResult().feeCharged = getFee(header, baseFee, applying);
-
-    // TODO: Remove
-    getResult().feeCharged = getFee(header, baseFee, applying);
 
     // resets Soroban related fields
     resPayload.sorobanExtension.reset();
@@ -933,9 +942,6 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
     }
 
     resPayload.getInnerResult().feeCharged -= feeRefund;
-    // TODO: Remove
-    getResult().feeCharged -= feeRefund;
-
     header.current().feePool -= feeRefund;
     ltx.commit();
 
@@ -1186,9 +1192,6 @@ TransactionFrame::commonValidPreSeqNum(
          mEnvelope.type() == ENVELOPE_TYPE_TX_V0))
     {
         resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
-
-        // TODO: Remove
-        getResult().result.code(txNOT_SUPPORTED);
         return false;
     }
 
@@ -1197,9 +1200,6 @@ TransactionFrame::commonValidPreSeqNum(
         mEnvelope.v1().tx.cond.type() == PRECOND_V2)
     {
         resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
-
-        // TODO: Remove
-        getResult().result.code(txNOT_SUPPORTED);
         return false;
     }
 
@@ -1211,9 +1211,6 @@ TransactionFrame::commonValidPreSeqNum(
         if (extraSigners.size() == 2 && extraSigners[0] == extraSigners[1])
         {
             resPayload.getInnerResult().result.code(txMALFORMED);
-
-            // TODO: Remove
-            getResult().result.code(txMALFORMED);
             return false;
         }
 
@@ -1223,9 +1220,6 @@ TransactionFrame::commonValidPreSeqNum(
                 signer.ed25519SignedPayload().payload.empty())
             {
                 resPayload.getInnerResult().result.code(txMALFORMED);
-
-                // TODO: Remove
-                getResult().result.code(txMALFORMED);
                 return false;
             }
         }
@@ -1234,18 +1228,12 @@ TransactionFrame::commonValidPreSeqNum(
     if (getNumOperations() == 0)
     {
         resPayload.getInnerResult().result.code(txMISSING_OPERATION);
-
-        // TODO: Remove
-        getResult().result.code(txMISSING_OPERATION);
         return false;
     }
 
     if (!validateSorobanOpsConsistency())
     {
         resPayload.getInnerResult().result.code(txMALFORMED);
-
-        // TODO: Remove
-        getResult().result.code(txMALFORMED);
         return false;
     }
     if (isSoroban())
@@ -1253,9 +1241,6 @@ TransactionFrame::commonValidPreSeqNum(
         if (protocolVersionIsBefore(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
         {
             resPayload.getInnerResult().result.code(txMALFORMED);
-
-            // TODO: Remove
-            getResult().result.code(txMALFORMED);
             return false;
         }
 
@@ -1277,9 +1262,6 @@ TransactionFrame::commonValidPreSeqNum(
                  makeU64SCVal(getFullFee())});
 
             resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
-
-            // TODO: Remove
-            getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
         releaseAssertOrThrow(sorobanResourceFee);
@@ -1293,9 +1275,6 @@ TransactionFrame::commonValidPreSeqNum(
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
 
             resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
-
-            // TODO: Remove
-            getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
         auto const resourceFees = sorobanResourceFee->refundable_fee +
@@ -1311,9 +1290,6 @@ TransactionFrame::commonValidPreSeqNum(
                  makeU64SCVal(resourceFees)});
 
             resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
-
-            // TODO: Remove
-            getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
 
@@ -1333,9 +1309,6 @@ TransactionFrame::commonValidPreSeqNum(
                         resPayload, {});
 
                     resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
-
-                    // TODO: Remove
-                    getResult().result.code(txSOROBAN_INVALID);
                     return false;
                 }
             }
@@ -1364,20 +1337,12 @@ TransactionFrame::commonValidPreSeqNum(
     auto header = ltx.loadHeader();
     if (isTooEarly(header, lowerBoundCloseTimeOffset))
     {
-
         resPayload.getInnerResult().result.code(txTOO_EARLY);
-
-        // TODO: Remove
-        getResult().result.code(txTOO_EARLY);
         return false;
     }
     if (isTooLate(header, upperBoundCloseTimeOffset))
     {
-
         resPayload.getInnerResult().result.code(txTOO_LATE);
-
-        // TODO: Remove
-        getResult().result.code(txTOO_LATE);
         return false;
     }
 
@@ -1385,28 +1350,17 @@ TransactionFrame::commonValidPreSeqNum(
         getInclusionFee() < getMinInclusionFee(*this, header.current()))
     {
         resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
-
-        // TODO: Remove
-        getResult().result.code(txINSUFFICIENT_FEE);
         return false;
     }
     if (!chargeFee && getInclusionFee() < 0)
     {
-
         resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
-
-        // TODO: Remove
-        getResult().result.code(txINSUFFICIENT_FEE);
         return false;
     }
 
     if (!loadSourceAccount(ltx, header))
     {
-
         resPayload.getInnerResult().result.code(txNO_ACCOUNT);
-
-        // TODO: Remove
-        getResult().result.code(txNO_ACCOUNT);
         return false;
     }
 
@@ -1484,9 +1438,6 @@ TransactionFrame::processSignatures(ValidationType cv,
     if (!signatureChecker.checkAllSignaturesUsed())
     {
         resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
-
-        // TODO: Remove
-        getResult().result.code(txBAD_AUTH_EXTRA);
         return false;
     }
 
@@ -1564,9 +1515,6 @@ TransactionFrame::commonValid(Application& app,
         if (isBadSeq(header, current))
         {
             resPayload.getInnerResult().result.code(txBAD_SEQ);
-
-            // TODO: Remove
-            getResult().result.code(txBAD_SEQ);
             return res;
         }
     }
@@ -1576,9 +1524,6 @@ TransactionFrame::commonValid(Application& app,
     if (isTooEarlyForAccount(header, sourceAccount, lowerBoundCloseTimeOffset))
     {
         resPayload.getInnerResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
-
-        // TODO: Remove
-        getResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
         return res;
     }
 
@@ -1587,9 +1532,6 @@ TransactionFrame::commonValid(Application& app,
             sourceAccount.current().data.account().thresholds[THRESHOLD_LOW]))
     {
         resPayload.getInnerResult().result.code(txBAD_AUTH);
-
-        // TODO: Remove
-        getResult().result.code(txBAD_AUTH);
         return res;
     }
 
@@ -1598,9 +1540,6 @@ TransactionFrame::commonValid(Application& app,
         !checkExtraSigners(signatureChecker))
     {
         resPayload.getInnerResult().result.code(txBAD_AUTH);
-
-        // TODO: Remove
-        getResult().result.code(txBAD_AUTH);
         return res;
     }
 
@@ -1619,9 +1558,6 @@ TransactionFrame::commonValid(Application& app,
     if (chargeFee && getAvailableBalance(header, sourceAccount) < feeToPay)
     {
         resPayload.getInnerResult().result.code(txINSUFFICIENT_BALANCE);
-
-        // TODO: Remove
-        getResult().result.code(txINSUFFICIENT_BALANCE);
         return res;
     }
 
@@ -1669,9 +1605,6 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
         }
         acc.seqNum = getSeqNum();
     }
-
-    // TODO: remove
-    getResult().feeCharged = resPayload.getInnerResult().feeCharged;
 }
 
 bool
@@ -1754,9 +1687,6 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     if (!XDRProvidesValidFee())
     {
         resPayload.getInnerResult().result.code(txMALFORMED);
-
-        // TODO: Remove
-        getResult().result.code(txMALFORMED);
         return false;
     }
 
@@ -1803,9 +1733,6 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         {
             res = false;
             resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
-
-            // TODO: Remove
-            getResult().result.code(txBAD_AUTH_EXTRA);
         }
     }
     return res;
@@ -1834,9 +1761,6 @@ TransactionFrame::checkSorobanResourceAndSetError(
                                   resPayload))
     {
         resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
-
-        // TODO: Remove
-        getResult().result.code(txSOROBAN_INVALID);
         return false;
     }
     return true;
@@ -1870,9 +1794,6 @@ TransactionFrame::markResultFailed(TransactionResultPayload& resPayload)
     // txSUCCESS have the same underlying field number so this does not
     // occur.
     resPayload.getInnerResult().result.code(txFAILED);
-
-    // TODO: REMOVE
-    getResult().result.code(txFAILED);
 }
 
 bool
@@ -1966,8 +1887,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 {
                     resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
 
-                    // TODO: Remove
-                    getResult().result.code(txBAD_AUTH_EXTRA);
                     // this should never happen: malformed transaction
                     // should not be accepted by nodes
                     return false;
@@ -1985,9 +1904,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                      ltxTx.hasSponsorshipEntry())
             {
                 resPayload.getInnerResult().result.code(txBAD_SPONSORSHIP);
-
-                // TODO: Remove
-                getResult().result.code(txBAD_SPONSORSHIP);
                 return false;
             }
 
@@ -2104,9 +2020,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
     }
     // This is only reachable if an exception is thrown
     resPayload.getInnerResult().result.code(txINTERNAL_ERROR);
-
-    // TODO: Remove
-    getResult().result.code(txINTERNAL_ERROR);
 
     // We only increase the internal-error metric count if the ledger is a
     // newer version.
@@ -2293,10 +2206,18 @@ TransactionFrame::getSize() const
 
 #ifdef BUILD_TESTS
 TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
-    : mTransactionFrame(tx), mTransactionResultPayload(tx->toTransactionFrame())
+    : mTransactionFrame(tx)
+    , mTransactionResultPayload(
+          TransactionResultPayload::create(tx->toTransactionFrame()))
 {
     releaseAssert(mTransactionFrame);
     releaseAssert(!mTransactionFrame->isTestTx());
+}
+
+void
+TransactionTestFrame::updateResultPayload(TransactionResultPayload& resPayload)
+{
+    mTransactionResultPayload = resPayload.getShared();
 }
 
 TransactionTestFramePtr
@@ -2315,6 +2236,7 @@ TransactionTestFrame::resetResults(LedgerHeader const& header,
                                    TransactionResultPayload& resPayload)
 {
     mTransactionFrame->resetResults(header, baseFee, applying, resPayload);
+    updateResultPayload(resPayload);
 }
 
 bool
@@ -2322,7 +2244,7 @@ TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                             TransactionMetaFrame& meta,
                             Hash const& sorobanBasePrngSeed)
 {
-    return mTransactionFrame->apply(app, ltx, meta, mTransactionResultPayload,
+    return mTransactionFrame->apply(app, ltx, meta, *mTransactionResultPayload,
                                     sorobanBasePrngSeed);
 }
 
@@ -2362,8 +2284,10 @@ TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                             TransactionResultPayload& resPayload,
                             Hash const& sorobanBasePrngSeed)
 {
-    return mTransactionFrame->apply(app, ltx, meta, resPayload,
-                                    sorobanBasePrngSeed);
+    auto ret = mTransactionFrame->apply(app, ltx, meta, resPayload,
+                                        sorobanBasePrngSeed);
+    updateResultPayload(resPayload);
+    return ret;
 }
 
 bool
@@ -2373,9 +2297,11 @@ TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                                  uint64_t lowerBoundCloseTimeOffset,
                                  uint64_t upperBoundCloseTimeOffset)
 {
-    return mTransactionFrame->checkValid(app, ltxOuter, resPayload, current,
-                                         lowerBoundCloseTimeOffset,
-                                         upperBoundCloseTimeOffset);
+    auto ret = mTransactionFrame->checkValid(app, ltxOuter, resPayload, current,
+                                             lowerBoundCloseTimeOffset,
+                                             upperBoundCloseTimeOffset);
+    updateResultPayload(resPayload);
+    return ret;
 }
 
 void
@@ -2383,7 +2309,7 @@ TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                        std::optional<int64_t> baseFee)
 {
     mTransactionFrame->processFeeSeqNum(ltx, baseFee,
-                                        mTransactionResultPayload);
+                                        *mTransactionResultPayload);
 }
 
 void
@@ -2391,7 +2317,7 @@ TransactionTestFrame::processPostApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta)
 {
     mTransactionFrame->processPostApply(app, ltx, meta,
-                                        mTransactionResultPayload);
+                                        *mTransactionResultPayload);
 }
 
 bool
@@ -2401,7 +2327,7 @@ TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                                  uint64_t upperBoundCloseTimeOffset)
 {
     return mTransactionFrame->checkValid(
-        app, ltxOuter, mTransactionResultPayload, current,
+        app, ltxOuter, *mTransactionResultPayload, current,
         lowerBoundCloseTimeOffset, upperBoundCloseTimeOffset);
 }
 
@@ -2410,8 +2336,10 @@ TransactionTestFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
     TransactionResultPayload& resPayload)
 {
-    return mTransactionFrame->checkSorobanResourceAndSetError(
+    auto ret = mTransactionFrame->checkSorobanResourceAndSetError(
         app, ledgerVersion, resPayload);
+    updateResultPayload(resPayload);
+    return ret;
 }
 
 TransactionEnvelope const&
@@ -2497,13 +2425,13 @@ TransactionTestFrame::getRawOperations() const
 TransactionResult&
 TransactionTestFrame::getResult()
 {
-    return mTransactionFrame->getResult();
+    return mTransactionResultPayload->getResult();
 }
 
 TransactionResultCode
 TransactionTestFrame::getResultCode() const
 {
-    return mTransactionFrame->getResultCode();
+    return mTransactionResultPayload->getResult().result.code();
 }
 
 SequenceNumber
@@ -2561,6 +2489,7 @@ TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                        TransactionResultPayload& resPayload)
 {
     mTransactionFrame->processFeeSeqNum(ltx, baseFee, resPayload);
+    updateResultPayload(resPayload);
 }
 
 void
@@ -2569,6 +2498,7 @@ TransactionTestFrame::processPostApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionResultPayload& resPayload)
 {
     mTransactionFrame->processPostApply(app, ltx, meta, resPayload);
+    updateResultPayload(resPayload);
 }
 
 StellarMessage

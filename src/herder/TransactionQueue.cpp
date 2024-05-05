@@ -236,8 +236,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                          std::vector<std::pair<TxStackPtr, bool>>& txsToEvict)
 {
     ZoneScoped;
-    TransactionResultPayloadPtr resPayload =
-        std::make_shared<TransactionResultPayload>(tx->toTransactionFrame());
+    auto resPayload =
+        TransactionResultPayload::create(tx->toTransactionFrame());
     if (isBanned(tx->getFullHash()))
     {
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
@@ -539,8 +539,8 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
     // fast fail when Soroban tx is malformed
     if ((tx->isSoroban() != (c1 || c2)) || !tx->XDRProvidesValidFee())
     {
-        auto resPayload = std::make_shared<TransactionResultPayload>(
-            tx->toTransactionFrame());
+        auto resPayload =
+            TransactionResultPayload::create(tx->toTransactionFrame());
         resPayload->getResult().result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }

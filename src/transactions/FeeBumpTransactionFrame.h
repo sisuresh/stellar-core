@@ -103,9 +103,6 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     std::vector<Operation> const& getRawOperations() const override;
 
-    TransactionResult& getResult() override;
-    TransactionResultCode getResultCode() const override;
-
     SequenceNumber getSeqNum() const override;
     AccountID getFeeSourceID() const override;
     AccountID getSourceID() const override;
