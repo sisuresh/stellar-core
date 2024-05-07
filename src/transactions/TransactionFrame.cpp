@@ -348,22 +348,24 @@ TransactionFrame::checkExtraSigners(SignatureChecker& signatureChecker)
 
 LedgerTxnEntry
 TransactionFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
-                                    LedgerTxnHeader const& header)
+                                    LedgerTxnHeader const& header,
+                                    TransactionResultPayload& resPayload)
 {
     ZoneScoped;
-    auto res = loadAccount(ltx, header, getSourceID());
+    auto res = loadAccount(ltx, header, getSourceID(), resPayload);
     if (protocolVersionIsBefore(header.current().ledgerVersion,
                                 ProtocolVersion::V_8))
     {
         // this is buggy caching that existed in old versions of the protocol
+        auto& cachedAccountPtr = resPayload.getCachedAccountPtr();
         if (res)
         {
             auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
-            mCachedAccount = newest;
+            cachedAccountPtr = newest;
         }
         else
         {
-            mCachedAccount.reset();
+            cachedAccountPtr.reset();
         }
     }
     return res;
@@ -372,27 +374,29 @@ TransactionFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
 LedgerTxnEntry
 TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
                               LedgerTxnHeader const& header,
-                              AccountID const& accountID)
+                              AccountID const& accountID,
+                              TransactionResultPayload& resPayload)
 {
     ZoneScoped;
+    auto& cachedAccountPtr = resPayload.getCachedAccountPtr();
     if (protocolVersionIsBefore(header.current().ledgerVersion,
                                 ProtocolVersion::V_8) &&
-        mCachedAccount &&
-        mCachedAccount->ledgerEntry().data.account().accountID == accountID)
+        cachedAccountPtr &&
+        cachedAccountPtr->ledgerEntry().data.account().accountID == accountID)
     {
         // this is buggy caching that existed in old versions of the protocol
         auto res = stellar::loadAccount(ltx, accountID);
         if (res)
         {
-            res.currentGeneralized() = *mCachedAccount;
+            res.currentGeneralized() = *cachedAccountPtr;
         }
         else
         {
-            res = ltx.create(*mCachedAccount);
+            res = ltx.create(*cachedAccountPtr);
         }
 
         auto newest = ltx.getNewestVersion(LedgerEntryKey(res.current()));
-        mCachedAccount = newest;
+        cachedAccountPtr = newest;
         return res;
     }
     else
@@ -715,7 +719,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
     auto header = ltx.loadHeader();
     // The fee source could be from a Fee-bump, so it needs to be forwarded here
     // instead of using TransactionFrame's getFeeSource() method
-    auto feeSourceAccount = loadAccount(ltx, header, feeSource);
+    auto feeSourceAccount = loadAccount(ltx, header, feeSource, resPayload);
     if (!feeSourceAccount)
     {
         // Account was merged (shouldn't be possible)
@@ -1089,7 +1093,7 @@ TransactionFrame::commonValidPreSeqNum(
         return false;
     }
 
-    if (!loadSourceAccount(ltx, header))
+    if (!loadSourceAccount(ltx, header, resPayload))
     {
         resPayload.getInnerResult().result.code(txNO_ACCOUNT);
         return false;
@@ -1099,14 +1103,15 @@ TransactionFrame::commonValidPreSeqNum(
 }
 
 void
-TransactionFrame::processSeqNum(AbstractLedgerTxn& ltx)
+TransactionFrame::processSeqNum(AbstractLedgerTxn& ltx,
+                                TransactionResultPayload& resPayload)
 {
     ZoneScoped;
     auto header = ltx.loadHeader();
     if (protocolVersionStartsFrom(header.current().ledgerVersion,
                                   ProtocolVersion::V_10))
     {
-        auto sourceAccount = loadSourceAccount(ltx, header);
+        auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
         if (sourceAccount.current().data.account().seqNum > getSeqNum())
         {
             throw std::runtime_error("unexpected sequence number");
@@ -1151,7 +1156,7 @@ TransactionFrame::processSignatures(ValidationType cv,
         LedgerTxn ltx(ltxOuter);
         for (auto op : resPayload.getOpFrames())
         {
-            if (!op->checkSignature(signatureChecker, ltx, false))
+            if (!op->checkSignature(signatureChecker, ltx, resPayload, false))
             {
                 allOpsValid = false;
             }
@@ -1231,7 +1236,7 @@ TransactionFrame::commonValid(Application& app,
     }
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header);
+    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
 
     // in older versions, the account's sequence number is updated when taking
     // fees
@@ -1301,12 +1306,12 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                    TransactionResultPayload& resPayload)
 {
     ZoneScoped;
-    mCachedAccount.reset();
+    resPayload.getCachedAccountPtr().reset();
 
     auto header = ltx.loadHeader();
     resetResults(header.current(), baseFee, true, resPayload);
 
-    auto sourceAccount = loadSourceAccount(ltx, header);
+    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
     if (!sourceAccount)
     {
         throw std::runtime_error("Unexpected database state");
@@ -1413,7 +1418,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     uint64_t upperBoundCloseTimeOffset)
 {
     ZoneScoped;
-    mCachedAccount.reset();
+    resPayload.getCachedAccountPtr().reset();
 
     if (!XDRProvidesValidFee())
     {
@@ -1751,7 +1756,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
     ZoneScoped;
     try
     {
-        mCachedAccount.reset();
+        resPayload.getCachedAccountPtr().reset();
         uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
         SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
                                           getSignatures(mEnvelope)};
@@ -1779,7 +1784,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                               0, 0, sorobanResourceFee, resPayload);
         if (cv >= ValidationType::kInvalidUpdateSeqNum)
         {
-            processSeqNum(ltxTx);
+            processSeqNum(ltxTx, resPayload);
         }
 
         bool signaturesValid =
