@@ -17,7 +17,7 @@ namespace stellar
 
 PathPaymentOpFrameBase::PathPaymentOpFrameBase(Operation const& op,
                                                OperationResult& res,
-                                               TransactionFrame& parentTx)
+                                               TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
 {
 }

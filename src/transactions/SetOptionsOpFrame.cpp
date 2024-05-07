@@ -23,7 +23,7 @@ static const uint32 allAccountAuthFlags =
      AUTH_CLAWBACK_ENABLED_FLAG);
 
 SetOptionsOpFrame::SetOptionsOpFrame(Operation const& op, OperationResult& res,
-                                     TransactionFrame& parentTx)
+                                     TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mSetOptions(mOperation.body.setOptionsOp())
 {

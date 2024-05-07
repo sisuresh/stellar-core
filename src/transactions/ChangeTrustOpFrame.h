@@ -27,7 +27,7 @@ class ChangeTrustOpFrame : public OperationFrame
 
   public:
     ChangeTrustOpFrame(Operation const& op, OperationResult& res,
-                       TransactionFrame& parentTx);
+                       TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

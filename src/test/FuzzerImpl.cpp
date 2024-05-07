@@ -908,7 +908,8 @@ class FuzzTransactionFrame : public TransactionFrame
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
     {
         // No soroban ops allowed
-        if (std::any_of(mOperations.begin(), mOperations.end(),
+        if (std::any_of(mResultPayload->getOpFrames().begin(),
+                        mResultPayload->getOpFrames().end(),
                         [](auto const& x) { return x->isSoroban(); }))
         {
             markResultFailed(*mResultPayload);
@@ -949,12 +950,12 @@ class FuzzTransactionFrame : public TransactionFrame
         }
     }
 
-    std::vector<std::shared_ptr<OperationFrame const>> const&
+    std::vector<std::shared_ptr<OperationFrame>> const&
     getOperations() const
     {
         // this can only be used on an initialized TransactionFrame
-        releaseAssert(mOperations.empty());
-        return mOperations;
+        releaseAssert(!mResultPayload->getOpFrames().empty());
+        return mResultPayload->getOpFrames();
     }
 
     TransactionResult&

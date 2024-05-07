@@ -63,7 +63,7 @@ getNeededThreshold(LedgerTxnEntry const& account, ThresholdLevel const level)
 
 shared_ptr<OperationFrame>
 OperationFrame::makeHelper(Operation const& op, OperationResult& res,
-                           TransactionFrame& tx, uint32_t index)
+                           TransactionFrame const& tx, uint32_t index)
 {
     switch (op.body.type())
     {
@@ -132,7 +132,7 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
 }
 
 OperationFrame::OperationFrame(Operation const& op, OperationResult& res,
-                               TransactionFrame& parentTx)
+                               TransactionFrame const& parentTx)
     : mOperation(op), mParentTx(parentTx), mResult(res)
 {
     resetResultSuccess();

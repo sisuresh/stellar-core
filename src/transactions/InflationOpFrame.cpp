@@ -23,7 +23,7 @@ const time_t INFLATION_START_TIME = (1404172800LL); // 1-jul-2014 (unix epoch)
 namespace stellar
 {
 InflationOpFrame::InflationOpFrame(Operation const& op, OperationResult& res,
-                                   TransactionFrame& parentTx)
+                                   TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
 {
 }

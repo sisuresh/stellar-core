@@ -14,7 +14,7 @@ namespace stellar
 {
 
 LiquidityPoolWithdrawOpFrame::LiquidityPoolWithdrawOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx)
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mLiquidityPoolWithdraw(mOperation.body.liquidityPoolWithdrawOp())
 {

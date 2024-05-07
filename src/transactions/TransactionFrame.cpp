@@ -60,27 +60,60 @@ int64_t const MAX_RESOURCE_FEE = 1LL << 50;
 using namespace std;
 using namespace stellar::txbridge;
 
+static bool
+hasDexOperationsInternal(TransactionResultPayload const& resPayload)
+{
+    for (auto const& op : resPayload.getOpFrames())
+    {
+        if (op->isDexOperation())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool
+isSorobanInternal(TransactionResultPayload const& resPayload)
+{
+    auto const& ops = resPayload.getOpFrames();
+    return !ops.empty() && ops[0]->isSoroban();
+}
+
+static bool
+validateSorobanOpsConsistencyInternal(
+    TransactionResultPayload const& resPayload)
+{
+    auto const& ops = resPayload.getOpFrames();
+    bool hasSorobanOp = isSorobanInternal(resPayload);
+    for (auto const& op : ops)
+    {
+        bool isSorobanOp = op->isSoroban();
+        // Mixing Soroban ops with non-Soroban ops is not allowed.
+        if (isSorobanOp != hasSorobanOp)
+        {
+            return false;
+        }
+    }
+    // Only one operation is allowed per Soroban transaction.
+    if (hasSorobanOp && ops.size() != 1)
+    {
+        return false;
+    }
+    return true;
+}
+
 TransactionFrame::TransactionFrame(Hash const& networkID,
                                    TransactionEnvelope const& envelope)
     : mEnvelope(envelope), mNetworkID(networkID)
 {
-    // Create operation frames with dummy results. Currently the proper results
-    // are initialized in `TransactionFrame::resetResults` and eventually the
-    // operation frames should be decoupled from the results completely and
-    // created just once.
-    auto& ops = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
-                    ? mEnvelope.v0().tx.operations
-                    : mEnvelope.v1().tx.operations;
-
-    mResult.result.code(txFAILED);
-    mResult.result.results().resize(static_cast<uint32_t>(ops.size()));
-
-    // TODO: Immutable mOperations for static queries only
-    for (size_t i = 0; i < ops.size(); i++)
-    {
-        mOperations.push_back(
-            makeOperation(ops[i], mResult.result.results()[i], i));
-    }
+    // We need information from the underlying OperationFrame objects, but we
+    // don't want to store mutable state, so use a throw away ResultPayload.
+    auto dummyPayload = TransactionResultPayload::create(*this);
+    mHasDexOperations = hasDexOperationsInternal(*dummyPayload);
+    mIsSoroban = isSorobanInternal(*dummyPayload);
+    mHasValidSorobanOpsConsistency =
+        validateSorobanOpsConsistencyInternal(*dummyPayload);
 }
 
 Hash const&
@@ -131,37 +164,30 @@ TransactionFrame::getEnvelope() const
 
 #ifdef BUILD_TESTS
 TransactionEnvelope&
-TransactionFrame::getEnvelope()
+TransactionFrame::getMutableEnvelope() const
 {
     return mEnvelope;
 }
 
 void
-TransactionFrame::clearCached()
+TransactionFrame::clearCached() const
 {
     Hash zero;
     mContentsHash = zero;
     mFullHash = zero;
 }
-
-TransactionFrame&
-TransactionFrame::toTransactionFrame()
-{
-    return *this;
-}
-
-TransactionFrame const&
-TransactionFrame::toTransactionFrame() const
-{
-    return *this;
-}
-
 #endif
 
 [[noreturn]] FeeBumpTransactionFrame const&
 TransactionFrame::toFeeBumpTransactionFrame() const
 {
     throw std::bad_cast();
+}
+
+TransactionFrame const&
+TransactionFrame::toTransactionFrame() const
+{
+    return *this;
 }
 
 SequenceNumber
@@ -294,7 +320,7 @@ TransactionFrame::getFee(LedgerHeader const& header,
 bool
 TransactionFrame::checkSignature(SignatureChecker& signatureChecker,
                                  LedgerTxnEntry const& account,
-                                 int32_t neededWeight)
+                                 int32_t neededWeight) const
 {
     ZoneScoped;
     auto& acc = account.current().data.account();
@@ -311,7 +337,7 @@ TransactionFrame::checkSignature(SignatureChecker& signatureChecker,
 
 bool
 TransactionFrame::checkSignatureNoAccount(SignatureChecker& signatureChecker,
-                                          AccountID const& accountID)
+                                          AccountID const& accountID) const
 {
     ZoneScoped;
     std::vector<Signer> signers;
@@ -321,7 +347,7 @@ TransactionFrame::checkSignatureNoAccount(SignatureChecker& signatureChecker,
 }
 
 bool
-TransactionFrame::checkExtraSigners(SignatureChecker& signatureChecker)
+TransactionFrame::checkExtraSigners(SignatureChecker& signatureChecker) const
 {
     ZoneScoped;
     if (extraSignersExist())
@@ -349,7 +375,7 @@ TransactionFrame::checkExtraSigners(SignatureChecker& signatureChecker)
 LedgerTxnEntry
 TransactionFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
                                     LedgerTxnHeader const& header,
-                                    TransactionResultPayload& resPayload)
+                                    TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     auto res = loadAccount(ltx, header, getSourceID(), resPayload);
@@ -375,7 +401,7 @@ LedgerTxnEntry
 TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
                               LedgerTxnHeader const& header,
                               AccountID const& accountID,
-                              TransactionResultPayload& resPayload)
+                              TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     auto& cachedAccountPtr = resPayload.getCachedAccountPtr();
@@ -408,20 +434,13 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
 bool
 TransactionFrame::hasDexOperations() const
 {
-    for (auto const& op : mOperations)
-    {
-        if (op->isDexOperation())
-        {
-            return true;
-        }
-    }
-    return false;
+    return mHasDexOperations;
 }
 
 bool
 TransactionFrame::isSoroban() const
 {
-    return !mOperations.empty() && mOperations[0]->isSoroban();
+    return mIsSoroban;
 }
 
 SorobanResources const&
@@ -431,30 +450,16 @@ TransactionFrame::sorobanResources() const
     return mEnvelope.v1().tx.ext.sorobanData().resources;
 }
 
-std::shared_ptr<OperationFrame>
-TransactionFrame::makeOperation(Operation const& op, OperationResult& res,
-                                size_t index)
-{
-    return OperationFrame::makeHelper(op, res, *this,
-                                      static_cast<uint32_t>(index));
-}
-
 void
 TransactionFrame::resetResults(LedgerHeader const& header,
                                std::optional<int64_t> baseFee, bool applying,
-                               TransactionResultPayload& resPayload)
+                               TransactionResultPayload& resPayload) const
 {
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
     auto feeCharged = getFee(header, baseFee, applying);
     resPayload.reset(*this, feeCharged);
-
-    mOperations.clear();
-    for (auto op : resPayload.getOpFrames())
-    {
-        mOperations.push_back(op);
-    }
 }
 
 std::optional<TimeBounds const> const
@@ -556,29 +561,13 @@ TransactionFrame::extraSignersExist() const
 bool
 TransactionFrame::validateSorobanOpsConsistency() const
 {
-    bool hasSorobanOp = mOperations[0]->isSoroban();
-    for (auto const& op : mOperations)
-    {
-        bool isSorobanOp = op->isSoroban();
-        // Mixing Soroban ops with non-Soroban ops is not allowed.
-        if (isSorobanOp != hasSorobanOp)
-        {
-            return false;
-        }
-    }
-    // Only one operation is allowed per Soroban transaction.
-    if (hasSorobanOp && mOperations.size() != 1)
-    {
-        return false;
-    }
-    return true;
+    return mHasValidSorobanOpsConsistency;
 }
 
 bool
-TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
-                                           Config const& appConfig,
-                                           uint32_t protocolVersion,
-                                           TransactionResultPayload& resPayload)
+TransactionFrame::validateSorobanResources(
+    SorobanNetworkConfig const& config, Config const& appConfig,
+    uint32_t protocolVersion, TransactionResultPayload& resPayload) const
 {
     auto const& resources = sorobanResources();
     auto const& readEntries = resources.footprint.readOnly;
@@ -706,7 +695,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
 int64_t
 TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
                                    AccountID const& feeSource,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     auto const feeRefund = resPayload.getSorobanFeeRefund();
@@ -740,7 +729,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
 }
 
 void
-TransactionFrame::updateSorobanMetrics(Application& app)
+TransactionFrame::updateSorobanMetrics(Application& app) const
 {
     releaseAssertOrThrow(isSoroban());
     SorobanMetrics& metrics = app.getLedgerManager().getSorobanMetrics();
@@ -800,7 +789,7 @@ TransactionFrame::declaredSorobanResourceFee() const
 FeePair
 TransactionFrame::computePreApplySorobanResourceFee(
     uint32_t protocolVersion, SorobanNetworkConfig const& sorobanConfig,
-    Config const& cfg)
+    Config const& cfg) const
 {
     ZoneScoped;
     releaseAssertOrThrow(isSoroban());
@@ -916,7 +905,7 @@ TransactionFrame::commonValidPreSeqNum(
     Application& app, AbstractLedgerTxn& ltx, bool chargeFee,
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
     std::optional<FeePair> sorobanResourceFee,
-    TransactionResultPayload& resPayload)
+    TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     // this function does validations that are independent of the account state
@@ -1104,7 +1093,7 @@ TransactionFrame::commonValidPreSeqNum(
 
 void
 TransactionFrame::processSeqNum(AbstractLedgerTxn& ltx,
-                                TransactionResultPayload& resPayload)
+                                TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     auto header = ltx.loadHeader();
@@ -1126,7 +1115,7 @@ bool
 TransactionFrame::processSignatures(ValidationType cv,
                                     SignatureChecker& signatureChecker,
                                     AbstractLedgerTxn& ltxOuter,
-                                    TransactionResultPayload& resPayload)
+                                    TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     bool maybeValid = (cv == ValidationType::kMaybeValid);
@@ -1140,7 +1129,7 @@ TransactionFrame::processSignatures(ValidationType cv,
     if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_13) &&
         !maybeValid)
     {
-        removeOneTimeSignerFromAllSourceAccounts(ltxOuter);
+        removeOneTimeSignerFromAllSourceAccounts(ltxOuter, resPayload);
         return false;
     }
     // older versions of the protocol only fast fail in a subset of cases
@@ -1163,7 +1152,7 @@ TransactionFrame::processSignatures(ValidationType cv,
         }
     }
 
-    removeOneTimeSignerFromAllSourceAccounts(ltxOuter);
+    removeOneTimeSignerFromAllSourceAccounts(ltxOuter, resPayload);
 
     if (!allOpsValid)
     {
@@ -1215,7 +1204,7 @@ TransactionFrame::commonValid(Application& app,
                               uint64_t lowerBoundCloseTimeOffset,
                               uint64_t upperBoundCloseTimeOffset,
                               std::optional<FeePair> sorobanResourceFee,
-                              TransactionResultPayload& resPayload)
+                              TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     LedgerTxn ltx(ltxOuter);
@@ -1303,7 +1292,7 @@ TransactionFrame::commonValid(Application& app,
 void
 TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                    std::optional<int64_t> baseFee,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
     resPayload.getCachedAccountPtr().reset();
@@ -1364,7 +1353,7 @@ TransactionFrame::XDRProvidesValidFee() const
 
 void
 TransactionFrame::removeOneTimeSignerFromAllSourceAccounts(
-    AbstractLedgerTxn& ltx) const
+    AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload) const
 {
     auto ledgerVersion = ltx.loadHeader().current().ledgerVersion;
     if (ledgerVersion == 7)
@@ -1373,7 +1362,7 @@ TransactionFrame::removeOneTimeSignerFromAllSourceAccounts(
     }
 
     UnorderedSet<AccountID> accounts{getSourceID()};
-    for (auto& op : mOperations)
+    for (auto& op : resPayload.getOpFrames())
     {
         accounts.emplace(op->getSourceID());
     }
@@ -1415,7 +1404,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     Application& app, AbstractLedgerTxn& ltxOuter,
     TransactionResultPayload& resPayload, SequenceNumber current,
     bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
-    uint64_t upperBoundCloseTimeOffset)
+    uint64_t upperBoundCloseTimeOffset) const
 {
     ZoneScoped;
     resPayload.getCachedAccountPtr().reset();
@@ -1479,7 +1468,7 @@ TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                              TransactionResultPayload& resPayload,
                              SequenceNumber current,
                              uint64_t lowerBoundCloseTimeOffset,
-                             uint64_t upperBoundCloseTimeOffset)
+                             uint64_t upperBoundCloseTimeOffset) const
 {
     return checkValidWithOptionallyChargedFee(
         app, ltxOuter, resPayload, current, true, lowerBoundCloseTimeOffset,
@@ -1489,7 +1478,7 @@ TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 bool
 TransactionFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
-    TransactionResultPayload& resPayload)
+    TransactionResultPayload& resPayload) const
 {
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
@@ -1512,7 +1501,10 @@ TransactionFrame::insertKeysForFeeProcessing(
 void
 TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 {
-    for (auto const& op : mOperations)
+    // We need information from the underlying OperationFrame objects, but we
+    // don't want to store mutable state, so use a throw away ResultPayload.
+    auto dummyPayload = TransactionResultPayload::create(*this);
+    for (auto const& op : dummyPayload->getOpFrames())
     {
         if (!(getSourceID() == op->getSourceID()))
         {
@@ -1523,7 +1515,7 @@ TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 }
 
 void
-TransactionFrame::markResultFailed(TransactionResultPayload& resPayload)
+TransactionFrame::markResultFailed(TransactionResultPayload& resPayload) const
 {
     // Changing "code" normally causes the XDR structure to be destructed,
     // then a different XDR structure is constructed. However, txFAILED and
@@ -1535,7 +1527,7 @@ TransactionFrame::markResultFailed(TransactionResultPayload& resPayload)
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                         TransactionResultPayload& resPayload,
-                        Hash const& sorobanBasePrngSeed)
+                        Hash const& sorobanBasePrngSeed) const
 {
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
     return apply(app, ltx, tm, resPayload, sorobanBasePrngSeed);
@@ -1546,7 +1538,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   Application& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& outerMeta,
                                   TransactionResultPayload& resPayload,
-                                  Hash const& sorobanBasePrngSeed)
+                                  Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     auto& internalErrorCounter = app.getMetrics().NewCounter(
@@ -1631,7 +1623,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 // if an error occurred, it is responsibility of account's
                 // owner to remove that signer
                 LedgerTxn ltxAfter(ltxTx);
-                removeOneTimeSignerFromAllSourceAccounts(ltxAfter);
+                removeOneTimeSignerFromAllSourceAccounts(ltxAfter, resPayload);
                 changesAfter = ltxAfter.getChanges();
                 ltxAfter.commit();
             }
@@ -1751,7 +1743,7 @@ bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta,
                         TransactionResultPayload& resPayload, bool chargeFee,
-                        Hash const& sorobanBasePrngSeed)
+                        Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     try
@@ -1838,7 +1830,7 @@ bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta,
                         TransactionResultPayload& resPayload,
-                        Hash const& sorobanBasePrngSeed)
+                        Hash const& sorobanBasePrngSeed) const
 {
     return apply(app, ltx, meta, resPayload, true, sorobanBasePrngSeed);
 }
@@ -1847,7 +1839,7 @@ void
 TransactionFrame::processPostApply(Application& app,
                                    AbstractLedgerTxn& ltxOuter,
                                    TransactionMetaFrame& meta,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayload& resPayload) const
 {
     processRefund(app, ltxOuter, meta, getSourceID(), resPayload);
 }
@@ -1858,7 +1850,7 @@ int64_t
 TransactionFrame::processRefund(Application& app, AbstractLedgerTxn& ltxOuter,
                                 TransactionMetaFrame& meta,
                                 AccountID const& feeSource,
-                                TransactionResultPayload& resPayload)
+                                TransactionResultPayload& resPayload) const
 {
     ZoneScoped;
 
@@ -1903,7 +1895,8 @@ TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
 }
 
 void
-TransactionTestFrame::updateResultPayload(TransactionResultPayload& resPayload)
+TransactionTestFrame::updateResultPayload(
+    TransactionResultPayload& resPayload) const
 {
     mTransactionResultPayload = resPayload.getShared();
 }
@@ -1921,7 +1914,7 @@ void
 TransactionTestFrame::resetResults(LedgerHeader const& header,
                                    std::optional<int64_t> baseFee,
                                    bool applying,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayload& resPayload) const
 {
     mTransactionFrame->resetResults(header, baseFee, applying, resPayload);
     updateResultPayload(resPayload);
@@ -1937,19 +1930,17 @@ TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 void
-TransactionTestFrame::clearCached()
+TransactionTestFrame::clearCached() const
 {
     mTransactionFrame->clearCached();
 }
 
-std::vector<std::shared_ptr<OperationFrame const>> const&
+std::vector<std::shared_ptr<OperationFrame>> const&
 TransactionTestFrame::getOperations() const
 {
-    auto const& tx = this->toTransactionFrame();
-
     // this can only be used on an initialized TransactionFrame
-    releaseAssert(!tx.mOperations.empty());
-    return tx.mOperations;
+    releaseAssert(!mTransactionResultPayload->getOpFrames().empty());
+    return mTransactionResultPayload->getOpFrames();
 }
 
 void
@@ -1963,14 +1954,14 @@ void
 TransactionTestFrame::addSignature(DecoratedSignature const& signature)
 {
     clearCached();
-    getSignatures(getEnvelope()).push_back(signature);
+    getSignatures(getMutableEnvelope()).push_back(signature);
 }
 
 bool
 TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                             TransactionMetaFrame& meta,
                             TransactionResultPayload& resPayload,
-                            Hash const& sorobanBasePrngSeed)
+                            Hash const& sorobanBasePrngSeed) const
 {
     auto ret = mTransactionFrame->apply(app, ltx, meta, resPayload,
                                         sorobanBasePrngSeed);
@@ -1983,7 +1974,7 @@ TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                                  TransactionResultPayload& resPayload,
                                  SequenceNumber current,
                                  uint64_t lowerBoundCloseTimeOffset,
-                                 uint64_t upperBoundCloseTimeOffset)
+                                 uint64_t upperBoundCloseTimeOffset) const
 {
     auto ret = mTransactionFrame->checkValid(app, ltxOuter, resPayload, current,
                                              lowerBoundCloseTimeOffset,
@@ -2022,7 +2013,7 @@ TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 bool
 TransactionTestFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
-    TransactionResultPayload& resPayload)
+    TransactionResultPayload& resPayload) const
 {
     auto ret = mTransactionFrame->checkSorobanResourceAndSetError(
         app, ledgerVersion, resPayload);
@@ -2037,21 +2028,15 @@ TransactionTestFrame::getEnvelope() const
 }
 
 TransactionEnvelope&
-TransactionTestFrame::getEnvelope()
+TransactionTestFrame::getMutableEnvelope() const
 {
-    return mTransactionFrame->getEnvelope();
+    return mTransactionFrame->getMutableEnvelope();
 }
 
 FeeBumpTransactionFrame const&
 TransactionTestFrame::toFeeBumpTransactionFrame() const
 {
     return mTransactionFrame->toFeeBumpTransactionFrame();
-}
-
-TransactionFrame&
-TransactionTestFrame::toTransactionFrame()
-{
-    return mTransactionFrame->toTransactionFrame();
 }
 
 TransactionFrame const&
@@ -2172,18 +2157,18 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 }
 
 void
-TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
-                                       std::optional<int64_t> baseFee,
-                                       TransactionResultPayload& resPayload)
+TransactionTestFrame::processFeeSeqNum(
+    AbstractLedgerTxn& ltx, std::optional<int64_t> baseFee,
+    TransactionResultPayload& resPayload) const
 {
     mTransactionFrame->processFeeSeqNum(ltx, baseFee, resPayload);
     updateResultPayload(resPayload);
 }
 
 void
-TransactionTestFrame::processPostApply(Application& app, AbstractLedgerTxn& ltx,
-                                       TransactionMetaFrame& meta,
-                                       TransactionResultPayload& resPayload)
+TransactionTestFrame::processPostApply(
+    Application& app, AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
+    TransactionResultPayload& resPayload) const
 {
     mTransactionFrame->processPostApply(app, ltx, meta, resPayload);
     updateResultPayload(resPayload);

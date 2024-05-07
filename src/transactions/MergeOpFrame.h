@@ -32,7 +32,7 @@ class MergeOpFrame : public OperationFrame
 
   public:
     MergeOpFrame(Operation const& op, OperationResult& res,
-                 TransactionFrame& parentTx);
+                 TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

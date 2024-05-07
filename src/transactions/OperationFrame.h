@@ -39,7 +39,7 @@ class OperationFrame
 {
   protected:
     Operation const& mOperation;
-    TransactionFrame& mParentTx;
+    TransactionFrame const& mParentTx;
     OperationResult& mResult;
 
     virtual bool doCheckValid(SorobanNetworkConfig const& config,
@@ -71,10 +71,10 @@ class OperationFrame
   public:
     static std::shared_ptr<OperationFrame>
     makeHelper(Operation const& op, OperationResult& res,
-               TransactionFrame& parentTx, uint32_t index);
+               TransactionFrame const& parentTx, uint32_t index);
 
     OperationFrame(Operation const& op, OperationResult& res,
-                   TransactionFrame& parentTx);
+                   TransactionFrame const& parentTx);
     OperationFrame(OperationFrame const&) = delete;
     virtual ~OperationFrame() = default;
 

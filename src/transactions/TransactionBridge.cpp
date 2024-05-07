@@ -95,13 +95,13 @@ getOperations(TransactionEnvelope& env)
 xdr::xvector<DecoratedSignature, 20>&
 getSignatures(TransactionTestFramePtr tx)
 {
-    return getSignatures(tx->getEnvelope());
+    return getSignatures(tx->getMutableEnvelope());
 }
 
 void
 setSeqNum(TransactionTestFramePtr tx, int64_t seq)
 {
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     int64_t& s = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.seqNum
                                                    : env.v1().tx.seqNum;
     s = seq;
@@ -110,7 +110,7 @@ setSeqNum(TransactionTestFramePtr tx, int64_t seq)
 void
 setFullFee(TransactionTestFramePtr tx, uint32_t totalFee)
 {
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     uint32_t& f =
         env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.fee : env.v1().tx.fee;
     f = totalFee;
@@ -120,7 +120,7 @@ void
 setSorobanFees(TransactionTestFramePtr tx, uint32_t totalFee, int64 resourceFee)
 {
     setFullFee(tx, totalFee);
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     auto& sorobanData = env.v1().tx.ext.sorobanData();
     sorobanData.resourceFee = resourceFee;
 }
@@ -128,7 +128,7 @@ setSorobanFees(TransactionTestFramePtr tx, uint32_t totalFee, int64 resourceFee)
 void
 setMemo(TransactionTestFramePtr tx, Memo memo)
 {
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     Memo& m =
         env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.memo : env.v1().tx.memo;
     m = memo;
@@ -137,7 +137,7 @@ setMemo(TransactionTestFramePtr tx, Memo memo)
 void
 setMinTime(TransactionTestFramePtr tx, TimePoint minTime)
 {
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     if (env.type() == ENVELOPE_TYPE_TX_V0)
     {
         env.v0().tx.timeBounds.activate().minTime = minTime;
@@ -162,7 +162,7 @@ setMinTime(TransactionTestFramePtr tx, TimePoint minTime)
 void
 setMaxTime(TransactionTestFramePtr tx, TimePoint maxTime)
 {
-    auto& env = tx->getEnvelope();
+    auto& env = tx->getMutableEnvelope();
     if (env.type() == ENVELOPE_TYPE_TX_V0)
     {
         env.v0().tx.timeBounds.activate().maxTime = maxTime;

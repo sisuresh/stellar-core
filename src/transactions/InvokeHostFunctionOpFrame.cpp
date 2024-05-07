@@ -235,9 +235,8 @@ struct HostFunctionMetrics
     }
 };
 
-InvokeHostFunctionOpFrame::InvokeHostFunctionOpFrame(Operation const& op,
-                                                     OperationResult& res,
-                                                     TransactionFrame& parentTx)
+InvokeHostFunctionOpFrame::InvokeHostFunctionOpFrame(
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mInvokeHostFunction(mOperation.body.invokeHostFunctionOp())
 {

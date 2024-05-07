@@ -22,7 +22,7 @@ class InflationOpFrame : public OperationFrame
 
   public:
     InflationOpFrame(Operation const& op, OperationResult& res,
-                     TransactionFrame& parentTx);
+                     TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

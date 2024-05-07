@@ -17,7 +17,7 @@ namespace stellar
 {
 
 ClaimClaimableBalanceOpFrame::ClaimClaimableBalanceOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx)
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mClaimClaimableBalance(mOperation.body.claimClaimableBalanceOp())
 {

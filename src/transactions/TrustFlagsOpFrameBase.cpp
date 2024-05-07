@@ -13,7 +13,7 @@ namespace stellar
 
 TrustFlagsOpFrameBase::TrustFlagsOpFrameBase(Operation const& op,
                                              OperationResult& res,
-                                             TransactionFrame& parentTx)
+                                             TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
 {
 }

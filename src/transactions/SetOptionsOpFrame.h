@@ -27,7 +27,7 @@ class SetOptionsOpFrame : public OperationFrame
 
   public:
     SetOptionsOpFrame(Operation const& op, OperationResult& res,
-                      TransactionFrame& parentTx);
+                      TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

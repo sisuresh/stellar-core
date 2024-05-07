@@ -35,9 +35,8 @@ struct RestoreFootprintMetrics
     }
 };
 
-RestoreFootprintOpFrame::RestoreFootprintOpFrame(Operation const& op,
-                                                 OperationResult& res,
-                                                 TransactionFrame& parentTx)
+RestoreFootprintOpFrame::RestoreFootprintOpFrame(
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mRestoreFootprintOp(mOperation.body.restoreFootprintOp())
 {

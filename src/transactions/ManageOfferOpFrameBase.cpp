@@ -18,7 +18,7 @@ namespace stellar
 {
 
 ManageOfferOpFrameBase::ManageOfferOpFrameBase(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx,
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx,
     Asset const& sheep, Asset const& wheat, int64_t offerID, Price const& price,
     bool setPassiveOnCreate)
     : OperationFrame(op, res, parentTx)

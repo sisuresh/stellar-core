@@ -1835,7 +1835,8 @@ getMinInclusionFee(TransactionFrameBase const& tx, LedgerHeader const& header,
 bool
 validateContractLedgerEntry(LedgerKey const& lk, size_t entrySize,
                             SorobanNetworkConfig const& config,
-                            Config const& appConfig, TransactionFrame& parentTx,
+                            Config const& appConfig,
+                            TransactionFrame const& parentTx,
                             TransactionResultPayload& resPayload)
 {
     // check contract code size limit
