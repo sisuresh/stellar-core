@@ -13,6 +13,7 @@
 #include "test/TxTests.h"
 #include "transactions/TransactionBridge.h"
 #include "transactions/TransactionSQL.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "transactions/test/SorobanTxTestUtils.h"
 #include "util/Logging.h"

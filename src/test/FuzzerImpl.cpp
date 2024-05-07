@@ -19,6 +19,7 @@
 #include "transactions/OperationFrame.h"
 #include "transactions/SignatureChecker.h"
 #include "transactions/TransactionMetaFrame.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 #include "util/Math.h"
@@ -927,8 +928,9 @@ class FuzzTransactionFrame : public TransactionFrame
             return !op->checkValid(app, signatureChecker, ltx, false,
                                    *mResultPayload);
         };
-        if (std::any_of(mResultPayload->opFrames.begin(),
-                        mResultPayload->opFrames.end(), isInvalidOperation))
+        if (std::any_of(mResultPayload->getOpFrames().begin(),
+                        mResultPayload->getOpFrames().end(),
+                        isInvalidOperation))
         {
             markResultFailed(*mResultPayload);
             return;

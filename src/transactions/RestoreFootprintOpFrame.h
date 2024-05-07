@@ -10,6 +10,7 @@
 namespace stellar
 {
 class AbstractLedgerTxn;
+class TransactionResultPayload;
 
 class RestoreFootprintOpFrame : public OperationFrame
 {

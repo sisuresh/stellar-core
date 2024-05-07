@@ -6,6 +6,7 @@
 #include "TransactionUtils.h"
 #include "ledger/LedgerManagerImpl.h"
 #include "ledger/LedgerTypeUtils.h"
+#include "transactions/TransactionResultPayload.h"
 #include <Tracy.hpp>
 
 namespace stellar
@@ -120,10 +121,9 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
 
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
-            mParentTx.pushApplyTimeDiagnosticError(
+            resPayload.pushApplyTimeDiagnosticError(
                 app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read resources exceeds amount specified",
-                resPayload,
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
 
@@ -150,9 +150,9 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
         app.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION, ledgerVersion,
         rustEntryRentChanges, sorobanConfig.rustBridgeRentFeeConfiguration(),
         ledgerSeq);
-    if (!mParentTx.consumeRefundableSorobanResources(
+    if (!resPayload.consumeRefundableSorobanResources(
             0, rentFee, ledgerVersion, sorobanConfig, app.getConfig(),
-            resPayload))
+            mParentTx))
     {
         innerResult().code(EXTEND_FOOTPRINT_TTL_INSUFFICIENT_REFUNDABLE_FEE);
         return false;
@@ -170,11 +170,11 @@ ExtendFootprintTTLOpFrame::doCheckValid(
     if (!footprint.readWrite.empty())
     {
         innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        mParentTx.pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-write footprint must be empty for ExtendFootprintTTL "
             "operation",
-            resPayload, {});
+            {});
         return false;
     }
 
@@ -183,11 +183,11 @@ ExtendFootprintTTLOpFrame::doCheckValid(
         if (!isSorobanEntry(lk))
         {
             innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-            mParentTx.pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only entries with TTL (contract data or code entries) can "
                 "have it extended",
-                resPayload, {});
+                {});
             return false;
         }
     }
@@ -196,9 +196,9 @@ ExtendFootprintTTLOpFrame::doCheckValid(
         networkConfig.stateArchivalSettings().maxEntryTTL - 1)
     {
         innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        mParentTx.pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
-            "TTL extension is too large: {} > {}", resPayload,
+            "TTL extension is too large: {} > {}",
             {
                 makeU64SCVal(mExtendFootprintTTLOp.extendTo),
                 makeU64SCVal(networkConfig.stateArchivalSettings().maxEntryTTL -
