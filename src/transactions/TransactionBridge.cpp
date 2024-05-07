@@ -42,6 +42,22 @@ convertForV13(TransactionEnvelope const& input)
     return res;
 }
 
+xdr::xvector<DecoratedSignature, 20> const&
+getSignatures(TransactionEnvelope const& env)
+{
+    switch (env.type())
+    {
+    case ENVELOPE_TYPE_TX_V0:
+        return env.v0().signatures;
+    case ENVELOPE_TYPE_TX:
+        return env.v1().signatures;
+    case ENVELOPE_TYPE_TX_FEE_BUMP:
+        return env.feeBump().signatures;
+    default:
+        abort();
+    }
+}
+
 xdr::xvector<DecoratedSignature, 20>&
 getSignatures(TransactionEnvelope& env)
 {

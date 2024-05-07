@@ -12,7 +12,6 @@
 #include "ledger/LedgerTxn.h"
 #include "main/Application.h"
 #include "overlay/OverlayManager.h"
-#include "test/TxTests.h"
 #include "transactions/FeeBumpTransactionFrame.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionBridge.h"
@@ -38,6 +37,10 @@
 #include <numeric>
 #include <optional>
 #include <random>
+
+#ifdef BUILD_TESTS
+#include "test/TxTests.h"
+#endif
 
 namespace stellar
 {
