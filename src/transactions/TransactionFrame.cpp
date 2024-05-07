@@ -115,6 +115,20 @@ TransactionResultPayload::getResultCode() const
     return getResult().result.code();
 }
 
+xdr::xvector<DiagnosticEvent> const&
+TransactionResultPayload::getDiagnosticEvents() const
+{
+    static xdr::xvector<DiagnosticEvent> const empty;
+    if (sorobanExtension)
+    {
+        return sorobanExtension->mDiagnosticEvents;
+    }
+    else
+    {
+        return empty;
+    }
+}
+
 TransactionResultPayloadPtr
 TransactionResultPayload::create(TransactionFrame& tx)
 {
@@ -197,10 +211,6 @@ TransactionFrame::pushContractEvents(xdr::xvector<ContractEvent> const& evts,
 {
     releaseAssertOrThrow(resPayload.sorobanExtension);
     resPayload.sorobanExtension->mEvents = evts;
-
-    // TODO: Remove
-    releaseAssertOrThrow(mSorobanExtension);
-    mSorobanExtension->mEvents = evts;
 }
 
 void
@@ -211,11 +221,6 @@ TransactionFrame::pushDiagnosticEvents(
     releaseAssertOrThrow(resPayload.sorobanExtension);
     auto& des = resPayload.sorobanExtension->mDiagnosticEvents;
     des.insert(des.end(), evts.begin(), evts.end());
-
-    // TODO: Remove
-    releaseAssertOrThrow(mSorobanExtension);
-    auto& des2 = mSorobanExtension->mDiagnosticEvents;
-    des2.insert(des2.end(), evts.begin(), evts.end());
 }
 
 void
@@ -224,10 +229,6 @@ TransactionFrame::pushDiagnosticEvent(DiagnosticEvent const& evt,
 {
     releaseAssertOrThrow(resPayload.sorobanExtension);
     resPayload.sorobanExtension->mDiagnosticEvents.emplace_back(evt);
-
-    // TODO: Remove
-    releaseAssertOrThrow(mSorobanExtension);
-    mSorobanExtension->mDiagnosticEvents.emplace_back(evt);
 }
 
 void
@@ -296,10 +297,6 @@ TransactionFrame::setReturnValue(SCVal const& returnValue,
 {
     releaseAssertOrThrow(resPayload.sorobanExtension);
     resPayload.sorobanExtension->mReturnValue = returnValue;
-
-    // TODO: Remove
-    releaseAssertOrThrow(mSorobanExtension);
-    mSorobanExtension->mReturnValue = returnValue;
 }
 
 TransactionEnvelope const&
@@ -652,9 +649,6 @@ TransactionFrame::resetResults(LedgerHeader const& header,
     {
         resPayload.sorobanExtension = std::make_optional<SorobanData>();
     }
-
-    // TODO: Remove this
-    mSorobanExtension = resPayload.sorobanExtension;
 }
 
 std::optional<TimeBounds const> const
@@ -917,8 +911,8 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
                                    TransactionResultPayload& resPayload)
 {
     ZoneScoped;
-    releaseAssertOrThrow(mSorobanExtension);
-    auto const feeRefund = mSorobanExtension->mFeeRefund;
+    releaseAssert(resPayload.sorobanExtension);
+    auto const feeRefund = resPayload.sorobanExtension->mFeeRefund;
     if (feeRefund == 0)
     {
         return 0;
@@ -1031,18 +1025,19 @@ TransactionFrame::consumeRefundableSorobanResources(
 {
     ZoneScoped;
     releaseAssertOrThrow(isSoroban());
-    releaseAssertOrThrow(mSorobanExtension);
+    releaseAssertOrThrow(resPayload.sorobanExtension);
     auto& consumedContractEventsSizeBytes =
-        mSorobanExtension->mConsumedContractEventsSizeBytes;
+        resPayload.sorobanExtension->mConsumedContractEventsSizeBytes;
     consumedContractEventsSizeBytes += contractEventSizeBytes;
 
-    auto& consumedRentFee = mSorobanExtension->mConsumedRentFee;
-    auto& consumedRefundableFee = mSorobanExtension->mConsumedRefundableFee;
+    auto& consumedRentFee = resPayload.sorobanExtension->mConsumedRentFee;
+    auto& consumedRefundableFee =
+        resPayload.sorobanExtension->mConsumedRefundableFee;
     consumedRentFee += rentFee;
     consumedRefundableFee += rentFee;
 
     // mFeeRefund was set in apply
-    auto& feeRefund = mSorobanExtension->mFeeRefund;
+    auto& feeRefund = resPayload.sorobanExtension->mFeeRefund;
     if (feeRefund < consumedRentFee)
     {
         pushApplyTimeDiagnosticError(
@@ -1916,19 +1911,19 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                           SOROBAN_PROTOCOL_VERSION) &&
                 isSoroban())
             {
-                releaseAssertOrThrow(mSorobanExtension);
+                releaseAssertOrThrow(resPayload.sorobanExtension);
                 outerMeta.pushContractEvents(
-                    std::move(mSorobanExtension->mEvents));
+                    std::move(resPayload.sorobanExtension->mEvents));
                 outerMeta.pushDiagnosticEvents(
-                    std::move(mSorobanExtension->mDiagnosticEvents));
+                    std::move(resPayload.sorobanExtension->mDiagnosticEvents));
                 outerMeta.setReturnValue(
-                    std::move(mSorobanExtension->mReturnValue));
+                    std::move(resPayload.sorobanExtension->mReturnValue));
                 if (app.getConfig().EMIT_SOROBAN_TRANSACTION_META_EXT_V1)
                 {
                     outerMeta.setSorobanFeeInfo(
-                        mSorobanExtension->mConsumedNonRefundableFee,
-                        mSorobanExtension->mConsumedRefundableFee,
-                        mSorobanExtension->mConsumedRentFee);
+                        resPayload.sorobanExtension->mConsumedNonRefundableFee,
+                        resPayload.sorobanExtension->mConsumedRefundableFee,
+                        resPayload.sorobanExtension->mConsumedRentFee);
                 }
             }
         }
@@ -1941,7 +1936,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             {
                 // If transaction fails, we don't charge for any
                 // refundable resources.
-                releaseAssertOrThrow(mSorobanExtension);
+                releaseAssertOrThrow(resPayload.sorobanExtension);
                 auto preApplyFee = computePreApplySorobanResourceFee(
                     ledgerVersion,
                     app.getLedgerManager().getSorobanNetworkConfig(),
@@ -1951,15 +1946,12 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                     declaredSorobanResourceFee() -
                     preApplyFee.non_refundable_fee;
 
-                // TODO: Remove
-                mSorobanExtension->mFeeRefund = declaredSorobanResourceFee() -
-                                                preApplyFee.non_refundable_fee;
                 outerMeta.pushDiagnosticEvents(
-                    std::move(mSorobanExtension->mDiagnosticEvents));
+                    std::move(resPayload.sorobanExtension->mDiagnosticEvents));
                 if (app.getConfig().EMIT_SOROBAN_TRANSACTION_META_EXT_V1)
                 {
                     outerMeta.setSorobanFeeInfo(
-                        mSorobanExtension->mConsumedNonRefundableFee,
+                        resPayload.sorobanExtension->mConsumedNonRefundableFee,
                         /* totalRefundableFeeSpent */ 0,
                         /* rentFeeCharged */ 0);
                 }
@@ -2056,8 +2048,6 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                                       SOROBAN_PROTOCOL_VERSION) &&
             isSoroban())
         {
-            // TODO: Remove
-            releaseAssertOrThrow(mSorobanExtension);
             releaseAssertOrThrow(resPayload.sorobanExtension);
 
             sorobanResourceFee = computePreApplySorobanResourceFee(
@@ -2067,13 +2057,6 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
             resPayload.sorobanExtension->mConsumedNonRefundableFee =
                 sorobanResourceFee->non_refundable_fee;
             resPayload.sorobanExtension->mFeeRefund =
-                declaredSorobanResourceFee() -
-                sorobanResourceFee->non_refundable_fee;
-
-            // TODO: Remove
-            mSorobanExtension->mConsumedNonRefundableFee =
-                sorobanResourceFee->non_refundable_fee;
-            mSorobanExtension->mFeeRefund =
                 declaredSorobanResourceFee() -
                 sorobanResourceFee->non_refundable_fee;
         }
@@ -2181,20 +2164,6 @@ TransactionFrame::toStellarMessage() const
     msg->type(TRANSACTION);
     msg->transaction() = mEnvelope;
     return msg;
-}
-
-xdr::xvector<DiagnosticEvent> const&
-TransactionFrame::getDiagnosticEvents() const
-{
-    static xdr::xvector<DiagnosticEvent> const empty;
-    if (mSorobanExtension)
-    {
-        return mSorobanExtension->mDiagnosticEvents;
-    }
-    else
-    {
-        return empty;
-    }
 }
 
 uint32_t
@@ -2528,7 +2497,7 @@ TransactionTestFrame::sorobanResources() const
 xdr::xvector<DiagnosticEvent> const&
 TransactionTestFrame::getDiagnosticEvents() const
 {
-    return mTransactionFrame->getDiagnosticEvents();
+    return mTransactionResultPayload->getDiagnosticEvents();
 }
 
 int64
