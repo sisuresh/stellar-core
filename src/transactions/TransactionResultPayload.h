@@ -36,6 +36,8 @@ class TransactionResultPayload
     std::vector<std::shared_ptr<OperationFrame>> mOpFrames;
     std::optional<SorobanData> mSorobanExtension;
 
+    std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
+
     TransactionResultPayload(TransactionFrame& tx);
 
   public:
@@ -56,6 +58,7 @@ class TransactionResultPayload
 
     std::vector<std::shared_ptr<OperationFrame>> const& getOpFrames() const;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const;
+    std::shared_ptr<InternalLedgerEntry const>& getCachedAccountPtr();
 
     bool
     consumeRefundableSorobanResources(uint32_t contractEventSizeBytes,

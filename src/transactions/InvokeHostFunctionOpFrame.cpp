@@ -250,7 +250,8 @@ InvokeHostFunctionOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx)
+InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                   TransactionResultPayload& resPayload)
 {
     throw std::runtime_error(
         "InvokeHostFunctionOpFrame::doApply needs Config and base PRNG seed");

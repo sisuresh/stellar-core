@@ -57,8 +57,6 @@ class TransactionFrame : public TransactionFrameBase
     TransactionEnvelope mEnvelope;
     TransactionResult mResult;
 
-    std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
-
     Hash const& mNetworkID;     // used to change the way we compute signatures
     mutable Hash mContentsHash; // the hash of the contents
     mutable Hash mFullHash;     // the hash of the contents and the sig.
@@ -68,7 +66,8 @@ class TransactionFrame : public TransactionFrameBase
     std::vector<std::shared_ptr<OperationFrame const>> mOperations;
 
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
-                                     LedgerTxnHeader const& header);
+                                     LedgerTxnHeader const& header,
+                                     TransactionResultPayload& resPayload);
 
     enum ValidationType
     {
@@ -124,7 +123,8 @@ class TransactionFrame : public TransactionFrameBase
                          TransactionResultPayload& resPayload,
                          Hash const& sorobanBasePrngSeed);
 
-    virtual void processSeqNum(AbstractLedgerTxn& ltx);
+    virtual void processSeqNum(AbstractLedgerTxn& ltx,
+                               TransactionResultPayload& resPayload);
 
     bool processSignatures(ValidationType cv,
                            SignatureChecker& signatureChecker,
@@ -265,7 +265,8 @@ class TransactionFrame : public TransactionFrameBase
 
     LedgerTxnEntry loadAccount(AbstractLedgerTxn& ltx,
                                LedgerTxnHeader const& header,
-                               AccountID const& accountID);
+                               AccountID const& accountID,
+                               TransactionResultPayload& resPayload);
 
     std::optional<SequenceNumber const> const getMinSeqNum() const override;
     Duration getMinSeqAge() const override;

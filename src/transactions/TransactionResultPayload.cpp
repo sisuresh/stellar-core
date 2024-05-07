@@ -150,6 +150,12 @@ TransactionResultPayload::getDiagnosticEvents() const
     }
 }
 
+std::shared_ptr<InternalLedgerEntry const>&
+TransactionResultPayload::getCachedAccountPtr()
+{
+    return mCachedAccount;
+}
+
 TransactionResultPayloadPtr
 TransactionResultPayload::create(TransactionFrame& tx)
 {

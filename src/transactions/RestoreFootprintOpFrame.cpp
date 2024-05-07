@@ -50,7 +50,8 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx)
+RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                 TransactionResultPayload& resPayload)
 {
     throw std::runtime_error("RestoreFootprintOpFrame::doApply needs Config");
 }

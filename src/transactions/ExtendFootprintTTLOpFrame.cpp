@@ -48,7 +48,8 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-ExtendFootprintTTLOpFrame::doApply(AbstractLedgerTxn& ltx)
+ExtendFootprintTTLOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                   TransactionResultPayload& resPayload)
 {
     throw std::runtime_error("ExtendFootprintTTLOpFrame::doApply needs Config");
 }
