@@ -14,10 +14,9 @@
 namespace stellar
 {
 
-SetTrustLineFlagsOpFrame::SetTrustLineFlagsOpFrame(Operation const& op,
-                                                   OperationResult& res,
-                                                   TransactionFrame& parentTx,
-                                                   uint32_t index)
+SetTrustLineFlagsOpFrame::SetTrustLineFlagsOpFrame(
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx,
+    uint32_t index)
     : TrustFlagsOpFrameBase(op, res, parentTx)
     , mSetTrustLineFlags(mOperation.body.setTrustLineFlagsOp())
     , mOpIndex(index)

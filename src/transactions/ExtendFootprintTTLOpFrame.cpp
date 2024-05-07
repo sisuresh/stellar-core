@@ -33,9 +33,8 @@ struct ExtendFootprintTTLMetrics
     }
 };
 
-ExtendFootprintTTLOpFrame::ExtendFootprintTTLOpFrame(Operation const& op,
-                                                     OperationResult& res,
-                                                     TransactionFrame& parentTx)
+ExtendFootprintTTLOpFrame::ExtendFootprintTTLOpFrame(
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mExtendFootprintTTLOp(mOperation.body.extendFootprintTTLOp())
 {

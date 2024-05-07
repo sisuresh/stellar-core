@@ -23,7 +23,7 @@ class ManageDataOpFrame : public OperationFrame
 
   public:
     ManageDataOpFrame(Operation const& op, OperationResult& res,
-                      TransactionFrame& parentTx);
+                      TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

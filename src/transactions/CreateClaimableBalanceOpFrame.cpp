@@ -125,7 +125,7 @@ validatePredicate(ClaimPredicate const& pred, uint32_t depth)
 }
 
 CreateClaimableBalanceOpFrame::CreateClaimableBalanceOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx,
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx,
     uint32_t index)
     : OperationFrame(op, res, parentTx)
     , mCreateClaimableBalance(mOperation.body.createClaimableBalanceOp())

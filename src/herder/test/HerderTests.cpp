@@ -2715,9 +2715,9 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
             auto tx = makeMultiPayment(root, root, 10, 1000, 0, 100);
             setMinTime(tx, minTime);
             setMaxTime(tx, maxTime);
-            auto& sig = tx->getEnvelope().type() == ENVELOPE_TYPE_TX_V0
-                            ? tx->getEnvelope().v0().signatures
-                            : tx->getEnvelope().v1().signatures;
+            auto& sig = tx->getMutableEnvelope().type() == ENVELOPE_TYPE_TX_V0
+                            ? tx->getMutableEnvelope().v0().signatures
+                            : tx->getMutableEnvelope().v1().signatures;
             sig.clear();
             tx->addSignature(root.getSecretKey());
             auto [txSet, applicableTxSet] =

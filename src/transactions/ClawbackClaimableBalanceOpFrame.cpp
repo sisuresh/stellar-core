@@ -13,7 +13,7 @@ namespace stellar
 {
 
 ClawbackClaimableBalanceOpFrame::ClawbackClaimableBalanceOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx)
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mClawbackClaimableBalance(mOperation.body.clawbackClaimableBalanceOp())
 {

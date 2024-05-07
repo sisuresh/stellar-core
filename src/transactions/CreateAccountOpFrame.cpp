@@ -27,7 +27,7 @@ using namespace std;
 
 CreateAccountOpFrame::CreateAccountOpFrame(Operation const& op,
                                            OperationResult& res,
-                                           TransactionFrame& parentTx)
+                                           TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mCreateAccount(mOperation.body.createAccountOp())
 {

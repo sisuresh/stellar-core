@@ -35,7 +35,7 @@ class ManageOfferOpFrameBase : public OperationFrame
 
   public:
     ManageOfferOpFrameBase(Operation const& op, OperationResult& res,
-                           TransactionFrame& parentTx, Asset const& sheep,
+                           TransactionFrame const& parentTx, Asset const& sheep,
                            Asset const& wheat, int64_t offerID,
                            Price const& price, bool setPassiveOnCreate);
 

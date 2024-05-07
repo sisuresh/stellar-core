@@ -38,10 +38,10 @@ class TransactionResultPayload
 
     std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
 
-    TransactionResultPayload(TransactionFrame& tx);
+    TransactionResultPayload(TransactionFrame const& tx);
 
   public:
-    static TransactionResultPayloadPtr create(TransactionFrame& tx);
+    static TransactionResultPayloadPtr create(TransactionFrame const& tx);
     void initializeFeeBumpResult();
     void initializeSorobanExtension();
 
@@ -60,11 +60,10 @@ class TransactionResultPayload
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const;
     std::shared_ptr<InternalLedgerEntry const>& getCachedAccountPtr();
 
-    bool
-    consumeRefundableSorobanResources(uint32_t contractEventSizeBytes,
-                                      int64_t rentFee, uint32_t protocolVersion,
-                                      SorobanNetworkConfig const& sorobanConfig,
-                                      Config const& cfg, TransactionFrame& tx);
+    bool consumeRefundableSorobanResources(
+        uint32_t contractEventSizeBytes, int64_t rentFee,
+        uint32_t protocolVersion, SorobanNetworkConfig const& sorobanConfig,
+        Config const& cfg, TransactionFrame const& tx);
 
     int64_t& getSorobanConsumedNonRefundableFee();
     int64_t& getSorobanFeeRefund();
@@ -88,7 +87,7 @@ class TransactionResultPayload
     void publishFailureDiagnosticsToMeta(TransactionMetaFrame& meta,
                                          Config const& cfg);
 
-    void reset(TransactionFrame& tx, int64_t feeCharged);
+    void reset(TransactionFrame const& tx, int64_t feeCharged);
 
     TransactionResultPayloadPtr
     getShared()

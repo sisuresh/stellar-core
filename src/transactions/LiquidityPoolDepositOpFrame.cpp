@@ -15,7 +15,7 @@ namespace stellar
 {
 
 LiquidityPoolDepositOpFrame::LiquidityPoolDepositOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx)
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mLiquidityPoolDeposit(mOperation.body.liquidityPoolDepositOp())
 {

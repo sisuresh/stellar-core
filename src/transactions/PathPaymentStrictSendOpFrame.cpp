@@ -16,7 +16,7 @@ namespace stellar
 {
 
 PathPaymentStrictSendOpFrame::PathPaymentStrictSendOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame& parentTx)
+    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
     : PathPaymentOpFrameBase(op, res, parentTx)
     , mPathPayment(mOperation.body.pathPaymentStrictSendOp())
 {

@@ -25,7 +25,7 @@ class BumpSequenceOpFrame : public OperationFrame
 
   public:
     BumpSequenceOpFrame(Operation const& op, OperationResult& res,
-                        TransactionFrame& parentTx);
+                        TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
                  TransactionResultPayload& resPayload) override;

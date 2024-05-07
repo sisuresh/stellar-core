@@ -19,7 +19,7 @@ namespace stellar
 using namespace std;
 
 PaymentOpFrame::PaymentOpFrame(Operation const& op, OperationResult& res,
-                               TransactionFrame& parentTx)
+                               TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx), mPayment(mOperation.body.paymentOp())
 {
 }

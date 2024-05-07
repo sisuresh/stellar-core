@@ -309,7 +309,7 @@ int64_t getMinInclusionFee(TransactionFrameBase const& tx,
 bool validateContractLedgerEntry(LedgerKey const& lk, size_t entrySize,
                                  SorobanNetworkConfig const& config,
                                  Config const& appConfig,
-                                 TransactionFrame& parentTx,
+                                 TransactionFrame const& parentTx,
                                  TransactionResultPayload& resPayload);
 
 struct LumenContractInfo

@@ -23,7 +23,7 @@ namespace stellar
 using namespace std;
 
 ManageDataOpFrame::ManageDataOpFrame(Operation const& op, OperationResult& res,
-                                     TransactionFrame& parentTx)
+                                     TransactionFrame const& parentTx)
     : OperationFrame(op, res, parentTx)
     , mManageData(mOperation.body.manageDataOp())
 {

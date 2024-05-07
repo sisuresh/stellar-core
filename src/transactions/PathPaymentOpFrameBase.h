@@ -33,7 +33,7 @@ class PathPaymentOpFrameBase : public OperationFrame
 
   public:
     PathPaymentOpFrameBase(Operation const& op, OperationResult& res,
-                           TransactionFrame& parentTx);
+                           TransactionFrame const& parentTx);
 
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

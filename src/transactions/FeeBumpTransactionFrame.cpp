@@ -108,7 +108,7 @@ bool
 FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                                TransactionMetaFrame& meta,
                                TransactionResultPayload& resPayload,
-                               Hash const& sorobanBasePrngSeed)
+                               Hash const& sorobanBasePrngSeed) const
 {
     try
     {
@@ -154,10 +154,9 @@ FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 void
-FeeBumpTransactionFrame::processPostApply(Application& app,
-                                          AbstractLedgerTxn& ltx,
-                                          TransactionMetaFrame& meta,
-                                          TransactionResultPayload& resPayload)
+FeeBumpTransactionFrame::processPostApply(
+    Application& app, AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
+    TransactionResultPayload& resPayload) const
 {
     // We must forward the Fee-bump source so the refund is applied to the
     // correct account
@@ -190,7 +189,7 @@ FeeBumpTransactionFrame::processPostApply(Application& app,
 bool
 FeeBumpTransactionFrame::checkSignature(SignatureChecker& signatureChecker,
                                         LedgerTxnEntry const& account,
-                                        int32_t neededWeight)
+                                        int32_t neededWeight) const
 {
     auto& acc = account.current().data.account();
     std::vector<Signer> signers;
@@ -210,7 +209,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
                                     TransactionResultPayload& resPayload,
                                     SequenceNumber current,
                                     uint64_t lowerBoundCloseTimeOffset,
-                                    uint64_t upperBoundCloseTimeOffset)
+                                    uint64_t upperBoundCloseTimeOffset) const
 {
     if (!XDRProvidesValidFee())
     {
@@ -250,7 +249,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
 bool
 FeeBumpTransactionFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
-    TransactionResultPayload& resPayload)
+    TransactionResultPayload& resPayload) const
 {
     return mInnerTx->checkSorobanResourceAndSetError(app, ledgerVersion,
                                                      resPayload);
@@ -258,7 +257,7 @@ FeeBumpTransactionFrame::checkSorobanResourceAndSetError(
 
 bool
 FeeBumpTransactionFrame::commonValidPreSeqNum(
-    AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload)
+    AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload) const
 {
     // this function does validations that are independent of the account state
     //    (stay true regardless of other side effects)
@@ -320,7 +319,7 @@ FeeBumpTransactionFrame::commonValidPreSeqNum(
 FeeBumpTransactionFrame::ValidationType
 FeeBumpTransactionFrame::commonValid(SignatureChecker& signatureChecker,
                                      AbstractLedgerTxn& ltxOuter, bool applying,
-                                     TransactionResultPayload& resPayload)
+                                     TransactionResultPayload& resPayload) const
 {
     releaseAssert(resPayload.isFeeBump());
     LedgerTxn ltx(ltxOuter);
@@ -366,30 +365,18 @@ FeeBumpTransactionFrame::getEnvelope() const
 
 #ifdef BUILD_TESTS
 TransactionEnvelope&
-FeeBumpTransactionFrame::getEnvelope()
+FeeBumpTransactionFrame::getMutableEnvelope() const
 {
     return mEnvelope;
 }
 
 void
-FeeBumpTransactionFrame::clearCached()
+FeeBumpTransactionFrame::clearCached() const
 {
     Hash zero;
     mContentsHash = zero;
     mFullHash = zero;
     mInnerTx->clearCached();
-}
-
-TransactionFrame&
-FeeBumpTransactionFrame::toTransactionFrame()
-{
-    return *mInnerTx;
-}
-
-TransactionFrame const&
-FeeBumpTransactionFrame::toTransactionFrame() const
-{
-    return *mInnerTx;
 }
 #endif
 
@@ -397,6 +384,12 @@ FeeBumpTransactionFrame const&
 FeeBumpTransactionFrame::toFeeBumpTransactionFrame() const
 {
     return *this;
+}
+
+TransactionFrame const&
+FeeBumpTransactionFrame::toTransactionFrame() const
+{
+    return *mInnerTx;
 }
 
 int64_t
@@ -555,9 +548,9 @@ FeeBumpTransactionFrame::insertKeysForTxApply(
 }
 
 void
-FeeBumpTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
-                                          std::optional<int64_t> baseFee,
-                                          TransactionResultPayload& resPayload)
+FeeBumpTransactionFrame::processFeeSeqNum(
+    AbstractLedgerTxn& ltx, std::optional<int64_t> baseFee,
+    TransactionResultPayload& resPayload) const
 {
     resetResults(ltx.loadHeader().current(), baseFee, true, resPayload);
     releaseAssert(resPayload.isFeeBump());
@@ -605,10 +598,9 @@ FeeBumpTransactionFrame::removeOneTimeSignerKeyFromFeeSource(
 }
 
 void
-FeeBumpTransactionFrame::resetResults(LedgerHeader const& header,
-                                      std::optional<int64_t> baseFee,
-                                      bool applying,
-                                      TransactionResultPayload& resPayload)
+FeeBumpTransactionFrame::resetResults(
+    LedgerHeader const& header, std::optional<int64_t> baseFee, bool applying,
+    TransactionResultPayload& resPayload) const
 {
     mInnerTx->resetResults(header, baseFee, applying, resPayload);
 

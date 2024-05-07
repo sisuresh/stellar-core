@@ -3,13 +3,14 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "transactions/TransactionResultPayload.h"
+#include "transactions/OperationFrame.h"
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
 
 #include <Tracy.hpp>
 namespace stellar
 {
-TransactionResultPayload::TransactionResultPayload(TransactionFrame& tx)
+TransactionResultPayload::TransactionResultPayload(TransactionFrame const& tx)
 {
     auto const& envelope = tx.getEnvelope();
     auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
@@ -21,7 +22,8 @@ TransactionResultPayload::TransactionResultPayload(TransactionFrame& tx)
     for (size_t i = 0; i < ops.size(); i++)
     {
         mOpFrames.push_back(
-            tx.makeOperation(ops[i], mTxResult.result.results()[i], i));
+            OperationFrame::makeHelper(ops[i], mTxResult.result.results()[i],
+                                       tx, static_cast<uint32_t>(i)));
     }
 }
 
@@ -69,7 +71,7 @@ bool
 TransactionResultPayload::consumeRefundableSorobanResources(
     uint32_t contractEventSizeBytes, int64_t rentFee, uint32_t protocolVersion,
     SorobanNetworkConfig const& sorobanConfig, Config const& cfg,
-    TransactionFrame& tx)
+    TransactionFrame const& tx)
 {
     ZoneScoped;
     releaseAssertOrThrow(tx.isSoroban());
@@ -157,7 +159,7 @@ TransactionResultPayload::getCachedAccountPtr()
 }
 
 TransactionResultPayloadPtr
-TransactionResultPayload::create(TransactionFrame& tx)
+TransactionResultPayload::create(TransactionFrame const& tx)
 {
     return std::shared_ptr<TransactionResultPayload>(
         new TransactionResultPayload(tx));
@@ -301,7 +303,7 @@ TransactionResultPayload::publishFailureDiagnosticsToMeta(
 }
 
 void
-TransactionResultPayload::reset(TransactionFrame& tx, int64_t feeCharged)
+TransactionResultPayload::reset(TransactionFrame const& tx, int64_t feeCharged)
 {
     auto const& envelope = tx.getEnvelope();
     auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
@@ -317,9 +319,9 @@ TransactionResultPayload::reset(TransactionFrame& tx, int64_t feeCharged)
     // bind operations to the results
     for (size_t i = 0; i < ops.size(); i++)
     {
-        auto op =
-            tx.makeOperation(ops[i], getInnerResult().result.results()[i], i);
-        mOpFrames.push_back(op);
+        mOpFrames.push_back(
+            OperationFrame::makeHelper(ops[i], mTxResult.result.results()[i],
+                                       tx, static_cast<uint32_t>(i)));
     }
 
     getInnerResult().feeCharged = feeCharged;

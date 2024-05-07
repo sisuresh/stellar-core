@@ -504,7 +504,7 @@ TEST_CASE("manualclose", "[commandhandler]")
                 lastCloseTime() + defaultManualCloseTimeInterval +
                 getUpperBoundCloseTimeOffset(*app, lastCloseTime());
             setMaxTime(txFrame, maxTime);
-            txFrame->getEnvelope().v1().signatures.clear();
+            txFrame->getMutableEnvelope().v1().signatures.clear();
             txFrame->addSignature(root);
 
             {
