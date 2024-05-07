@@ -90,6 +90,8 @@ class TransactionResultPayload
     TransactionResult const& getResult() const;
     TransactionResultCode getResultCode() const;
 
+    xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const;
+
     TransactionResultPayloadPtr
     getShared()
     {
@@ -109,8 +111,6 @@ class TransactionFrame : public TransactionFrameBase
   protected:
     TransactionEnvelope mEnvelope;
     TransactionResult mResult;
-
-    std::optional<SorobanData> mSorobanExtension;
 
     std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
 
@@ -241,7 +241,6 @@ class TransactionFrame : public TransactionFrameBase
                                            std::string&& message,
                                            TransactionResultPayload& resPayload,
                                            xdr::xvector<SCVal>&& args = {});
-    xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
 
     TransactionEnvelope const& getEnvelope() const override;
 
@@ -414,6 +413,8 @@ class TransactionTestFrame : public TransactionFrameBase
     std::vector<std::shared_ptr<OperationFrame const>> const&
     getOperations() const;
 
+    xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const;
+
     // Redefinitions of TransactionFrameBase functions
     bool apply(Application& app, AbstractLedgerTxn& ltx,
                TransactionMetaFrame& meta, TransactionResultPayload& resPayload,
@@ -485,7 +486,6 @@ class TransactionTestFrame : public TransactionFrameBase
 
     bool isSoroban() const override;
     SorobanResources const& sorobanResources() const override;
-    xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
     int64 declaredSorobanResourceFee() const override;
     bool XDRProvidesValidFee() const override;
 

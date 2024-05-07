@@ -53,12 +53,6 @@ FeeBumpTransactionFrame::sorobanResources() const
     return mInnerTx->sorobanResources();
 }
 
-xdr::xvector<DiagnosticEvent> const&
-FeeBumpTransactionFrame::getDiagnosticEvents() const
-{
-    return mInnerTx->getDiagnosticEvents();
-}
-
 FeeBumpTransactionFrame::FeeBumpTransactionFrame(
     Hash const& networkID, TransactionEnvelope const& envelope)
     : mEnvelope(envelope)

@@ -113,8 +113,6 @@ class TransactionFrameBase
 
     virtual bool isSoroban() const = 0;
     virtual SorobanResources const& sorobanResources() const = 0;
-    virtual xdr::xvector<DiagnosticEvent> const&
-    getDiagnosticEvents() const = 0;
     virtual int64 declaredSorobanResourceFee() const = 0;
     virtual bool XDRProvidesValidFee() const = 0;
 };
