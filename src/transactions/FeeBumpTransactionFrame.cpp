@@ -16,6 +16,7 @@
 #include "transactions/SignatureUtils.h"
 #include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionMetaFrame.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/GlobalChecks.h"
 #include "util/ProtocolVersion.h"

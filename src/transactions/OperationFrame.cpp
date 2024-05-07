@@ -31,6 +31,7 @@
 #include "transactions/SetOptionsOpFrame.h"
 #include "transactions/SetTrustLineFlagsOpFrame.h"
 #include "transactions/TransactionFrame.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 #include "util/ProtocolVersion.h"

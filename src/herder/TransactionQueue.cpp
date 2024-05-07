@@ -16,6 +16,7 @@
 #include "transactions/FeeBumpTransactionFrame.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionBridge.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/BitSet.h"
 #include "util/GlobalChecks.h"

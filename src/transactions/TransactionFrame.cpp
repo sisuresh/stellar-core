@@ -25,6 +25,7 @@
 #include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionBridge.h"
 #include "transactions/TransactionMetaFrame.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Decoder.h"
 #include "util/GlobalChecks.h"
@@ -58,89 +59,6 @@ int64_t const MAX_RESOURCE_FEE = 1LL << 50;
 
 using namespace std;
 using namespace stellar::txbridge;
-
-TransactionResultPayload::TransactionResultPayload(TransactionFrame& tx)
-{
-    auto const& envelope = tx.getEnvelope();
-    auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
-                          ? envelope.v0().tx.operations
-                          : envelope.v1().tx.operations;
-    txResult.result.code(txFAILED);
-    txResult.result.results().resize(static_cast<uint32_t>(ops.size()));
-
-    for (size_t i = 0; i < ops.size(); i++)
-    {
-        opFrames.push_back(
-            tx.makeOperation(ops[i], txResult.result.results()[i], i));
-    }
-}
-
-bool
-TransactionResultPayload::isFeeBump() const
-{
-    return outerFeeBumpResult.has_value();
-}
-
-TransactionResult&
-TransactionResultPayload::getInnerResult()
-{
-    return txResult;
-}
-
-TransactionResult&
-TransactionResultPayload::getResult()
-{
-    if (outerFeeBumpResult)
-    {
-        return *outerFeeBumpResult;
-    }
-
-    return txResult;
-}
-
-TransactionResult const&
-TransactionResultPayload::getResult() const
-{
-    if (outerFeeBumpResult)
-    {
-        return *outerFeeBumpResult;
-    }
-
-    return txResult;
-}
-
-TransactionResultCode
-TransactionResultPayload::getResultCode() const
-{
-    return getResult().result.code();
-}
-
-xdr::xvector<DiagnosticEvent> const&
-TransactionResultPayload::getDiagnosticEvents() const
-{
-    static xdr::xvector<DiagnosticEvent> const empty;
-    if (sorobanExtension)
-    {
-        return sorobanExtension->mDiagnosticEvents;
-    }
-    else
-    {
-        return empty;
-    }
-}
-
-TransactionResultPayloadPtr
-TransactionResultPayload::create(TransactionFrame& tx)
-{
-    return std::shared_ptr<TransactionResultPayload>(
-        new TransactionResultPayload(tx));
-}
-
-void
-TransactionResultPayload::initializeFeeBumpResult()
-{
-    outerFeeBumpResult = std::make_optional<TransactionResult>();
-}
 
 TransactionFrame::TransactionFrame(Hash const& networkID,
                                    TransactionEnvelope const& envelope)
@@ -203,100 +121,6 @@ TransactionFrame::getContentsHash() const
     releaseAssert(isZero(oldHash) || (oldHash == mContentsHash));
 #endif
     return (mContentsHash);
-}
-
-void
-TransactionFrame::pushContractEvents(xdr::xvector<ContractEvent> const& evts,
-                                     TransactionResultPayload& resPayload)
-{
-    releaseAssertOrThrow(resPayload.sorobanExtension);
-    resPayload.sorobanExtension->mEvents = evts;
-}
-
-void
-TransactionFrame::pushDiagnosticEvents(
-    xdr::xvector<DiagnosticEvent> const& evts,
-    TransactionResultPayload& resPayload)
-{
-    releaseAssertOrThrow(resPayload.sorobanExtension);
-    auto& des = resPayload.sorobanExtension->mDiagnosticEvents;
-    des.insert(des.end(), evts.begin(), evts.end());
-}
-
-void
-TransactionFrame::pushDiagnosticEvent(DiagnosticEvent const& evt,
-                                      TransactionResultPayload& resPayload)
-{
-    releaseAssertOrThrow(resPayload.sorobanExtension);
-    resPayload.sorobanExtension->mDiagnosticEvents.emplace_back(evt);
-}
-
-void
-TransactionFrame::pushSimpleDiagnosticError(
-    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
-    xdr::xvector<SCVal>&& args, TransactionResultPayload& resPayload)
-{
-    ContractEvent ce;
-    ce.type = DIAGNOSTIC;
-    ce.body.v(0);
-
-    SCVal sym = makeSymbolSCVal("error"), err;
-    err.type(SCV_ERROR);
-    err.error().type(ty);
-    err.error().code() = code;
-    ce.body.v0().topics.assign({std::move(sym), std::move(err)});
-
-    if (args.empty())
-    {
-        ce.body.v0().data.type(SCV_STRING);
-        ce.body.v0().data.str().assign(std::move(message));
-    }
-    else
-    {
-        ce.body.v0().data.type(SCV_VEC);
-        ce.body.v0().data.vec().activate();
-        ce.body.v0().data.vec()->reserve(args.size() + 1);
-        ce.body.v0().data.vec()->emplace_back(
-            makeStringSCVal(std::move(message)));
-        std::move(std::begin(args), std::end(args),
-                  std::back_inserter(*ce.body.v0().data.vec()));
-    }
-    DiagnosticEvent evt(false, std::move(ce));
-    pushDiagnosticEvent(evt, resPayload);
-}
-
-void
-TransactionFrame::pushApplyTimeDiagnosticError(
-    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
-    TransactionResultPayload& resPayload, xdr::xvector<SCVal>&& args)
-{
-    if (!cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
-    {
-        return;
-    }
-    pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args), resPayload);
-}
-
-void
-TransactionFrame::pushValidationTimeDiagnosticError(
-    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
-    TransactionResultPayload& resPayload, xdr::xvector<SCVal>&& args)
-{
-    if (!cfg.ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION)
-    {
-        return;
-    }
-    pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args), resPayload);
-}
-
-void
-TransactionFrame::setReturnValue(SCVal const& returnValue,
-                                 TransactionResultPayload& resPayload)
-{
-    releaseAssertOrThrow(resPayload.sorobanExtension);
-    resPayload.sorobanExtension->mReturnValue = returnValue;
 }
 
 TransactionEnvelope const&
@@ -616,38 +440,16 @@ TransactionFrame::resetResults(LedgerHeader const& header,
                                std::optional<int64_t> baseFee, bool applying,
                                TransactionResultPayload& resPayload)
 {
-    auto& ops = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
-                    ? mEnvelope.v0().tx.operations
-                    : mEnvelope.v1().tx.operations;
-
-    // pre-allocates the results for all operations
-    resPayload.getInnerResult().result.code(txSUCCESS);
-    resPayload.getInnerResult().result.results().resize(
-        static_cast<uint32_t>(ops.size()));
-
-    mOperations.clear();
-    resPayload.opFrames.clear();
-
-    // bind operations to the results
-    for (size_t i = 0; i < ops.size(); i++)
-    {
-        auto op = makeOperation(
-            ops[i], resPayload.getInnerResult().result.results()[i], i);
-        resPayload.opFrames.push_back(op);
-
-        // TODO: Remove
-        mOperations.push_back(op);
-    }
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
-    resPayload.getInnerResult().feeCharged = getFee(header, baseFee, applying);
+    auto feeCharged = getFee(header, baseFee, applying);
+    resPayload.reset(*this, feeCharged);
 
-    // resets Soroban related fields
-    resPayload.sorobanExtension.reset();
-    if (isSoroban())
+    mOperations.clear();
+    for (auto op : resPayload.getOpFrames())
     {
-        resPayload.sorobanExtension = std::make_optional<SorobanData>();
+        mOperations.push_back(op);
     }
 }
 
@@ -779,30 +581,27 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     auto const& writeEntries = resources.footprint.readWrite;
     if (resources.instructions > config.txMaxInstructions())
     {
-        pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "transaction instructions resources exceed network config limit",
-            resPayload,
             {makeU64SCVal(resources.instructions),
              makeU64SCVal(config.txMaxInstructions())});
         return false;
     }
     if (resources.readBytes > config.txMaxReadBytes())
     {
-        pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-read resources exceed network config limit",
-            resPayload,
             {makeU64SCVal(resources.readBytes),
              makeU64SCVal(config.txMaxReadBytes())});
         return false;
     }
     if (resources.writeBytes > config.txMaxWriteBytes())
     {
-        pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-write resources exceed network config limit",
-            resPayload,
             {makeU64SCVal(resources.writeBytes),
              makeU64SCVal(config.txMaxWriteBytes())});
         return false;
@@ -810,20 +609,18 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     if (readEntries.size() + writeEntries.size() >
         config.txMaxReadLedgerEntries())
     {
-        pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-read resources exceed network config limit",
-            resPayload,
             {makeU64SCVal(readEntries.size() + writeEntries.size()),
              makeU64SCVal(config.txMaxReadLedgerEntries())});
         return false;
     }
     if (writeEntries.size() > config.txMaxWriteLedgerEntries())
     {
-        pushValidationTimeDiagnosticError(
+        resPayload.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-write resources exceed network config limit",
-            resPayload,
             {makeU64SCVal(writeEntries.size()),
              makeU64SCVal(config.txMaxWriteLedgerEntries())});
         return false;
@@ -842,10 +639,9 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
                 (tl.asset.type() == ASSET_TYPE_NATIVE) ||
                 isIssuer(tl.accountID, tl.asset))
             {
-                pushValidationTimeDiagnosticError(
+                resPayload.pushValidationTimeDiagnosticError(
                     appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
-                    "transaction footprint contains invalid trustline asset",
-                    resPayload);
+                    "transaction footprint contains invalid trustline asset");
                 return false;
             }
             break;
@@ -856,10 +652,10 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         case LIQUIDITY_POOL:
         case CONFIG_SETTING:
         case TTL:
-            pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_UNEXPECTED_TYPE,
                 "transaction footprint contains unsupported ledger key type",
-                resPayload, {makeU64SCVal(key.type())});
+                {makeU64SCVal(key.type())});
             return false;
         default:
             throw std::runtime_error("unknown ledger key type");
@@ -867,10 +663,9 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
 
         if (xdr::xdr_size(key) > config.maxContractDataKeySizeBytes())
         {
-            pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction footprint key exceeds network config limit",
-                resPayload,
                 {makeU64SCVal(xdr::xdr_size(key)),
                  makeU64SCVal(config.maxContractDataKeySizeBytes())});
             return false;
@@ -895,11 +690,10 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     auto txSize = this->getSize();
     if (txSize > config.txMaxSizeBytes())
     {
-        pushSimpleDiagnosticError(
+        resPayload.pushSimpleDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "total transaction size exceeds network config limit",
-            {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())},
-            resPayload);
+            {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())});
         return false;
     }
     return true;
@@ -911,8 +705,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
                                    TransactionResultPayload& resPayload)
 {
     ZoneScoped;
-    releaseAssert(resPayload.sorobanExtension);
-    auto const feeRefund = resPayload.sorobanExtension->mFeeRefund;
+    auto const feeRefund = resPayload.getSorobanFeeRefund();
     if (feeRefund == 0)
     {
         return 0;
@@ -1015,60 +808,6 @@ TransactionFrame::computePreApplySorobanResourceFee(
         static_cast<uint32>(
             getResources(false).getVal(Resource::Type::TX_BYTE_SIZE)),
         0, sorobanConfig, cfg);
-}
-
-bool
-TransactionFrame::consumeRefundableSorobanResources(
-    uint32_t contractEventSizeBytes, int64_t rentFee, uint32_t protocolVersion,
-    SorobanNetworkConfig const& sorobanConfig, Config const& cfg,
-    TransactionResultPayload& resPayload)
-{
-    ZoneScoped;
-    releaseAssertOrThrow(isSoroban());
-    releaseAssertOrThrow(resPayload.sorobanExtension);
-    auto& consumedContractEventsSizeBytes =
-        resPayload.sorobanExtension->mConsumedContractEventsSizeBytes;
-    consumedContractEventsSizeBytes += contractEventSizeBytes;
-
-    auto& consumedRentFee = resPayload.sorobanExtension->mConsumedRentFee;
-    auto& consumedRefundableFee =
-        resPayload.sorobanExtension->mConsumedRefundableFee;
-    consumedRentFee += rentFee;
-    consumedRefundableFee += rentFee;
-
-    // mFeeRefund was set in apply
-    auto& feeRefund = resPayload.sorobanExtension->mFeeRefund;
-    if (feeRefund < consumedRentFee)
-    {
-        pushApplyTimeDiagnosticError(
-            cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-            "refundable resource fee was not sufficient to cover the ledger "
-            "storage rent: {} > {}",
-            resPayload,
-            {makeU64SCVal(consumedRentFee), makeU64SCVal(feeRefund)});
-        return false;
-    }
-    feeRefund -= consumedRentFee;
-
-    FeePair consumedFee = computeSorobanResourceFee(
-        protocolVersion, sorobanResources(),
-        static_cast<uint32>(
-            getResources(false).getVal(Resource::Type::TX_BYTE_SIZE)),
-        consumedContractEventsSizeBytes, sorobanConfig, cfg);
-    consumedRefundableFee += consumedFee.refundable_fee;
-    if (feeRefund < consumedFee.refundable_fee)
-    {
-        pushApplyTimeDiagnosticError(
-            cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-            "refundable resource fee was not sufficient to cover the events "
-            "fee after paying for ledger storage rent: {} > {}",
-            resPayload,
-            {makeU64SCVal(consumedFee.refundable_fee),
-             makeU64SCVal(feeRefund)});
-        return false;
-    }
-    feeRefund -= consumedFee.refundable_fee;
-    return true;
 }
 
 bool
@@ -1247,12 +986,10 @@ TransactionFrame::commonValidPreSeqNum(
         auto const& sorobanData = mEnvelope.v1().tx.ext.sorobanData();
         if (sorobanData.resourceFee > getFullFee())
         {
-            // TODO: Support Diagnostics in TransactionResultPayload
-            pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is higher than the "
                 "full transaction fee",
-                resPayload,
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(getFullFee())});
 
@@ -1263,9 +1000,9 @@ TransactionFrame::commonValidPreSeqNum(
         if (sorobanResourceFee->refundable_fee >
             INT64_MAX - sorobanResourceFee->non_refundable_fee)
         {
-            pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
-                "transaction resource fees cannot be added", resPayload,
+                "transaction resource fees cannot be added",
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
 
@@ -1276,11 +1013,10 @@ TransactionFrame::commonValidPreSeqNum(
                                   sorobanResourceFee->non_refundable_fee;
         if (sorobanData.resourceFee < resourceFees)
         {
-            pushValidationTimeDiagnosticError(
+            resPayload.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is lower than the "
                 "actual Soroban resource fee",
-                resPayload,
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(resourceFees)});
 
@@ -1296,12 +1032,12 @@ TransactionFrame::commonValidPreSeqNum(
             {
                 if (!set.emplace(lk).second)
                 {
-                    pushValidationTimeDiagnosticError(
+                    resPayload.pushValidationTimeDiagnosticError(
                         app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
                         "Found duplicate key in the Soroban footprint; every "
                         "key across read-only and read-write footprints has to "
                         "be unique.",
-                        resPayload, {});
+                        {});
 
                     resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
                     return false;
@@ -1413,7 +1149,7 @@ TransactionFrame::processSignatures(ValidationType cv,
     {
         // scope here to avoid potential side effects of loading source accounts
         LedgerTxn ltx(ltxOuter);
-        for (auto& op : resPayload.opFrames)
+        for (auto op : resPayload.getOpFrames())
         {
             if (!op->checkSignature(signatureChecker, ltx, false))
             {
@@ -1712,7 +1448,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
                            resPayload) == ValidationType::kMaybeValid;
     if (res)
     {
-        for (auto& op : resPayload.opFrames)
+        for (auto op : resPayload.getOpFrames())
         {
             if (!op->checkValid(app, signatureChecker, ltx, false, resPayload))
             {
@@ -1831,7 +1567,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         uint64_t opNum{0};
-        for (auto& op : resPayload.opFrames)
+        for (auto op : resPayload.getOpFrames())
         {
             auto time = opTimer.TimeScope();
             LedgerTxn ltxOp(ltxTx);
@@ -1911,20 +1647,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                           SOROBAN_PROTOCOL_VERSION) &&
                 isSoroban())
             {
-                releaseAssertOrThrow(resPayload.sorobanExtension);
-                outerMeta.pushContractEvents(
-                    std::move(resPayload.sorobanExtension->mEvents));
-                outerMeta.pushDiagnosticEvents(
-                    std::move(resPayload.sorobanExtension->mDiagnosticEvents));
-                outerMeta.setReturnValue(
-                    std::move(resPayload.sorobanExtension->mReturnValue));
-                if (app.getConfig().EMIT_SOROBAN_TRANSACTION_META_EXT_V1)
-                {
-                    outerMeta.setSorobanFeeInfo(
-                        resPayload.sorobanExtension->mConsumedNonRefundableFee,
-                        resPayload.sorobanExtension->mConsumedRefundableFee,
-                        resPayload.sorobanExtension->mConsumedRentFee);
-                }
+                resPayload.publishSuccessDiagnosticsToMeta(outerMeta,
+                                                           app.getConfig());
             }
         }
         else
@@ -1936,25 +1660,17 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             {
                 // If transaction fails, we don't charge for any
                 // refundable resources.
-                releaseAssertOrThrow(resPayload.sorobanExtension);
                 auto preApplyFee = computePreApplySorobanResourceFee(
                     ledgerVersion,
                     app.getLedgerManager().getSorobanNetworkConfig(),
                     app.getConfig());
 
-                resPayload.sorobanExtension->mFeeRefund =
+                resPayload.getSorobanFeeRefund() =
                     declaredSorobanResourceFee() -
                     preApplyFee.non_refundable_fee;
 
-                outerMeta.pushDiagnosticEvents(
-                    std::move(resPayload.sorobanExtension->mDiagnosticEvents));
-                if (app.getConfig().EMIT_SOROBAN_TRANSACTION_META_EXT_V1)
-                {
-                    outerMeta.setSorobanFeeInfo(
-                        resPayload.sorobanExtension->mConsumedNonRefundableFee,
-                        /* totalRefundableFeeSpent */ 0,
-                        /* rentFeeCharged */ 0);
-                }
+                resPayload.publishFailureDiagnosticsToMeta(outerMeta,
+                                                           app.getConfig());
             }
         }
         return success;
@@ -2048,15 +1764,13 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                                       SOROBAN_PROTOCOL_VERSION) &&
             isSoroban())
         {
-            releaseAssertOrThrow(resPayload.sorobanExtension);
-
             sorobanResourceFee = computePreApplySorobanResourceFee(
                 ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
                 app.getConfig());
 
-            resPayload.sorobanExtension->mConsumedNonRefundableFee =
+            resPayload.getSorobanConsumedNonRefundableFee() =
                 sorobanResourceFee->non_refundable_fee;
-            resPayload.sorobanExtension->mFeeRefund =
+            resPayload.getSorobanFeeRefund() =
                 declaredSorobanResourceFee() -
                 sorobanResourceFee->non_refundable_fee;
         }

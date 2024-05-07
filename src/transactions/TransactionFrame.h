@@ -48,61 +48,6 @@ using TransactionFramePtr = std::shared_ptr<TransactionFrame>;
 class TransactionResultPayload;
 using TransactionResultPayloadPtr = std::shared_ptr<TransactionResultPayload>;
 
-// TODO: Make private inner struct of TransactionResult
-struct SorobanData
-{
-    xdr::xvector<ContractEvent> mEvents;
-    xdr::xvector<DiagnosticEvent> mDiagnosticEvents;
-    SCVal mReturnValue;
-    // Size of the emitted Soroban events.
-    uint32_t mConsumedContractEventsSizeBytes{};
-    int64_t mFeeRefund{};
-    int64_t mConsumedNonRefundableFee{};
-    int64_t mConsumedRentFee{};
-    int64_t mConsumedRefundableFee{};
-    SorobanData()
-    {
-    }
-};
-
-class TransactionResultPayload
-    : public NonMovableOrCopyable,
-      public std::enable_shared_from_this<TransactionResultPayload>
-{
-  private:
-    TransactionResult txResult;
-    std::optional<TransactionResult> outerFeeBumpResult;
-
-    TransactionResultPayload(TransactionFrame& tx);
-
-  public:
-    static TransactionResultPayloadPtr create(TransactionFrame& tx);
-    void initializeFeeBumpResult();
-
-    bool isFeeBump() const;
-
-    // Returns the inner most result.
-    TransactionResult& getInnerResult();
-
-    // Returns the outer most result. If payload refers to a Fee Bump TX, the
-    // fee bump result is returned. Otherwise, the inner TX result is returned.
-    TransactionResult& getResult();
-    TransactionResult const& getResult() const;
-    TransactionResultCode getResultCode() const;
-
-    xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const;
-
-    TransactionResultPayloadPtr
-    getShared()
-    {
-        return shared_from_this();
-    }
-
-    // TODO: Make private
-    std::vector<std::shared_ptr<OperationFrame>> opFrames;
-    std::optional<SorobanData> sorobanExtension;
-};
-
 class TransactionFrame : public TransactionFrameBase
 {
   private:
@@ -206,11 +151,6 @@ class TransactionFrame : public TransactionFrameBase
                                       SorobanNetworkConfig const& sorobanConfig,
                                       Config const& cfg);
 
-    void pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
-                                   SCErrorCode code, std::string&& message,
-                                   xdr::xvector<SCVal>&& args,
-                                   TransactionResultPayload& resPayload);
-
   public:
     TransactionFrame(Hash const& networkID,
                      TransactionEnvelope const& envelope);
@@ -223,25 +163,6 @@ class TransactionFrame : public TransactionFrameBase
 
     Hash const& getFullHash() const override;
     Hash const& getContentsHash() const override;
-
-    void pushContractEvents(xdr::xvector<ContractEvent> const& evts,
-                            TransactionResultPayload& resPayload);
-    void pushDiagnosticEvents(xdr::xvector<DiagnosticEvent> const& evts,
-                              TransactionResultPayload& resPayload);
-    void setReturnValue(SCVal const& returnValue,
-                        TransactionResultPayload& resPayload);
-    void pushDiagnosticEvent(DiagnosticEvent const& evt,
-                             TransactionResultPayload& resPayload);
-    void pushApplyTimeDiagnosticError(Config const& cfg, SCErrorType ty,
-                                      SCErrorCode code, std::string&& message,
-                                      TransactionResultPayload& resPayload,
-                                      xdr::xvector<SCVal>&& args = {});
-    void pushValidationTimeDiagnosticError(Config const& cfg, SCErrorType ty,
-                                           SCErrorCode code,
-                                           std::string&& message,
-                                           TransactionResultPayload& resPayload,
-                                           xdr::xvector<SCVal>&& args = {});
-
     TransactionEnvelope const& getEnvelope() const override;
 
 #ifdef BUILD_TESTS
@@ -354,11 +275,6 @@ class TransactionFrame : public TransactionFrameBase
 
     bool isSoroban() const override;
     SorobanResources const& sorobanResources() const override;
-
-    bool consumeRefundableSorobanResources(
-        uint32_t contractEventSizeBytes, int64_t rentFee,
-        uint32_t protocolVersion, SorobanNetworkConfig const& sorobanConfig,
-        Config const& cfg, TransactionResultPayload& resPayload);
 
     static FeePair computeSorobanResourceFee(
         uint32_t protocolVersion, SorobanResources const& txResources,

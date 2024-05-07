@@ -17,6 +17,7 @@
 #include "test/test.h"
 #include "transactions/SignatureUtils.h"
 #include "transactions/TransactionBridge.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Timer.h"
 #include "util/numeric128.h"

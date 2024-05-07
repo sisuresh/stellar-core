@@ -23,6 +23,7 @@
 #include "overlay/SurveyManager.h"
 #include "transactions/InvokeHostFunctionOpFrame.h"
 #include "transactions/TransactionBridge.h"
+#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 #include "util/StatusManager.h"

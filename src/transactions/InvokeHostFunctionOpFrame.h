@@ -12,6 +12,7 @@
 namespace stellar
 {
 class AbstractLedgerTxn;
+class TransactionResultPayload;
 
 static constexpr ContractDataDurability CONTRACT_INSTANCE_ENTRY_DURABILITY =
     ContractDataDurability::PERSISTENT;
