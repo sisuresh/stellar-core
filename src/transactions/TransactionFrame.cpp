@@ -2275,7 +2275,7 @@ void
 TransactionTestFrame::addSignature(DecoratedSignature const& signature)
 {
     clearCached();
-    getSignatures(mTransactionFrame->getEnvelope()).push_back(signature);
+    getSignatures(getEnvelope()).push_back(signature);
 }
 
 bool

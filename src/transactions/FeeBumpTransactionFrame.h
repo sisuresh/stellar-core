@@ -15,10 +15,12 @@ class SignatureChecker;
 
 class FeeBumpTransactionFrame : public TransactionFrameBase
 {
-    TransactionEnvelope mEnvelope;
-    TransactionResult mResult;
 
-    TransactionFramePtr mInnerTx;
+#ifndef BUILD_TESTS
+    const
+#endif
+        TransactionEnvelope mEnvelope;
+    TransactionFramePtr const mInnerTx;
 
     Hash const& mNetworkID;
     mutable Hash mContentsHash;
