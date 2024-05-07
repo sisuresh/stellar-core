@@ -22,6 +22,8 @@ namespace txbridge
 
 TransactionEnvelope convertForV13(TransactionEnvelope const& input);
 
+xdr::xvector<DecoratedSignature, 20> const&
+getSignatures(TransactionEnvelope const& env);
 xdr::xvector<DecoratedSignature, 20>& getSignatures(TransactionEnvelope& env);
 xdr::xvector<DecoratedSignature, 20>&
 getSignaturesInner(TransactionEnvelope& env);
