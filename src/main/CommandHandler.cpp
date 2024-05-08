@@ -1547,7 +1547,7 @@ CommandHandler::testTx(std::string const& params, std::string& retStr)
         if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
         {
             root["detail"] = xdrToCerealString(resultPayload->getResultCode(),
-                                           "TransactionResultCode");
+                                               "TransactionResultCode");
         }
     }
     else

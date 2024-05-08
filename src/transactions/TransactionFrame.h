@@ -393,7 +393,7 @@ class TransactionTestFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           TransactionResultPayload& resPayload) const override;
 
-    StellarMessage toStellarMessage() const override;
+    std::shared_ptr<StellarMessage const> toStellarMessage() const override;
 
     bool hasDexOperations() const override;
 

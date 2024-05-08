@@ -12,8 +12,8 @@
 #include "test/TestAccount.h"
 #include "test/TxTests.h"
 #include "transactions/TransactionBridge.h"
-#include "transactions/TransactionSQL.h"
 #include "transactions/TransactionResultPayload.h"
+#include "transactions/TransactionSQL.h"
 #include "transactions/TransactionUtils.h"
 #include "transactions/test/SorobanTxTestUtils.h"
 #include "util/Logging.h"
@@ -1744,7 +1744,7 @@ LoadGenerator::pretendTransaction(uint32_t numAccounts, uint32_t offset,
                                            maxGeneratedFeeRate));
 }
 
-std::pair<LoadGenerator::TestAccountPtr, TransactionFramePtr>
+std::pair<LoadGenerator::TestAccountPtr, TransactionTestFramePtr>
 LoadGenerator::createMixedClassicSorobanTransaction(
     uint32_t ledgerNum, uint64_t sourceAccountId,
     GeneratedLoadConfig const& cfg)
@@ -2152,12 +2152,13 @@ LoadGenerator::execute(TransactionTestFramePtr& txf, LoadGenMode mode,
     auto [status, resPayload] = mApp.getHerder().recvTransaction(txf, true);
     if (status != TransactionQueue::AddResult::ADD_STATUS_PENDING)
     {
-        CLOG_INFO(LoadGen, "tx rejected '{}': ===> {}, {}",
-                  TX_STATUS_STRING[static_cast<int>(status)],
-                  txf->isSoroban() ? "soroban"
-                                   : xdrToCerealString(txf->getEnvelope(),
-                                                   "TransactionEnvelope"),
-                  xdrToCerealString(resPayload->getResult(), "TransactionResult"));
+        CLOG_INFO(
+            LoadGen, "tx rejected '{}': ===> {}, {}",
+            TX_STATUS_STRING[static_cast<int>(status)],
+            txf->isSoroban()
+                ? "soroban"
+                : xdrToCerealString(txf->getEnvelope(), "TransactionEnvelope"),
+            xdrToCerealString(resPayload->getResult(), "TransactionResult"));
         if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
         {
             code = resPayload->getResultCode();
