@@ -1052,7 +1052,7 @@ TransactionFrame::commonValidPreSeqNum(
             if (mEnvelope.type() == ENVELOPE_TYPE_TX &&
                 mEnvelope.v1().tx.ext.v() != 0)
             {
-                getResult().result.code(txMALFORMED);
+                resPayload.getInnerResult().result.code(txMALFORMED);
                 return false;
             }
         }
@@ -2174,7 +2174,7 @@ TransactionTestFrame::processPostApply(
     updateResultPayload(resPayload);
 }
 
-StellarMessage
+std::shared_ptr<StellarMessage const>
 TransactionTestFrame::toStellarMessage() const
 {
     return mTransactionFrame->toStellarMessage();

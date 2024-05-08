@@ -774,19 +774,19 @@ TEST_CASE_VERSIONS("txenvelope", "[tx][envelope]")
                              tx->addSignature(SignatureUtils::signHashX(x));
                          },
                          0},
-            AltSignature{"payload signer", false,
-                         [rootPayloadSignerKey](TransactionTestFramePtr) {
-                             return rootPayloadSignerKey;
-                         },
-                         [root, x,
-                          rootPayloadSignerKey](TransactionTestFramePtr tx) {
-                             DecoratedSignature sig;
-                             sig.signature = root.getSecretKey().sign(x);
-                             sig.hint = SignatureUtils::getSignedPayloadHint(
-                                 rootPayloadSignerKey.ed25519SignedPayload());
-                             tx->addSignature(sig);
-                         },
-                         19},
+            AltSignature{
+                "payload signer", false,
+                [rootPayloadSignerKey](TransactionTestFramePtr) {
+                    return rootPayloadSignerKey;
+                },
+                [root, x, rootPayloadSignerKey](TransactionTestFramePtr tx) {
+                    DecoratedSignature sig;
+                    sig.signature = root.getSecretKey().sign(x);
+                    sig.hint = SignatureUtils::getSignedPayloadHint(
+                        rootPayloadSignerKey.ed25519SignedPayload());
+                    tx->addSignature(sig);
+                },
+                19},
         };
 
         for (auto const& alternative : alternatives)

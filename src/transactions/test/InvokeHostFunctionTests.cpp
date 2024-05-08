@@ -4164,8 +4164,7 @@ TEST_CASE("Module cache", "[tx][soroban]")
         auto invocation = sumContract.prepareInvocation(
             fnName, {makeAddressSCVal(addContract.getAddress()), scVec}, spec,
             expectedRefund);
-        auto tx =
-            std::dynamic_pointer_cast<TransactionFrame>(invocation.createTx());
+        auto tx = invocation.createTx();
         return test.invokeTx(tx);
     };
 
@@ -4224,8 +4223,7 @@ TEST_CASE("Vm instantiation tightening", "[tx][soroban]")
 
         auto invocation = addContract.prepareInvocation(fnName, {sc7, sc16},
                                                         spec, expectedRefund);
-        auto tx =
-            std::dynamic_pointer_cast<TransactionFrame>(invocation.createTx());
+        auto tx = invocation.createTx();
         return test.invokeTx(tx);
     };
 
