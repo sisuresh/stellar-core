@@ -1254,6 +1254,7 @@ TEST_CASE("Soroban TransactionQueue limits",
         auto [status, txPayload] =
             app->getHerder().recvTransaction(badTx, false);
         REQUIRE(status == TransactionQueue::AddResult::ADD_STATUS_ERROR);
+        REQUIRE(txPayload);
         REQUIRE(txPayload->getResultCode() == txMALFORMED);
     }
     SECTION("source account limit, soroban and classic tx queue")
@@ -1365,6 +1366,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
 
+                REQUIRE(resPayload);
                 REQUIRE(resPayload->getResultCode() ==
                         TransactionResultCode::txINSUFFICIENT_FEE);
                 REQUIRE(resPayload->getResult().feeCharged ==
@@ -1382,6 +1384,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                 REQUIRE(status ==
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
+                REQUIRE(resPayload);
                 REQUIRE(resPayload->getResultCode() ==
                         TransactionResultCode::txINSUFFICIENT_BALANCE);
             }
@@ -1411,6 +1414,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                 REQUIRE(status ==
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
+                REQUIRE(resPayload);
                 REQUIRE(resPayload->getResultCode() ==
                         TransactionResultCode::txSOROBAN_INVALID);
             }
@@ -1425,7 +1429,7 @@ TEST_CASE("Soroban TransactionQueue limits",
                 REQUIRE(status ==
                         TransactionQueue::AddResult::ADD_STATUS_ERROR);
                 REQUIRE(!app->getHerder().isBannedTx(tx->getFullHash()));
-
+                REQUIRE(resPayload);
                 REQUIRE(resPayload->getResultCode() ==
                         TransactionResultCode::txMALFORMED);
             }
