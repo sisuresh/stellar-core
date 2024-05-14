@@ -307,6 +307,10 @@ class TransactionTestFrame : public TransactionFrameBase
   public:
     static TransactionTestFramePtr fromTxFrame(TransactionFrameBasePtr txFrame);
 
+    virtual ~TransactionTestFrame()
+    {
+    }
+
     // Test only functions
     bool apply(Application& app, AbstractLedgerTxn& ltx,
                TransactionMetaFrame& meta,

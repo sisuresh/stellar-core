@@ -27,7 +27,7 @@ class FeeBumpTransactionFrame;
 class TransactionResultPayload;
 
 class TransactionFrameBase;
-using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase>;
+using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 

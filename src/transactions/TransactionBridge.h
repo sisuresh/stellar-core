@@ -45,7 +45,8 @@ void setMemo(TransactionTestFramePtr tx, Memo memo);
 
 void setMinTime(TransactionTestFramePtr tx, TimePoint minTime);
 
-void setMaxTime(TransactionTestFramePtr tx, TimePoint maxTime);
+void setMaxTime(std::shared_ptr<TransactionTestFrame const> tx,
+                TimePoint maxTime);
 #endif
 }
 }

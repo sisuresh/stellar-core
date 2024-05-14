@@ -422,7 +422,8 @@ testTxSet(uint32 protocolVersion)
         }
         SECTION("bad signature")
         {
-            auto tx = std::static_pointer_cast<TransactionTestFrame>(txs[0]);
+            auto tx =
+                std::static_pointer_cast<TransactionTestFrame const>(txs[0]);
             setMaxTime(tx, UINT64_MAX);
             tx->clearCached();
             TxSetTransactions removed;

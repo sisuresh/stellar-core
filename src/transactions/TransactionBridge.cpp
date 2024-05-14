@@ -176,7 +176,7 @@ setMinTime(TransactionTestFramePtr tx, TimePoint minTime)
 }
 
 void
-setMaxTime(TransactionTestFramePtr tx, TimePoint maxTime)
+setMaxTime(std::shared_ptr<TransactionTestFrame const> tx, TimePoint maxTime)
 {
     auto& env = tx->getMutableEnvelope();
     if (env.type() == ENVELOPE_TYPE_TX_V0)
