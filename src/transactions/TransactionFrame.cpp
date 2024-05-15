@@ -109,7 +109,7 @@ TransactionFrame::TransactionFrame(Hash const& networkID,
 {
     // We need information from the underlying OperationFrame objects, but we
     // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = TransactionResultPayload::create(*this);
+    auto dummyPayload = TransactionResultPayload::create(*this, 0);
     mHasDexOperations = hasDexOperationsInternal(*dummyPayload);
     mIsSoroban = isSorobanInternal(*dummyPayload);
     mHasValidSorobanOpsConsistency =
@@ -450,16 +450,15 @@ TransactionFrame::sorobanResources() const
     return mEnvelope.v1().tx.ext.sorobanData().resources;
 }
 
-void
-TransactionFrame::resetResults(LedgerHeader const& header,
-                               std::optional<int64_t> baseFee, bool applying,
-                               TransactionResultPayload& resPayload) const
+TransactionResultPayloadPtr
+TransactionFrame::createResultPayloadWithFeeCharged(
+    LedgerHeader const& header, std::optional<int64_t> baseFee,
+    bool applying) const
 {
-
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
     auto feeCharged = getFee(header, baseFee, applying);
-    resPayload.reset(*this, feeCharged);
+    return TransactionResultPayload::create(*this, feeCharged);
 }
 
 std::optional<TimeBounds const> const
@@ -1289,18 +1288,18 @@ TransactionFrame::commonValid(Application& app,
     return ValidationType::kMaybeValid;
 }
 
-void
+TransactionResultPayloadPtr
 TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
-                                   std::optional<int64_t> baseFee,
-                                   TransactionResultPayload& resPayload) const
+                                   std::optional<int64_t> baseFee) const
 {
     ZoneScoped;
-    resPayload.getCachedAccountPtr().reset();
 
     auto header = ltx.loadHeader();
-    resetResults(header.current(), baseFee, true, resPayload);
+    auto resPayload =
+        createResultPayloadWithFeeCharged(header.current(), baseFee, true);
+    releaseAssert(resPayload);
 
-    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
+    auto sourceAccount = loadSourceAccount(ltx, header, *resPayload);
     if (!sourceAccount)
     {
         throw std::runtime_error("Unexpected database state");
@@ -1308,7 +1307,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 
     auto& acc = sourceAccount.current().data.account();
 
-    int64_t& fee = resPayload.getInnerResult().feeCharged;
+    int64_t& fee = resPayload->getInnerResult().feeCharged;
     if (fee > 0)
     {
         fee = std::min(acc.balance, fee);
@@ -1330,6 +1329,8 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
         }
         acc.seqNum = getSeqNum();
     }
+
+    return resPayload;
 }
 
 bool
@@ -1399,20 +1400,19 @@ TransactionFrame::removeAccountSigner(AbstractLedgerTxn& ltxOuter,
     }
 }
 
-bool
+std::pair<bool, TransactionResultPayloadPtr>
 TransactionFrame::checkValidWithOptionallyChargedFee(
-    Application& app, AbstractLedgerTxn& ltxOuter,
-    TransactionResultPayload& resPayload, SequenceNumber current,
+    Application& app, AbstractLedgerTxn& ltxOuter, SequenceNumber current,
     bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset) const
 {
     ZoneScoped;
-    resPayload.getCachedAccountPtr().reset();
 
     if (!XDRProvidesValidFee())
     {
-        resPayload.getInnerResult().result.code(txMALFORMED);
-        return false;
+        auto resPayload = TransactionResultPayload::create(*this, 0);
+        resPayload->getInnerResult().result.code(txMALFORMED);
+        return {false, resPayload};
     }
 
     LedgerTxn ltx(ltxOuter);
@@ -1422,7 +1422,9 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         minBaseFee = 0;
     }
 
-    resetResults(ltx.loadHeader().current(), minBaseFee, false, resPayload);
+    auto resPayload = createResultPayloadWithFeeCharged(
+        ltx.loadHeader().current(), minBaseFee, false);
+    releaseAssert(resPayload);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
                                       getContentsHash(),
@@ -1439,40 +1441,39 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     bool res = commonValid(app, signatureChecker, ltx, current, false,
                            chargeFee, lowerBoundCloseTimeOffset,
                            upperBoundCloseTimeOffset, sorobanResourceFee,
-                           resPayload) == ValidationType::kMaybeValid;
+                           *resPayload) == ValidationType::kMaybeValid;
     if (res)
     {
-        for (auto op : resPayload.getOpFrames())
+        for (auto op : resPayload->getOpFrames())
         {
-            if (!op->checkValid(app, signatureChecker, ltx, false, resPayload))
+            if (!op->checkValid(app, signatureChecker, ltx, false, *resPayload))
             {
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
                 // is only used by applications
-                markResultFailed(resPayload);
-                return false;
+                markResultFailed(*resPayload);
+                return {false, resPayload};
             }
         }
 
         if (!signatureChecker.checkAllSignaturesUsed())
         {
             res = false;
-            resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
+            resPayload->getInnerResult().result.code(txBAD_AUTH_EXTRA);
         }
     }
-    return res;
+    return {res, resPayload};
 }
 
-bool
+std::pair<bool, TransactionResultPayloadPtr>
 TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
-                             TransactionResultPayload& resPayload,
                              SequenceNumber current,
                              uint64_t lowerBoundCloseTimeOffset,
                              uint64_t upperBoundCloseTimeOffset) const
 {
-    return checkValidWithOptionallyChargedFee(
-        app, ltxOuter, resPayload, current, true, lowerBoundCloseTimeOffset,
-        upperBoundCloseTimeOffset);
+    return checkValidWithOptionallyChargedFee(app, ltxOuter, current, true,
+                                              lowerBoundCloseTimeOffset,
+                                              upperBoundCloseTimeOffset);
 }
 
 bool
@@ -1503,7 +1504,7 @@ TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 {
     // We need information from the underlying OperationFrame objects, but we
     // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = TransactionResultPayload::create(*this);
+    auto dummyPayload = TransactionResultPayload::create(*this, 0);
     for (auto const& op : dummyPayload->getOpFrames())
     {
         if (!(getSourceID() == op->getSourceID()))
@@ -1888,7 +1889,7 @@ TransactionFrame::getSize() const
 TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
     : mTransactionFrame(tx)
     , mTransactionResultPayload(
-          TransactionResultPayload::create(tx->toTransactionFrame()))
+          TransactionResultPayload::create(tx->toTransactionFrame(), 0))
 {
     releaseAssert(mTransactionFrame);
     releaseAssert(!mTransactionFrame->isTestTx());
@@ -1910,14 +1911,13 @@ TransactionTestFrame::fromTxFrame(TransactionFrameBasePtr txFrame)
         new TransactionTestFrame(txFrame));
 }
 
-void
-TransactionTestFrame::resetResults(LedgerHeader const& header,
-                                   std::optional<int64_t> baseFee,
-                                   bool applying,
-                                   TransactionResultPayload& resPayload) const
+TransactionResultPayloadPtr
+TransactionTestFrame::createResultPayloadWithFeeCharged(
+    LedgerHeader const& header, std::optional<int64_t> baseFee,
+    bool applying) const
 {
-    mTransactionFrame->resetResults(header, baseFee, applying, resPayload);
-    updateResultPayload(resPayload);
+    return mTransactionFrame->createResultPayloadWithFeeCharged(header, baseFee,
+                                                                applying);
 }
 
 bool
@@ -1969,26 +1969,25 @@ TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
     return ret;
 }
 
-bool
+std::pair<bool, TransactionResultPayloadPtr>
 TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
-                                 TransactionResultPayload& resPayload,
                                  SequenceNumber current,
                                  uint64_t lowerBoundCloseTimeOffset,
                                  uint64_t upperBoundCloseTimeOffset) const
 {
-    auto ret = mTransactionFrame->checkValid(app, ltxOuter, resPayload, current,
-                                             lowerBoundCloseTimeOffset,
-                                             upperBoundCloseTimeOffset);
-    updateResultPayload(resPayload);
-    return ret;
+    auto result = mTransactionFrame->checkValid(app, ltxOuter, current,
+                                                lowerBoundCloseTimeOffset,
+                                                upperBoundCloseTimeOffset);
+    mTransactionResultPayload = result.second;
+    return result;
 }
 
 void
 TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                        std::optional<int64_t> baseFee)
 {
-    mTransactionFrame->processFeeSeqNum(ltx, baseFee,
-                                        *mTransactionResultPayload);
+    mTransactionResultPayload =
+        mTransactionFrame->processFeeSeqNum(ltx, baseFee);
 }
 
 void
@@ -2000,14 +1999,17 @@ TransactionTestFrame::processPostApply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 bool
-TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
-                                 SequenceNumber current,
-                                 uint64_t lowerBoundCloseTimeOffset,
-                                 uint64_t upperBoundCloseTimeOffset)
+TransactionTestFrame::checkValidForTesting(Application& app,
+                                           AbstractLedgerTxn& ltxOuter,
+                                           SequenceNumber current,
+                                           uint64_t lowerBoundCloseTimeOffset,
+                                           uint64_t upperBoundCloseTimeOffset)
 {
-    return mTransactionFrame->checkValid(
-        app, ltxOuter, *mTransactionResultPayload, current,
-        lowerBoundCloseTimeOffset, upperBoundCloseTimeOffset);
+    bool res;
+    std::tie(res, mTransactionResultPayload) =
+        checkValid(app, ltxOuter, current, lowerBoundCloseTimeOffset,
+                   upperBoundCloseTimeOffset);
+    return res;
 }
 
 bool
@@ -2156,13 +2158,13 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
     mTransactionFrame->insertKeysForTxApply(keys);
 }
 
-void
-TransactionTestFrame::processFeeSeqNum(
-    AbstractLedgerTxn& ltx, std::optional<int64_t> baseFee,
-    TransactionResultPayload& resPayload) const
+TransactionResultPayloadPtr
+TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
+                                       std::optional<int64_t> baseFee) const
 {
-    mTransactionFrame->processFeeSeqNum(ltx, baseFee, resPayload);
-    updateResultPayload(resPayload);
+    mTransactionResultPayload =
+        mTransactionFrame->processFeeSeqNum(ltx, baseFee);
+    return mTransactionResultPayload;
 }
 
 void

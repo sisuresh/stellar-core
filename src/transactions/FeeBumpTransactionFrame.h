@@ -76,17 +76,18 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           TransactionResultPayload& resPayload) const override;
 
-    bool checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
-                    TransactionResultPayload& resPayload,
-                    SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
-                    uint64_t upperBoundCloseTimeOffset) const override;
+    std::pair<bool, TransactionResultPayloadPtr>
+    checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
+               SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
+               uint64_t upperBoundCloseTimeOffset) const override;
     bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
         TransactionResultPayload& resPayload) const override;
 
-    void resetResults(LedgerHeader const& header,
-                      std::optional<int64_t> baseFee, bool applying,
-                      TransactionResultPayload& resPayload) const override;
+    TransactionResultPayloadPtr
+    createResultPayloadWithFeeCharged(LedgerHeader const& header,
+                                      std::optional<int64_t> baseFee,
+                                      bool applying) const override;
 
     TransactionEnvelope const& getEnvelope() const override;
     FeeBumpTransactionFrame const& toFeeBumpTransactionFrame() const override;
@@ -117,9 +118,9 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const override;
 
-    void processFeeSeqNum(AbstractLedgerTxn& ltx,
-                          std::optional<int64_t> baseFee,
-                          TransactionResultPayload& resPayload) const override;
+    TransactionResultPayloadPtr
+    processFeeSeqNum(AbstractLedgerTxn& ltx,
+                     std::optional<int64_t> baseFee) const override;
 
     std::shared_ptr<StellarMessage const> toStellarMessage() const override;
 

@@ -898,16 +898,10 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     std::vector<TransactionFrameBasePtr> const txs =
         applicableTxSet->getTxsInApplyOrder();
 
-    std::vector<TransactionResultPayloadPtr> txResults;
-    for (auto tx : txs)
-    {
-        txResults.emplace_back(
-            TransactionResultPayload::create(tx->toTransactionFrame()));
-    }
-
     // first, prefetch source accounts for txset, then charge fees
     prefetchTxSourceIds(txs);
-    processFeesSeqNums(txs, txResults, ltx, *applicableTxSet, ledgerCloseMeta);
+    auto const txResults =
+        processFeesSeqNums(txs, ltx, *applicableTxSet, ledgerCloseMeta);
 
     TransactionResultSet txResultSet;
     txResultSet.results.reserve(txs.size());
@@ -1346,15 +1340,15 @@ mergeOpInTx(std::vector<Operation> const& ops)
     return false;
 }
 
-void
+std::vector<TransactionResultPayloadPtr>
 LedgerManagerImpl::processFeesSeqNums(
     std::vector<TransactionFrameBasePtr> const& txs,
-    std::vector<TransactionResultPayloadPtr> const& txResults,
     AbstractLedgerTxn& ltxOuter, ApplicableTxSetFrame const& txSet,
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta)
 {
     ZoneScoped;
-    releaseAssert(txs.size() == txResults.size());
+    std::vector<TransactionResultPayloadPtr> txResults;
+    txResults.reserve(txs.size());
     CLOG_DEBUG(Ledger, "processing fees and sequence numbers");
     int index = 0;
     try
@@ -1368,12 +1362,11 @@ LedgerManagerImpl::processFeesSeqNums(
         for (size_t i = 0; i < txs.size(); ++i)
         {
             auto tx = txs.at(i);
-            auto& txResult = *txResults.at(i);
 
             LedgerTxn ltxTx(ltx);
 
-            tx->processFeeSeqNum(ltxTx, txSet.getTxBaseFee(tx, header),
-                                 txResult);
+            txResults.push_back(
+                tx->processFeeSeqNum(ltxTx, txSet.getTxBaseFee(tx, header)));
 
             if (protocolVersionStartsFrom(
                     ltxTx.loadHeader().current().ledgerVersion,
@@ -1452,6 +1445,8 @@ LedgerManagerImpl::processFeesSeqNums(
         CLOG_FATAL(Ledger, "{}", REPORT_INTERNAL_BUG);
         throw;
     }
+
+    return txResults;
 }
 
 void
