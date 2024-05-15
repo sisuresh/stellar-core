@@ -10,20 +10,34 @@
 #include <Tracy.hpp>
 namespace stellar
 {
-TransactionResultPayload::TransactionResultPayload(TransactionFrame const& tx)
+TransactionResultPayload::TransactionResultPayload(TransactionFrame const& tx,
+                                                   int64_t feeCharged)
 {
     auto const& envelope = tx.getEnvelope();
     auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
                           ? envelope.v0().tx.operations
                           : envelope.v1().tx.operations;
-    mTxResult.result.code(txFAILED);
-    mTxResult.result.results().resize(static_cast<uint32_t>(ops.size()));
 
+    // pre-allocates the results for all operations
+    getInnerResult().result.code(txSUCCESS);
+    getInnerResult().result.results().resize(static_cast<uint32_t>(ops.size()));
+
+    mOpFrames.clear();
+
+    // bind operations to the results
     for (size_t i = 0; i < ops.size(); i++)
     {
         mOpFrames.push_back(
             OperationFrame::makeHelper(ops[i], mTxResult.result.results()[i],
                                        tx, static_cast<uint32_t>(i)));
+    }
+
+    getInnerResult().feeCharged = feeCharged;
+
+    // resets Soroban related fields
+    if (tx.isSoroban())
+    {
+        initializeSorobanExtension();
     }
 }
 
@@ -121,14 +135,14 @@ TransactionResultPayload::consumeRefundableSorobanResources(
 int64_t&
 TransactionResultPayload::getSorobanConsumedNonRefundableFee()
 {
-    releaseAssert(mSorobanExtension);
+    releaseAssertOrThrow(mSorobanExtension);
     return mSorobanExtension->mConsumedNonRefundableFee;
 }
 
 int64_t&
 TransactionResultPayload::getSorobanFeeRefund()
 {
-    releaseAssert(mSorobanExtension);
+    releaseAssertOrThrow(mSorobanExtension);
     return mSorobanExtension->mFeeRefund;
 }
 
@@ -159,10 +173,10 @@ TransactionResultPayload::getCachedAccountPtr()
 }
 
 TransactionResultPayloadPtr
-TransactionResultPayload::create(TransactionFrame const& tx)
+TransactionResultPayload::create(TransactionFrame const& tx, int64_t feeCharged)
 {
     return std::shared_ptr<TransactionResultPayload>(
-        new TransactionResultPayload(tx));
+        new TransactionResultPayload(tx, feeCharged));
 }
 
 void
@@ -208,7 +222,7 @@ TransactionResultPayload::pushSimpleDiagnosticError(Config const& cfg,
                                                     std::string&& message,
                                                     xdr::xvector<SCVal>&& args)
 {
-    releaseAssert(mSorobanExtension);
+    releaseAssertOrThrow(mSorobanExtension);
 
     ContractEvent ce;
     ce.type = DIAGNOSTIC;
@@ -276,7 +290,7 @@ void
 TransactionResultPayload::publishSuccessDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
-    releaseAssert(mSorobanExtension);
+    releaseAssertOrThrow(mSorobanExtension);
     meta.pushContractEvents(std::move(mSorobanExtension->mEvents));
     meta.pushDiagnosticEvents(std::move(mSorobanExtension->mDiagnosticEvents));
     meta.setReturnValue(std::move(mSorobanExtension->mReturnValue));
@@ -292,44 +306,13 @@ void
 TransactionResultPayload::publishFailureDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
-    releaseAssert(mSorobanExtension);
+    releaseAssertOrThrow(mSorobanExtension);
     meta.pushDiagnosticEvents(std::move(mSorobanExtension->mDiagnosticEvents));
     if (cfg.EMIT_SOROBAN_TRANSACTION_META_EXT_V1)
     {
         meta.setSorobanFeeInfo(mSorobanExtension->mConsumedNonRefundableFee,
                                /* totalRefundableFeeSpent */ 0,
                                /* rentFeeCharged */ 0);
-    }
-}
-
-void
-TransactionResultPayload::reset(TransactionFrame const& tx, int64_t feeCharged)
-{
-    auto const& envelope = tx.getEnvelope();
-    auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
-                          ? envelope.v0().tx.operations
-                          : envelope.v1().tx.operations;
-
-    // pre-allocates the results for all operations
-    getInnerResult().result.code(txSUCCESS);
-    getInnerResult().result.results().resize(static_cast<uint32_t>(ops.size()));
-
-    mOpFrames.clear();
-
-    // bind operations to the results
-    for (size_t i = 0; i < ops.size(); i++)
-    {
-        mOpFrames.push_back(
-            OperationFrame::makeHelper(ops[i], mTxResult.result.results()[i],
-                                       tx, static_cast<uint32_t>(i)));
-    }
-
-    getInnerResult().feeCharged = feeCharged;
-
-    // resets Soroban related fields
-    if (tx.isSoroban())
-    {
-        initializeSorobanExtension();
     }
 }
 }

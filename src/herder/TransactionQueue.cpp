@@ -240,21 +240,21 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                          std::vector<std::pair<TxStackPtr, bool>>& txsToEvict)
 {
     ZoneScoped;
-    auto resPayload =
-        TransactionResultPayload::create(tx->toTransactionFrame());
     if (isBanned(tx->getFullHash()))
     {
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
-                resPayload};
+                nullptr};
     }
     if (isFiltered(tx))
     {
-        return {TransactionQueue::AddResult::ADD_STATUS_FILTERED, resPayload};
+        return {TransactionQueue::AddResult::ADD_STATUS_FILTERED, nullptr};
     }
 
     int64_t newFullFee = tx->getFullFee();
     if (newFullFee < 0 || tx->getInclusionFee() < 0)
     {
+        auto resPayload =
+            TransactionResultPayload::create(tx->toTransactionFrame(), 0);
         resPayload->getResult().result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
@@ -273,7 +273,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             if (isDuplicateTx(currentTx, tx))
             {
                 return {TransactionQueue::AddResult::ADD_STATUS_DUPLICATE,
-                        resPayload};
+                        nullptr};
             }
 
             // Any transaction older than the current one is invalid
@@ -281,6 +281,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             {
                 // If the transaction is older than the one in the queue, we
                 // reject it
+                auto resPayload = TransactionResultPayload::create(
+                    tx->toTransactionFrame(), 0);
                 resPayload->getResult().result.code(txBAD_SEQ);
                 return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                         resPayload};
@@ -291,6 +293,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             // appropriate error message
             if (tx->isSoroban())
             {
+                auto resPayload = TransactionResultPayload::create(
+                    tx->toTransactionFrame(), 0);
                 if (!tx->checkSorobanResourceAndSetError(
                         mApp,
                         mApp.getLedgerManager()
@@ -307,7 +311,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 // If there's already a transaction in the queue, we reject
                 // any new transaction
                 return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
-                        resPayload};
+                        nullptr};
             }
             else
             {
@@ -316,14 +320,15 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                     // New fee-bump transaction is rejected
                     return {
                         TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
-                        resPayload};
+                        nullptr};
                 }
 
                 int64_t minFee;
                 if (!canReplaceByFee(tx, currentTx, minFee))
                 {
+                    auto resPayload = TransactionResultPayload::create(
+                        tx->toTransactionFrame(), minFee);
                     resPayload->getResult().result.code(txINSUFFICIENT_FEE);
-                    resPayload->getResult().feeCharged = minFee;
                     return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                             resPayload};
                 }
@@ -350,12 +355,13 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         ban({tx});
         if (canAddRes.second != 0)
         {
+            auto resPayload = TransactionResultPayload::create(
+                tx->toTransactionFrame(), canAddRes.second);
             resPayload->getResult().result.code(txINSUFFICIENT_FEE);
-            resPayload->getResult().feeCharged = canAddRes.second;
             return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
         }
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
-                resPayload};
+                nullptr};
     }
 
     auto closeTime = mApp.getLedgerManager()
@@ -369,8 +375,9 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
     }
 
-    if (!tx->checkValid(mApp, ltx, *resPayload, 0, 0,
-                        getUpperBoundCloseTimeOffset(mApp, closeTime)))
+    auto [isValid, resPayload] = tx->checkValid(
+        mApp, ltx, 0, 0, getUpperBoundCloseTimeOffset(mApp, closeTime));
+    if (!isValid)
     {
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
@@ -544,7 +551,7 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
     if ((tx->isSoroban() != (c1 || c2)) || !tx->XDRProvidesValidFee())
     {
         auto resPayload =
-            TransactionResultPayload::create(tx->toTransactionFrame());
+            TransactionResultPayload::create(tx->toTransactionFrame(), 0);
         resPayload->getResult().result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }

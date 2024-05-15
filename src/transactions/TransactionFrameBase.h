@@ -11,6 +11,7 @@
 #include "main/Config.h"
 #include "overlay/StellarXDR.h"
 #include "transactions/TransactionMetaFrame.h"
+#include "transactions/TransactionResultPayload.h"
 #include "util/TxResource.h"
 #include "util/UnorderedSet.h"
 #include "util/types.h"
@@ -24,7 +25,6 @@ class Database;
 class OperationFrame;
 class TransactionFrame;
 class FeeBumpTransactionFrame;
-class TransactionResultPayload;
 
 class TransactionFrameBase;
 using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
@@ -43,18 +43,18 @@ class TransactionFrameBase
                        TransactionResultPayload& resPayload,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
-    virtual bool checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
-                            TransactionResultPayload& resPayload,
-                            SequenceNumber current,
-                            uint64_t lowerBoundCloseTimeOffset,
-                            uint64_t upperBoundCloseTimeOffset) const = 0;
+    virtual std::pair<bool, TransactionResultPayloadPtr>
+    checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
+               SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
+               uint64_t upperBoundCloseTimeOffset) const = 0;
     virtual bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
         TransactionResultPayload& resPayload) const = 0;
 
-    virtual void resetResults(LedgerHeader const& header,
-                              std::optional<int64_t> baseFee, bool applying,
-                              TransactionResultPayload& resPayload) const = 0;
+    virtual TransactionResultPayloadPtr
+    createResultPayloadWithFeeCharged(LedgerHeader const& header,
+                                      std::optional<int64_t> baseFee,
+                                      bool applying) const = 0;
 
     virtual TransactionEnvelope const& getEnvelope() const = 0;
 
@@ -98,9 +98,9 @@ class TransactionFrameBase
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const = 0;
     virtual void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const = 0;
 
-    virtual void
-    processFeeSeqNum(AbstractLedgerTxn& ltx, std::optional<int64_t> baseFee,
-                     TransactionResultPayload& resPayload) const = 0;
+    virtual TransactionResultPayloadPtr
+    processFeeSeqNum(AbstractLedgerTxn& ltx,
+                     std::optional<int64_t> baseFee) const = 0;
 
     virtual void
     processPostApply(Application& app, AbstractLedgerTxn& ltx,

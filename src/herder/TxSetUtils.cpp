@@ -184,18 +184,24 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
         while (iter != accountQueue->mTxs.end())
         {
             auto tx = *iter;
-            auto txPayload =
-                TransactionResultPayload::create(tx->toTransactionFrame());
             // In addition to checkValid, we also want to make sure that all but
             // the transaction with the lowest seqNum on a given sourceAccount
             // do not have minSeqAge and minSeqLedgerGap set
             bool minSeqCheckIsInvalid =
                 iter != accountQueue->mTxs.begin() &&
                 (tx->getMinSeqAge() != 0 || tx->getMinSeqLedgerGap() != 0);
-            if (minSeqCheckIsInvalid ||
-                !tx->checkValid(app, ltx, *txPayload, lastSeq,
-                                lowerBoundCloseTimeOffset,
-                                upperBoundCloseTimeOffset))
+
+            // Only call checkValid if we passed the seqNum check
+            bool checkValid = false;
+            TransactionResultPayloadPtr resPayload{};
+            if (!minSeqCheckIsInvalid)
+            {
+                std::tie(checkValid, resPayload) =
+                    tx->checkValid(app, ltx, lastSeq, lowerBoundCloseTimeOffset,
+                                   upperBoundCloseTimeOffset);
+            }
+
+            if (minSeqCheckIsInvalid || !checkValid)
             {
                 invalidTxs.emplace_back(tx);
                 iter = accountQueue->mTxs.erase(iter);
@@ -211,6 +217,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                     }
                     else
                     {
+                        releaseAssert(resPayload);
                         CLOG_DEBUG(
                             Herder,
                             "Got bad txSet: tx invalid lastSeq:{} tx: {} "
@@ -218,7 +225,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                             lastSeq,
                             xdrToCerealString(tx->getEnvelope(),
                                               "TransactionEnvelope"),
-                            txPayload->getResultCode());
+                            resPayload->getResultCode());
                     }
                     return invalidTxs;
                 }

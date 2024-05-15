@@ -3111,7 +3111,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto tx = TransactionTestFrame::fromTxFrame(rawTx);
         LedgerTxn ltx(app->getLedgerTxnRoot());
         TransactionMetaFrame txm(ltx.loadHeader().current().ledgerVersion);
-        REQUIRE(tx->checkValid(*app, ltx, 0, 0, 0));
+        REQUIRE(tx->checkValidForTesting(*app, ltx, 0, 0, 0));
         REQUIRE(tx->apply(*app, ltx, txm));
         ltx.commit();
     }
@@ -3178,7 +3178,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto txRevertSettings = TransactionTestFrame::fromTxFrame(txRaw);
         LedgerTxn ltx(app->getLedgerTxnRoot());
         TransactionMetaFrame txm(ltx.loadHeader().current().ledgerVersion);
-        REQUIRE(txRevertSettings->checkValid(*app, ltx, 0, 0, 0));
+        REQUIRE(txRevertSettings->checkValidForTesting(*app, ltx, 0, 0, 0));
         REQUIRE(txRevertSettings->apply(*app, ltx, txm));
         ltx.commit();
 

@@ -4,18 +4,31 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "transactions/TransactionFrame.h"
 #include "util/NonCopyable.h"
+#include "util/types.h"
 
 #include <memory>
 
 namespace stellar
 {
 
+class Config;
+class OperationFrame;
+class InternalLedgerEntry;
+class TransactionFrame;
+class TransactionMetaFrame;
+class SorobanNetworkConfig;
+
+class TransactionResultPayload;
+using TransactionResultPayloadPtr = std::shared_ptr<TransactionResultPayload>;
+
 // This class holds all mutable state that is associated with a transaction.
 class TransactionResultPayload
-    : public NonMovableOrCopyable,
+    : public NonMovableOrCopyable
+#ifdef BUILD_TESTS
+    ,
       public std::enable_shared_from_this<TransactionResultPayload>
+#endif
 {
   private:
     struct SorobanData
@@ -38,10 +51,11 @@ class TransactionResultPayload
 
     std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
 
-    TransactionResultPayload(TransactionFrame const& tx);
+    TransactionResultPayload(TransactionFrame const& tx, int64_t feeCharged);
 
   public:
-    static TransactionResultPayloadPtr create(TransactionFrame const& tx);
+    static TransactionResultPayloadPtr create(TransactionFrame const& tx,
+                                              int64_t feeCharged);
     void initializeFeeBumpResult();
     void initializeSorobanExtension();
 
@@ -87,12 +101,12 @@ class TransactionResultPayload
     void publishFailureDiagnosticsToMeta(TransactionMetaFrame& meta,
                                          Config const& cfg);
 
-    void reset(TransactionFrame const& tx, int64_t feeCharged);
-
+#ifdef BUILD_TESTS
     TransactionResultPayloadPtr
     getShared()
     {
         return shared_from_this();
     }
+#endif
 };
 }

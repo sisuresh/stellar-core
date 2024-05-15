@@ -203,47 +203,56 @@ FeeBumpTransactionFrame::checkSignature(SignatureChecker& signatureChecker,
     return signatureChecker.checkSignature(signers, neededWeight);
 }
 
-bool
+std::pair<bool, TransactionResultPayloadPtr>
 FeeBumpTransactionFrame::checkValid(Application& app,
                                     AbstractLedgerTxn& ltxOuter,
-                                    TransactionResultPayload& resPayload,
                                     SequenceNumber current,
                                     uint64_t lowerBoundCloseTimeOffset,
                                     uint64_t upperBoundCloseTimeOffset) const
 {
     if (!XDRProvidesValidFee())
     {
-        resPayload.initializeFeeBumpResult();
-        resPayload.getResult().result.code(txMALFORMED);
-        return false;
+        auto resPayload = TransactionResultPayload::create(*mInnerTx, 0);
+        resPayload->initializeFeeBumpResult();
+        resPayload->getResult().result.code(txMALFORMED);
+        return {false, resPayload};
     }
 
     LedgerTxn ltx(ltxOuter);
     int64_t minBaseFee = ltx.loadHeader().current().baseFee;
-    resetResults(ltx.loadHeader().current(), minBaseFee, false, resPayload);
+    auto resPayload = createResultPayloadWithFeeCharged(
+        ltx.loadHeader().current(), minBaseFee, false);
+
+    // TODO: Fix
+    auto toRemove = resPayload->getResult().feeCharged;
+    releaseAssert(resPayload);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
                                       getContentsHash(),
                                       mEnvelope.feeBump().signatures};
-    if (commonValid(signatureChecker, ltx, false, resPayload) !=
+    if (commonValid(signatureChecker, ltx, false, *resPayload) !=
         ValidationType::kFullyValid)
     {
-        return false;
+        return {false, resPayload};
     }
 
-    releaseAssert(resPayload.isFeeBump());
+    releaseAssert(resPayload->isFeeBump());
     if (!signatureChecker.checkAllSignaturesUsed())
     {
-        resPayload.getResult().result.code(txBAD_AUTH_EXTRA);
-        return false;
+        resPayload->getResult().result.code(txBAD_AUTH_EXTRA);
+        return {false, resPayload};
     }
 
-    bool res = mInnerTx->checkValidWithOptionallyChargedFee(
-        app, ltx, resPayload, current, false, lowerBoundCloseTimeOffset,
+    // Replace result payload with inner TX result then update accordingly
+    bool res;
+    std::tie(res, resPayload) = mInnerTx->checkValidWithOptionallyChargedFee(
+        app, ltx, current, false, lowerBoundCloseTimeOffset,
         upperBoundCloseTimeOffset);
+    resPayload->initializeFeeBumpResult();
+    updateResult(*resPayload, mInnerTx);
+    resPayload->getResult().feeCharged = toRemove;
 
-    updateResult(resPayload, mInnerTx);
-    return res;
+    return {res, resPayload};
 }
 
 bool
@@ -547,13 +556,14 @@ FeeBumpTransactionFrame::insertKeysForTxApply(
     mInnerTx->insertKeysForTxApply(keys);
 }
 
-void
-FeeBumpTransactionFrame::processFeeSeqNum(
-    AbstractLedgerTxn& ltx, std::optional<int64_t> baseFee,
-    TransactionResultPayload& resPayload) const
+TransactionResultPayloadPtr
+FeeBumpTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
+                                          std::optional<int64_t> baseFee) const
 {
-    resetResults(ltx.loadHeader().current(), baseFee, true, resPayload);
-    releaseAssert(resPayload.isFeeBump());
+    auto resPayload = createResultPayloadWithFeeCharged(
+        ltx.loadHeader().current(), baseFee, true);
+    releaseAssert(resPayload);
+    releaseAssert(resPayload->isFeeBump());
 
     auto feeSource = stellar::loadAccount(ltx, getFeeSourceID());
     if (!feeSource)
@@ -564,7 +574,7 @@ FeeBumpTransactionFrame::processFeeSeqNum(
 
     auto header = ltx.loadHeader();
 
-    int64_t& fee = resPayload.getResult().feeCharged;
+    int64_t& fee = resPayload->getResult().feeCharged;
     if (fee > 0)
     {
         fee = std::min(acc.balance, fee);
@@ -574,6 +584,8 @@ FeeBumpTransactionFrame::processFeeSeqNum(
         stellar::addBalance(acc.balance, -fee);
         header.current().feePool += fee;
     }
+
+    return resPayload;
 }
 
 void
@@ -597,19 +609,21 @@ FeeBumpTransactionFrame::removeOneTimeSignerKeyFromFeeSource(
     }
 }
 
-void
-FeeBumpTransactionFrame::resetResults(
-    LedgerHeader const& header, std::optional<int64_t> baseFee, bool applying,
-    TransactionResultPayload& resPayload) const
+TransactionResultPayloadPtr
+FeeBumpTransactionFrame::createResultPayloadWithFeeCharged(
+    LedgerHeader const& header, std::optional<int64_t> baseFee,
+    bool applying) const
 {
-    mInnerTx->resetResults(header, baseFee, applying, resPayload);
+    auto resPayload =
+        mInnerTx->createResultPayloadWithFeeCharged(header, baseFee, applying);
 
-    resPayload.initializeFeeBumpResult();
-    resPayload.getResult().result.code(txFEE_BUMP_INNER_SUCCESS);
+    resPayload->initializeFeeBumpResult();
+    resPayload->getResult().result.code(txFEE_BUMP_INNER_SUCCESS);
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
-    resPayload.getResult().feeCharged = getFee(header, baseFee, applying);
+    resPayload->getResult().feeCharged = getFee(header, baseFee, applying);
+    return resPayload;
 }
 
 std::shared_ptr<StellarMessage const>

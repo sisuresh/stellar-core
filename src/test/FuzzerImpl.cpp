@@ -902,7 +902,7 @@ class FuzzTransactionFrame : public TransactionFrame
     FuzzTransactionFrame(Hash const& networkID,
                          TransactionEnvelope const& envelope)
         : TransactionFrame(networkID, envelope)
-        , mResultPayload(TransactionResultPayload::create(*this)){};
+        , mResultPayload(TransactionResultPayload::create(*this, 0)){};
 
     void
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
@@ -917,7 +917,8 @@ class FuzzTransactionFrame : public TransactionFrame
         }
 
         // reset results of operations
-        resetResults(ltx.getHeader(), 0, true, *mResultPayload);
+        mResultPayload =
+            createResultPayloadWithFeeCharged(ltx.getHeader(), 0, true);
 
         // attempt application of transaction without processing the fee or
         // committing the LedgerTxn
