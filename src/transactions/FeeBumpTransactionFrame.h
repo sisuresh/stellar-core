@@ -69,12 +69,14 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     virtual ~FeeBumpTransactionFrame(){};
 
     bool apply(Application& app, AbstractLedgerTxn& ltx,
-               TransactionMetaFrame& meta, TransactionResultPayload& resPayload,
+               TransactionMetaFrame& meta,
+               TransactionResultPayloadPtr resPayload,
                Hash const& sorobanBasePrngSeed) const override;
 
-    void processPostApply(Application& app, AbstractLedgerTxn& ltx,
-                          TransactionMetaFrame& meta,
-                          TransactionResultPayload& resPayload) const override;
+    void
+    processPostApply(Application& app, AbstractLedgerTxn& ltx,
+                     TransactionMetaFrame& meta,
+                     TransactionResultPayloadPtr resPayload) const override;
 
     std::pair<bool, TransactionResultPayloadPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
@@ -82,7 +84,9 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                uint64_t upperBoundCloseTimeOffset) const override;
     bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
-        TransactionResultPayload& resPayload) const override;
+        TransactionResultPayloadPtr resPayload) const override;
+
+    TransactionResultPayloadPtr createResultPayload() const override;
 
     TransactionResultPayloadPtr
     createResultPayloadWithFeeCharged(LedgerHeader const& header,
@@ -90,8 +94,6 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                                       bool applying) const override;
 
     TransactionEnvelope const& getEnvelope() const override;
-    FeeBumpTransactionFrame const& toFeeBumpTransactionFrame() const override;
-    TransactionFrame const& toTransactionFrame() const override;
 
     int64_t getFullFee() const override;
     int64_t getInclusionFee() const override;

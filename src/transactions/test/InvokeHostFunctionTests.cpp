@@ -996,7 +996,7 @@ TEST_CASE("Soroban non-refundable resource fees are stable", "[tx][soroban]")
         auto& app = test.getApp();
         // Sanity check the tx fee computation logic.
         auto actualFeePair =
-            validTx->toTransactionFrame().computePreApplySorobanResourceFee(
+            validTx->getRawTransactionFrame().computePreApplySorobanResourceFee(
                 app.getLedgerManager()
                     .getLastClosedLedgerHeader()
                     .header.ledgerVersion,

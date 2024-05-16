@@ -11,7 +11,6 @@
 #include "main/Config.h"
 #include "overlay/StellarXDR.h"
 #include "transactions/TransactionMetaFrame.h"
-#include "transactions/TransactionResultPayload.h"
 #include "util/TxResource.h"
 #include "util/UnorderedSet.h"
 #include "util/types.h"
@@ -25,6 +24,9 @@ class Database;
 class OperationFrame;
 class TransactionFrame;
 class FeeBumpTransactionFrame;
+
+class TransactionResultPayload;
+using TransactionResultPayloadPtr = std::shared_ptr<TransactionResultPayload>;
 
 class TransactionFrameBase;
 using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
@@ -40,7 +42,7 @@ class TransactionFrameBase
 
     virtual bool apply(Application& app, AbstractLedgerTxn& ltx,
                        TransactionMetaFrame& meta,
-                       TransactionResultPayload& resPayload,
+                       TransactionResultPayloadPtr resPayload,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
     virtual std::pair<bool, TransactionResultPayloadPtr>
@@ -49,7 +51,9 @@ class TransactionFrameBase
                uint64_t upperBoundCloseTimeOffset) const = 0;
     virtual bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
-        TransactionResultPayload& resPayload) const = 0;
+        TransactionResultPayloadPtr resPayload) const = 0;
+
+    virtual TransactionResultPayloadPtr createResultPayload() const = 0;
 
     virtual TransactionResultPayloadPtr
     createResultPayloadWithFeeCharged(LedgerHeader const& header,
@@ -63,11 +67,6 @@ class TransactionFrameBase
     virtual void clearCached() const = 0;
     virtual bool isTestTx() const = 0;
 #endif
-
-    // Protected Cast
-    virtual FeeBumpTransactionFrame const&
-    toFeeBumpTransactionFrame() const = 0;
-    virtual TransactionFrame const& toTransactionFrame() const = 0;
 
     // Returns the total fee of this transaction, including the 'flat',
     // non-market part.
@@ -105,7 +104,7 @@ class TransactionFrameBase
     virtual void
     processPostApply(Application& app, AbstractLedgerTxn& ltx,
                      TransactionMetaFrame& meta,
-                     TransactionResultPayload& resPayload) const = 0;
+                     TransactionResultPayloadPtr resPayload) const = 0;
 
     virtual std::shared_ptr<StellarMessage const> toStellarMessage() const = 0;
 

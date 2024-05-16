@@ -902,7 +902,7 @@ class FuzzTransactionFrame : public TransactionFrame
     FuzzTransactionFrame(Hash const& networkID,
                          TransactionEnvelope const& envelope)
         : TransactionFrame(networkID, envelope)
-        , mResultPayload(TransactionResultPayload::create(*this, 0)){};
+        , mResultPayload(createResultPayload()){};
 
     void
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
