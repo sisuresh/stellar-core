@@ -1522,7 +1522,7 @@ LedgerManagerImpl::applyTransactions(
     {
         ZoneNamedN(txZone, "applyTransaction", true);
         auto tx = txs.at(i);
-        auto& txResult = *txResults.at(i);
+        auto txResult = txResults.at(i);
 
         auto txTime = mTransactionApply.TimeScope();
         TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
@@ -1546,7 +1546,7 @@ LedgerManagerImpl::applyTransactions(
         tx->processPostApply(mApp, ltx, tm, txResult);
         TransactionResultPair results;
         results.transactionHash = tx->getContentsHash();
-        results.result = txResult.getResult();
+        results.result = txResult->getResult();
         if (results.result.result.code() == TransactionResultCode::txSUCCESS)
         {
             if (tx->isSoroban())

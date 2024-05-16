@@ -109,7 +109,7 @@ TransactionFrame::TransactionFrame(Hash const& networkID,
 {
     // We need information from the underlying OperationFrame objects, but we
     // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = TransactionResultPayload::create(*this, 0);
+    auto dummyPayload = createResultPayload();
     mHasDexOperations = hasDexOperationsInternal(*dummyPayload);
     mIsSoroban = isSorobanInternal(*dummyPayload);
     mHasValidSorobanOpsConsistency =
@@ -177,18 +177,6 @@ TransactionFrame::clearCached() const
     mFullHash = zero;
 }
 #endif
-
-[[noreturn]] FeeBumpTransactionFrame const&
-TransactionFrame::toFeeBumpTransactionFrame() const
-{
-    throw std::bad_cast();
-}
-
-TransactionFrame const&
-TransactionFrame::toTransactionFrame() const
-{
-    return *this;
-}
 
 SequenceNumber
 TransactionFrame::getSeqNum() const
@@ -458,7 +446,15 @@ TransactionFrame::createResultPayloadWithFeeCharged(
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
     auto feeCharged = getFee(header, baseFee, applying);
-    return TransactionResultPayload::create(*this, feeCharged);
+    return TransactionResultPayloadPtr(
+        new TransactionResultPayloadImpl(*this, feeCharged));
+}
+
+TransactionResultPayloadPtr
+TransactionFrame::createResultPayload() const
+{
+    return TransactionResultPayloadPtr(
+        new TransactionResultPayloadImpl(*this, 0));
 }
 
 std::optional<TimeBounds const> const
@@ -720,7 +716,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
         return 0;
     }
 
-    resPayload.getInnerResult().feeCharged -= feeRefund;
+    resPayload.getResult().feeCharged -= feeRefund;
     header.current().feePool -= feeRefund;
     ltx.commit();
 
@@ -904,9 +900,10 @@ TransactionFrame::commonValidPreSeqNum(
     Application& app, AbstractLedgerTxn& ltx, bool chargeFee,
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
     std::optional<FeePair> sorobanResourceFee,
-    TransactionResultPayload& resPayload) const
+    TransactionResultPayloadPtr resPayload) const
 {
     ZoneScoped;
+    releaseAssertOrThrow(resPayload);
     // this function does validations that are independent of the account state
     //    (stay true regardless of other side effects)
 
@@ -917,7 +914,7 @@ TransactionFrame::commonValidPreSeqNum(
         (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_13) &&
          mEnvelope.type() == ENVELOPE_TYPE_TX_V0))
     {
-        resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
+        resPayload->getResult().result.code(txNOT_SUPPORTED);
         return false;
     }
 
@@ -925,7 +922,7 @@ TransactionFrame::commonValidPreSeqNum(
         mEnvelope.type() == ENVELOPE_TYPE_TX &&
         mEnvelope.v1().tx.cond.type() == PRECOND_V2)
     {
-        resPayload.getInnerResult().result.code(txNOT_SUPPORTED);
+        resPayload->getResult().result.code(txNOT_SUPPORTED);
         return false;
     }
 
@@ -936,7 +933,7 @@ TransactionFrame::commonValidPreSeqNum(
         static_assert(decltype(PreconditionsV2::extraSigners)::max_size() == 2);
         if (extraSigners.size() == 2 && extraSigners[0] == extraSigners[1])
         {
-            resPayload.getInnerResult().result.code(txMALFORMED);
+            resPayload->getResult().result.code(txMALFORMED);
             return false;
         }
 
@@ -945,7 +942,7 @@ TransactionFrame::commonValidPreSeqNum(
             if (signer.type() == SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD &&
                 signer.ed25519SignedPayload().payload.empty())
             {
-                resPayload.getInnerResult().result.code(txMALFORMED);
+                resPayload->getResult().result.code(txMALFORMED);
                 return false;
             }
         }
@@ -953,20 +950,20 @@ TransactionFrame::commonValidPreSeqNum(
 
     if (getNumOperations() == 0)
     {
-        resPayload.getInnerResult().result.code(txMISSING_OPERATION);
+        resPayload->getResult().result.code(txMISSING_OPERATION);
         return false;
     }
 
     if (!validateSorobanOpsConsistency())
     {
-        resPayload.getInnerResult().result.code(txMALFORMED);
+        resPayload->getResult().result.code(txMALFORMED);
         return false;
     }
     if (isSoroban())
     {
         if (protocolVersionIsBefore(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
         {
-            resPayload.getInnerResult().result.code(txMALFORMED);
+            resPayload->getResult().result.code(txMALFORMED);
             return false;
         }
 
@@ -978,41 +975,41 @@ TransactionFrame::commonValidPreSeqNum(
         auto const& sorobanData = mEnvelope.v1().tx.ext.sorobanData();
         if (sorobanData.resourceFee > getFullFee())
         {
-            resPayload.pushValidationTimeDiagnosticError(
+            resPayload->pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is higher than the "
                 "full transaction fee",
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(getFullFee())});
 
-            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
+            resPayload->getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
         releaseAssertOrThrow(sorobanResourceFee);
         if (sorobanResourceFee->refundable_fee >
             INT64_MAX - sorobanResourceFee->non_refundable_fee)
         {
-            resPayload.pushValidationTimeDiagnosticError(
+            resPayload->pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
                 "transaction resource fees cannot be added",
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
 
-            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
+            resPayload->getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
         auto const resourceFees = sorobanResourceFee->refundable_fee +
                                   sorobanResourceFee->non_refundable_fee;
         if (sorobanData.resourceFee < resourceFees)
         {
-            resPayload.pushValidationTimeDiagnosticError(
+            resPayload->pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is lower than the "
                 "actual Soroban resource fee",
                 {makeU64SCVal(sorobanData.resourceFee),
                  makeU64SCVal(resourceFees)});
 
-            resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
+            resPayload->getResult().result.code(txSOROBAN_INVALID);
             return false;
         }
 
@@ -1024,14 +1021,14 @@ TransactionFrame::commonValidPreSeqNum(
             {
                 if (!set.emplace(lk).second)
                 {
-                    resPayload.pushValidationTimeDiagnosticError(
+                    resPayload->pushValidationTimeDiagnosticError(
                         app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
                         "Found duplicate key in the Soroban footprint; every "
                         "key across read-only and read-write footprints has to "
                         "be unique.",
                         {});
 
-                    resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
+                    resPayload->getResult().result.code(txSOROBAN_INVALID);
                     return false;
                 }
             }
@@ -1051,7 +1048,7 @@ TransactionFrame::commonValidPreSeqNum(
             if (mEnvelope.type() == ENVELOPE_TYPE_TX &&
                 mEnvelope.v1().tx.ext.v() != 0)
             {
-                resPayload.getInnerResult().result.code(txMALFORMED);
+                resPayload->getResult().result.code(txMALFORMED);
                 return false;
             }
         }
@@ -1060,30 +1057,30 @@ TransactionFrame::commonValidPreSeqNum(
     auto header = ltx.loadHeader();
     if (isTooEarly(header, lowerBoundCloseTimeOffset))
     {
-        resPayload.getInnerResult().result.code(txTOO_EARLY);
+        resPayload->getResult().result.code(txTOO_EARLY);
         return false;
     }
     if (isTooLate(header, upperBoundCloseTimeOffset))
     {
-        resPayload.getInnerResult().result.code(txTOO_LATE);
+        resPayload->getResult().result.code(txTOO_LATE);
         return false;
     }
 
     if (chargeFee &&
         getInclusionFee() < getMinInclusionFee(*this, header.current()))
     {
-        resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
+        resPayload->getResult().result.code(txINSUFFICIENT_FEE);
         return false;
     }
     if (!chargeFee && getInclusionFee() < 0)
     {
-        resPayload.getInnerResult().result.code(txINSUFFICIENT_FEE);
+        resPayload->getResult().result.code(txINSUFFICIENT_FEE);
         return false;
     }
 
-    if (!loadSourceAccount(ltx, header, resPayload))
+    if (!loadSourceAccount(ltx, header, *resPayload))
     {
-        resPayload.getInnerResult().result.code(txNO_ACCOUNT);
+        resPayload->getResult().result.code(txNO_ACCOUNT);
         return false;
     }
 
@@ -1161,7 +1158,7 @@ TransactionFrame::processSignatures(ValidationType cv,
 
     if (!signatureChecker.checkAllSignaturesUsed())
     {
-        resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
+        resPayload.getResult().result.code(txBAD_AUTH_EXTRA);
         return false;
     }
 
@@ -1203,9 +1200,10 @@ TransactionFrame::commonValid(Application& app,
                               uint64_t lowerBoundCloseTimeOffset,
                               uint64_t upperBoundCloseTimeOffset,
                               std::optional<FeePair> sorobanResourceFee,
-                              TransactionResultPayload& resPayload) const
+                              TransactionResultPayloadPtr resPayload) const
 {
     ZoneScoped;
+    releaseAssertOrThrow(resPayload);
     LedgerTxn ltx(ltxOuter);
     ValidationType res = ValidationType::kInvalid;
 
@@ -1224,7 +1222,7 @@ TransactionFrame::commonValid(Application& app,
     }
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
+    auto sourceAccount = loadSourceAccount(ltx, header, *resPayload);
 
     // in older versions, the account's sequence number is updated when taking
     // fees
@@ -1238,7 +1236,7 @@ TransactionFrame::commonValid(Application& app,
         }
         if (isBadSeq(header, current))
         {
-            resPayload.getInnerResult().result.code(txBAD_SEQ);
+            resPayload->getResult().result.code(txBAD_SEQ);
             return res;
         }
     }
@@ -1247,7 +1245,7 @@ TransactionFrame::commonValid(Application& app,
 
     if (isTooEarlyForAccount(header, sourceAccount, lowerBoundCloseTimeOffset))
     {
-        resPayload.getInnerResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
+        resPayload->getResult().result.code(txBAD_MIN_SEQ_AGE_OR_GAP);
         return res;
     }
 
@@ -1255,7 +1253,7 @@ TransactionFrame::commonValid(Application& app,
             signatureChecker, sourceAccount,
             sourceAccount.current().data.account().thresholds[THRESHOLD_LOW]))
     {
-        resPayload.getInnerResult().result.code(txBAD_AUTH);
+        resPayload->getResult().result.code(txBAD_AUTH);
         return res;
     }
 
@@ -1263,7 +1261,7 @@ TransactionFrame::commonValid(Application& app,
                                   ProtocolVersion::V_19) &&
         !checkExtraSigners(signatureChecker))
     {
-        resPayload.getInnerResult().result.code(txBAD_AUTH);
+        resPayload->getResult().result.code(txBAD_AUTH);
         return res;
     }
 
@@ -1281,7 +1279,7 @@ TransactionFrame::commonValid(Application& app,
     // liabilities
     if (chargeFee && getAvailableBalance(header, sourceAccount) < feeToPay)
     {
-        resPayload.getInnerResult().result.code(txINSUFFICIENT_BALANCE);
+        resPayload->getResult().result.code(txINSUFFICIENT_BALANCE);
         return res;
     }
 
@@ -1307,7 +1305,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 
     auto& acc = sourceAccount.current().data.account();
 
-    int64_t& fee = resPayload->getInnerResult().feeCharged;
+    int64_t& fee = resPayload->getResult().feeCharged;
     if (fee > 0)
     {
         fee = std::min(acc.balance, fee);
@@ -1410,8 +1408,8 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
 
     if (!XDRProvidesValidFee())
     {
-        auto resPayload = TransactionResultPayload::create(*this, 0);
-        resPayload->getInnerResult().result.code(txMALFORMED);
+        auto resPayload = createResultPayload();
+        resPayload->getResult().result.code(txMALFORMED);
         return {false, resPayload};
     }
 
@@ -1441,7 +1439,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     bool res = commonValid(app, signatureChecker, ltx, current, false,
                            chargeFee, lowerBoundCloseTimeOffset,
                            upperBoundCloseTimeOffset, sorobanResourceFee,
-                           *resPayload) == ValidationType::kMaybeValid;
+                           resPayload) == ValidationType::kMaybeValid;
     if (res)
     {
         for (auto op : resPayload->getOpFrames())
@@ -1459,7 +1457,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         if (!signatureChecker.checkAllSignaturesUsed())
         {
             res = false;
-            resPayload->getInnerResult().result.code(txBAD_AUTH_EXTRA);
+            resPayload->getResult().result.code(txBAD_AUTH_EXTRA);
         }
     }
     return {res, resPayload};
@@ -1479,14 +1477,15 @@ TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 bool
 TransactionFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
-    TransactionResultPayload& resPayload) const
+    TransactionResultPayloadPtr resPayload) const
 {
+    releaseAssertOrThrow(resPayload);
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
     if (!validateSorobanResources(sorobanConfig, app.getConfig(), ledgerVersion,
-                                  resPayload))
+                                  *resPayload))
     {
-        resPayload.getInnerResult().result.code(txSOROBAN_INVALID);
+        resPayload->getResult().result.code(txSOROBAN_INVALID);
         return false;
     }
     return true;
@@ -1504,7 +1503,7 @@ TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 {
     // We need information from the underlying OperationFrame objects, but we
     // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = TransactionResultPayload::create(*this, 0);
+    auto dummyPayload = createResultPayload();
     for (auto const& op : dummyPayload->getOpFrames())
     {
         if (!(getSourceID() == op->getSourceID()))
@@ -1522,12 +1521,12 @@ TransactionFrame::markResultFailed(TransactionResultPayload& resPayload) const
     // then a different XDR structure is constructed. However, txFAILED and
     // txSUCCESS have the same underlying field number so this does not
     // occur.
-    resPayload.getInnerResult().result.code(txFAILED);
+    resPayload.getResult().result.code(txFAILED);
 }
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionResultPayload& resPayload,
+                        TransactionResultPayloadPtr resPayload,
                         Hash const& sorobanBasePrngSeed) const
 {
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
@@ -1614,7 +1613,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             {
                 if (!signatureChecker.checkAllSignaturesUsed())
                 {
-                    resPayload.getInnerResult().result.code(txBAD_AUTH_EXTRA);
+                    resPayload.getResult().result.code(txBAD_AUTH_EXTRA);
 
                     // this should never happen: malformed transaction
                     // should not be accepted by nodes
@@ -1632,7 +1631,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                                ProtocolVersion::V_14) &&
                      ltxTx.hasSponsorshipEntry())
             {
-                resPayload.getInnerResult().result.code(txBAD_SPONSORSHIP);
+                resPayload.getResult().result.code(txBAD_SPONSORSHIP);
                 return false;
             }
 
@@ -1663,9 +1662,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                     app.getLedgerManager().getSorobanNetworkConfig(),
                     app.getConfig());
 
-                resPayload.getSorobanFeeRefund() =
-                    declaredSorobanResourceFee() -
-                    preApplyFee.non_refundable_fee;
+                resPayload.setSorobanFeeRefund(declaredSorobanResourceFee() -
+                                               preApplyFee.non_refundable_fee);
 
                 resPayload.publishFailureDiagnosticsToMeta(outerMeta,
                                                            app.getConfig());
@@ -1725,7 +1723,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                            "operations, see logs for details.");
     }
     // This is only reachable if an exception is thrown
-    resPayload.getInnerResult().result.code(txINTERNAL_ERROR);
+    resPayload.getResult().result.code(txINTERNAL_ERROR);
 
     // We only increase the internal-error metric count if the ledger is a
     // newer version.
@@ -1743,13 +1741,13 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta,
-                        TransactionResultPayload& resPayload, bool chargeFee,
+                        TransactionResultPayloadPtr resPayload, bool chargeFee,
                         Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     try
     {
-        resPayload.getCachedAccountPtr().reset();
+        resPayload->getCachedAccountPtr().reset();
         uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
         SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
                                           getSignatures(mEnvelope)};
@@ -1766,22 +1764,22 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                 ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
                 app.getConfig());
 
-            resPayload.getSorobanConsumedNonRefundableFee() =
-                sorobanResourceFee->non_refundable_fee;
-            resPayload.getSorobanFeeRefund() =
+            resPayload->setSorobanConsumedNonRefundableFee(
+                sorobanResourceFee->non_refundable_fee);
+            resPayload->setSorobanFeeRefund(
                 declaredSorobanResourceFee() -
-                sorobanResourceFee->non_refundable_fee;
+                sorobanResourceFee->non_refundable_fee);
         }
         LedgerTxn ltxTx(ltx);
         auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
                               0, 0, sorobanResourceFee, resPayload);
         if (cv >= ValidationType::kInvalidUpdateSeqNum)
         {
-            processSeqNum(ltxTx, resPayload);
+            processSeqNum(ltxTx, *resPayload);
         }
 
         bool signaturesValid =
-            processSignatures(cv, signatureChecker, ltxTx, resPayload);
+            processSignatures(cv, signatureChecker, ltxTx, *resPayload);
 
         meta.pushTxChangesBefore(ltxTx.getChanges());
         ltxTx.commit();
@@ -1800,7 +1798,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                 }
 
                 ok = applyOperations(signatureChecker, app, ltx, meta,
-                                     resPayload, sorobanBasePrngSeed);
+                                     *resPayload, sorobanBasePrngSeed);
             }
             return ok;
         }
@@ -1830,7 +1828,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta,
-                        TransactionResultPayload& resPayload,
+                        TransactionResultPayloadPtr resPayload,
                         Hash const& sorobanBasePrngSeed) const
 {
     return apply(app, ltx, meta, resPayload, true, sorobanBasePrngSeed);
@@ -1840,9 +1838,10 @@ void
 TransactionFrame::processPostApply(Application& app,
                                    AbstractLedgerTxn& ltxOuter,
                                    TransactionMetaFrame& meta,
-                                   TransactionResultPayload& resPayload) const
+                                   TransactionResultPayloadPtr resPayload) const
 {
-    processRefund(app, ltxOuter, meta, getSourceID(), resPayload);
+    releaseAssertOrThrow(resPayload);
+    processRefund(app, ltxOuter, meta, getSourceID(), *resPayload);
 }
 
 // This is a TransactionFrame specific function that should only be used by
@@ -1888,18 +1887,10 @@ TransactionFrame::getSize() const
 #ifdef BUILD_TESTS
 TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
     : mTransactionFrame(tx)
-    , mTransactionResultPayload(
-          TransactionResultPayload::create(tx->toTransactionFrame(), 0))
+    , mTransactionResultPayload(tx->createResultPayload())
 {
     releaseAssert(mTransactionFrame);
     releaseAssert(!mTransactionFrame->isTestTx());
-}
-
-void
-TransactionTestFrame::updateResultPayload(
-    TransactionResultPayload& resPayload) const
-{
-    mTransactionResultPayload = resPayload.getShared();
 }
 
 TransactionTestFramePtr
@@ -1920,12 +1911,18 @@ TransactionTestFrame::createResultPayloadWithFeeCharged(
                                                                 applying);
 }
 
+TransactionResultPayloadPtr
+TransactionTestFrame::createResultPayload() const
+{
+    return mTransactionFrame->createResultPayload();
+}
+
 bool
 TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                             TransactionMetaFrame& meta,
                             Hash const& sorobanBasePrngSeed)
 {
-    return mTransactionFrame->apply(app, ltx, meta, *mTransactionResultPayload,
+    return mTransactionFrame->apply(app, ltx, meta, mTransactionResultPayload,
                                     sorobanBasePrngSeed);
 }
 
@@ -1960,12 +1957,12 @@ TransactionTestFrame::addSignature(DecoratedSignature const& signature)
 bool
 TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                             TransactionMetaFrame& meta,
-                            TransactionResultPayload& resPayload,
+                            TransactionResultPayloadPtr resPayload,
                             Hash const& sorobanBasePrngSeed) const
 {
     auto ret = mTransactionFrame->apply(app, ltx, meta, resPayload,
                                         sorobanBasePrngSeed);
-    updateResultPayload(resPayload);
+    mTransactionResultPayload = resPayload;
     return ret;
 }
 
@@ -1995,7 +1992,7 @@ TransactionTestFrame::processPostApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta)
 {
     mTransactionFrame->processPostApply(app, ltx, meta,
-                                        *mTransactionResultPayload);
+                                        mTransactionResultPayload);
 }
 
 bool
@@ -2015,11 +2012,11 @@ TransactionTestFrame::checkValidForTesting(Application& app,
 bool
 TransactionTestFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
-    TransactionResultPayload& resPayload) const
+    TransactionResultPayloadPtr resPayload) const
 {
     auto ret = mTransactionFrame->checkSorobanResourceAndSetError(
         app, ledgerVersion, resPayload);
-    updateResultPayload(resPayload);
+    mTransactionResultPayload = resPayload;
     return ret;
 }
 
@@ -2035,16 +2032,19 @@ TransactionTestFrame::getMutableEnvelope() const
     return mTransactionFrame->getMutableEnvelope();
 }
 
-FeeBumpTransactionFrame const&
-TransactionTestFrame::toFeeBumpTransactionFrame() const
+TransactionFrame const&
+TransactionTestFrame::getRawTransactionFrame() const
 {
-    return mTransactionFrame->toFeeBumpTransactionFrame();
+    auto ret =
+        std::dynamic_pointer_cast<TransactionFrame const>(mTransactionFrame);
+    releaseAssertOrThrow(ret);
+    return *ret;
 }
 
-TransactionFrame const&
-TransactionTestFrame::toTransactionFrame() const
+TransactionFrameBasePtr
+TransactionTestFrame::getTxFramePtr() const
 {
-    return mTransactionFrame->toTransactionFrame();
+    return mTransactionFrame;
 }
 
 int64_t
@@ -2170,10 +2170,10 @@ TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 void
 TransactionTestFrame::processPostApply(
     Application& app, AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
-    TransactionResultPayload& resPayload) const
+    TransactionResultPayloadPtr resPayload) const
 {
     mTransactionFrame->processPostApply(app, ltx, meta, resPayload);
-    updateResultPayload(resPayload);
+    mTransactionResultPayload = resPayload;
 }
 
 std::shared_ptr<StellarMessage const>

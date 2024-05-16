@@ -222,8 +222,22 @@ isDuplicateTx(TransactionFrameBasePtr oldTx, TransactionFrameBasePtr newTx)
     }
     else if (oldEnv.type() == ENVELOPE_TYPE_TX_FEE_BUMP)
     {
-        auto const& oldFeeBump = oldTx->toFeeBumpTransactionFrame();
-        return oldFeeBump.getInnerFullHash() == newTx->getFullHash();
+        std::shared_ptr<FeeBumpTransactionFrame const> feeBumpPtr{};
+#ifdef BUILD_TESTS
+        if (oldTx->isTestTx())
+        {
+            auto testFrame =
+                std::dynamic_pointer_cast<TransactionTestFrame const>(oldTx);
+            feeBumpPtr =
+                std::dynamic_pointer_cast<FeeBumpTransactionFrame const>(
+                    testFrame->getTxFramePtr());
+        }
+        else
+#endif
+            feeBumpPtr =
+                std::dynamic_pointer_cast<FeeBumpTransactionFrame const>(oldTx);
+        releaseAssertOrThrow(feeBumpPtr);
+        return feeBumpPtr->getInnerFullHash() == newTx->getFullHash();
     }
     return false;
 }
@@ -253,8 +267,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     int64_t newFullFee = tx->getFullFee();
     if (newFullFee < 0 || tx->getInclusionFee() < 0)
     {
-        auto resPayload =
-            TransactionResultPayload::create(tx->toTransactionFrame(), 0);
+        auto resPayload = tx->createResultPayload();
         resPayload->getResult().result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
@@ -281,8 +294,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             {
                 // If the transaction is older than the one in the queue, we
                 // reject it
-                auto resPayload = TransactionResultPayload::create(
-                    tx->toTransactionFrame(), 0);
+                auto resPayload = tx->createResultPayload();
                 resPayload->getResult().result.code(txBAD_SEQ);
                 return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                         resPayload};
@@ -293,14 +305,13 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             // appropriate error message
             if (tx->isSoroban())
             {
-                auto resPayload = TransactionResultPayload::create(
-                    tx->toTransactionFrame(), 0);
+                auto resPayload = tx->createResultPayload();
                 if (!tx->checkSorobanResourceAndSetError(
                         mApp,
                         mApp.getLedgerManager()
                             .getLastClosedLedgerHeader()
                             .header.ledgerVersion,
-                        *resPayload))
+                        resPayload))
                 {
                     return {AddResult::ADD_STATUS_ERROR, resPayload};
                 }
@@ -326,8 +337,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 int64_t minFee;
                 if (!canReplaceByFee(tx, currentTx, minFee))
                 {
-                    auto resPayload = TransactionResultPayload::create(
-                        tx->toTransactionFrame(), minFee);
+                    auto resPayload = tx->createResultPayload();
+                    resPayload->getResult().feeCharged = minFee;
                     resPayload->getResult().result.code(txINSUFFICIENT_FEE);
                     return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                             resPayload};
@@ -355,8 +366,8 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         ban({tx});
         if (canAddRes.second != 0)
         {
-            auto resPayload = TransactionResultPayload::create(
-                tx->toTransactionFrame(), canAddRes.second);
+            auto resPayload = tx->createResultPayload();
+            resPayload->getResult().feeCharged = canAddRes.second;
             resPayload->getResult().result.code(txINSUFFICIENT_FEE);
             return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
         }
@@ -550,8 +561,7 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
     // fast fail when Soroban tx is malformed
     if ((tx->isSoroban() != (c1 || c2)) || !tx->XDRProvidesValidFee())
     {
-        auto resPayload =
-            TransactionResultPayload::create(tx->toTransactionFrame(), 0);
+        auto resPayload = tx->createResultPayload();
         resPayload->getResult().result.code(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
