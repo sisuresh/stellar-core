@@ -1359,10 +1359,8 @@ LedgerManagerImpl::processFeesSeqNums(
         std::map<AccountID, SequenceNumber> accToMaxSeq;
 
         bool mergeSeen = false;
-        for (size_t i = 0; i < txs.size(); ++i)
+        for (auto tx : txs)
         {
-            auto tx = txs.at(i);
-
             LedgerTxn ltxTx(ltx);
 
             txResults.push_back(

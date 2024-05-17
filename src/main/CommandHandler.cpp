@@ -1023,7 +1023,7 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
             if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
             {
                 std::string resultBase64;
-                releaseAssert(payload);
+                releaseAssertOrThrow(payload);
                 auto resultBin = xdr::xdr_to_opaque(payload->getResult());
                 resultBase64.reserve(decoder::encoded_size64(resultBin.size()) +
                                      1);
