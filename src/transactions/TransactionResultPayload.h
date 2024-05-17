@@ -23,8 +23,6 @@ class SorobanNetworkConfig;
 class TransactionResultPayload : public NonMovableOrCopyable
 {
   public:
-    virtual void initializeSorobanExtension() = 0;
-
     virtual TransactionResult& getResult() = 0;
     virtual TransactionResult const& getResult() const = 0;
     virtual TransactionResultCode getResultCode() const = 0;
@@ -105,8 +103,6 @@ class TransactionResultPayloadImpl : public TransactionResultPayload
   public:
     virtual ~TransactionResultPayloadImpl() = default;
 
-    void initializeSorobanExtension() override;
-
     TransactionResult& getResult() override;
     TransactionResult const& getResult() const override;
     TransactionResultCode getResultCode() const override;
@@ -168,11 +164,9 @@ class FeeBumpTransactionResultPayload : public TransactionResultPayload
     // Updates outer fee bump result based on inner result.
     void updateResult(TransactionFrameBasePtr innerTx);
 
-    void swapInnerResultPayload(TransactionResultPayloadPtr innerResultPayload);
+    void setInnerResultPayload(TransactionResultPayloadPtr innerResultPayload);
 
     TransactionResultPayloadPtr getInnerResultPayload();
-
-    void initializeSorobanExtension() override;
 
     TransactionResult& getResult() override;
     TransactionResult const& getResult() const override;

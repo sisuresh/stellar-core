@@ -1,4 +1,4 @@
-// Copyright 2034 Stellar Development Foundation and contributors. Licensed
+// Copyright 2024 Stellar Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -39,7 +39,7 @@ TransactionResultPayloadImpl::TransactionResultPayloadImpl(
     // resets Soroban related fields
     if (tx.isSoroban())
     {
-        initializeSorobanExtension();
+        mSorobanExtension = SorobanData();
     }
 }
 
@@ -157,12 +157,6 @@ std::shared_ptr<InternalLedgerEntry const>&
 TransactionResultPayloadImpl::getCachedAccountPtr()
 {
     return mCachedAccount;
-}
-
-void
-TransactionResultPayloadImpl::initializeSorobanExtension()
-{
-    mSorobanExtension = SorobanData();
 }
 
 void
@@ -327,7 +321,7 @@ FeeBumpTransactionResultPayload::updateResult(TransactionFrameBasePtr innerTx)
 }
 
 void
-FeeBumpTransactionResultPayload::swapInnerResultPayload(
+FeeBumpTransactionResultPayload::setInnerResultPayload(
     TransactionResultPayloadPtr innerResultPayload)
 {
     releaseAssertOrThrow(innerResultPayload);
@@ -339,13 +333,6 @@ FeeBumpTransactionResultPayload::getInnerResultPayload()
 {
     releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload;
-}
-
-void
-FeeBumpTransactionResultPayload::initializeSorobanExtension()
-{
-    releaseAssertOrThrow(mInnerResultPayload);
-    mInnerResultPayload->initializeSorobanExtension();
 }
 
 TransactionResult&

@@ -220,7 +220,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
     auto [res, innerResPayload] = mInnerTx->checkValidWithOptionallyChargedFee(
         app, ltx, current, false, lowerBoundCloseTimeOffset,
         upperBoundCloseTimeOffset);
-    resPayload->swapInnerResultPayload(innerResPayload);
+    resPayload->setInnerResultPayload(innerResPayload);
     resPayload->updateResult(mInnerTx);
 
     return {res, resPayload};
