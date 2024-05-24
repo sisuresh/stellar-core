@@ -32,7 +32,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                         int32_t neededWeight) const;
 
     bool commonValidPreSeqNum(AbstractLedgerTxn& ltx,
-                              TransactionResultPayload& resPayload) const;
+                              TransactionResultPayloadBase& resPayload) const;
 
     enum ValidationType
     {
@@ -44,7 +44,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     ValidationType commonValid(SignatureChecker& signatureChecker,
                                AbstractLedgerTxn& ltxOuter, bool applying,
-                               TransactionResultPayload& resPayload) const;
+                               TransactionResultPayloadBase& resPayload) const;
 
     void removeOneTimeSignerKeyFromFeeSource(AbstractLedgerTxn& ltx) const;
 

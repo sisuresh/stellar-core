@@ -912,7 +912,7 @@ class FuzzTransactionFrame : public TransactionFrame
                         mResultPayload->getOpFrames().end(),
                         [](auto const& x) { return x->isSoroban(); }))
         {
-            markResultFailed(*mResultPayload);
+            mResultPayload->setResultCode(txFAILED);
             return;
         }
 
@@ -934,7 +934,7 @@ class FuzzTransactionFrame : public TransactionFrame
                         mResultPayload->getOpFrames().end(),
                         isInvalidOperation))
         {
-            markResultFailed(*mResultPayload);
+            mResultPayload->setResultCode(txFAILED);
             return;
         }
         // while the following method's result is not captured, regardless, for

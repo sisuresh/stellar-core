@@ -268,7 +268,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     if (newFullFee < 0 || tx->getInclusionFee() < 0)
     {
         auto resPayload = tx->createResultPayload();
-        resPayload->getResult().result.code(txMALFORMED);
+        resPayload->setResultCode(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 
@@ -295,7 +295,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 // If the transaction is older than the one in the queue, we
                 // reject it
                 auto resPayload = tx->createResultPayload();
-                resPayload->getResult().result.code(txBAD_SEQ);
+                resPayload->setResultCode(txBAD_SEQ);
                 return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                         resPayload};
             }
@@ -339,7 +339,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 {
                     auto resPayload = tx->createResultPayload();
                     resPayload->getResult().feeCharged = minFee;
-                    resPayload->getResult().result.code(txINSUFFICIENT_FEE);
+                    resPayload->setResultCode(txINSUFFICIENT_FEE);
                     return {TransactionQueue::AddResult::ADD_STATUS_ERROR,
                             resPayload};
                 }
@@ -368,7 +368,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         {
             auto resPayload = tx->createResultPayload();
             resPayload->getResult().feeCharged = canAddRes.second;
-            resPayload->getResult().result.code(txINSUFFICIENT_FEE);
+            resPayload->setResultCode(txINSUFFICIENT_FEE);
             return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
         }
         return {TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER,
@@ -403,7 +403,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     if (getAvailableBalance(ltx.loadHeader(), feeSource) - newFullFee <
         totalFees)
     {
-        resPayload->getResult().result.code(txINSUFFICIENT_BALANCE);
+        resPayload->setResultCode(txINSUFFICIENT_BALANCE);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 
@@ -562,7 +562,7 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
     if ((tx->isSoroban() != (c1 || c2)) || !tx->XDRProvidesValidFee())
     {
         auto resPayload = tx->createResultPayload();
-        resPayload->getResult().result.code(txMALFORMED);
+        resPayload->setResultCode(txMALFORMED);
         return {TransactionQueue::AddResult::ADD_STATUS_ERROR, resPayload};
     }
 

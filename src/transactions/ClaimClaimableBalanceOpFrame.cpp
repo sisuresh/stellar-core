@@ -71,7 +71,7 @@ validatePredicate(ClaimPredicate const& pred, TimePoint closeTime)
 
 bool
 ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      TransactionResultPayload& resPayload)
+                                      TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ClaimClaimableBalanceOpFrame apply", true);
 

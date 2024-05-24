@@ -217,15 +217,29 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                     }
                     else
                     {
-                        releaseAssert(resPayload);
-                        CLOG_DEBUG(
-                            Herder,
-                            "Got bad txSet: tx invalid lastSeq:{} tx: {} "
-                            "result: {}",
-                            lastSeq,
-                            xdrToCerealString(tx->getEnvelope(),
-                                              "TransactionEnvelope"),
-                            resPayload->getResultCode());
+                        if (resPayload)
+                        {
+                            CLOG_DEBUG(
+                                Herder,
+                                "Got bad txSet: tx invalid lastSeq:{} tx: {} "
+                                "result: {}",
+                                lastSeq,
+                                xdrToCerealString(tx->getEnvelope(),
+                                                  "TransactionEnvelope"),
+                                resPayload->getResultCode());
+                        }
+                        // This should never happen, but an assert is not
+                        // appropriate here since resPayload is only used for
+                        // logging.
+                        else
+                        {
+                            CLOG_DEBUG(
+                                Herder,
+                                "Got bad txSet: tx invalid lastSeq:{} tx: {}",
+                                lastSeq,
+                                xdrToCerealString(tx->getEnvelope(),
+                                                  "TransactionEnvelope"));
+                        }
                     }
                     return invalidTxs;
                 }

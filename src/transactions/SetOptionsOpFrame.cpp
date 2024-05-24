@@ -44,7 +44,7 @@ SetOptionsOpFrame::getThresholdLevel() const
 
 bool
 SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
-                                     TransactionResultPayload& resPayload)
+                                     TransactionResultPayloadBase& resPayload)
 {
     auto header = ltx.loadHeader();
     auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
@@ -123,7 +123,7 @@ SetOptionsOpFrame::deleteSigner(AbstractLedgerTxn& ltx,
 
 bool
 SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx,
-                           TransactionResultPayload& resPayload)
+                           TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "SetOptionsOp apply", true);
 

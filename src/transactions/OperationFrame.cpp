@@ -141,7 +141,7 @@ OperationFrame::OperationFrame(Operation const& op, OperationResult& res,
 bool
 OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
                       AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
-                      TransactionResultPayload& resPayload)
+                      TransactionResultPayloadBase& resPayload)
 {
     ZoneScoped;
     bool res;
@@ -159,7 +159,7 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
 bool
 OperationFrame::doApply(Application& _app, AbstractLedgerTxn& ltx,
                         Hash const& sorobanBasePrngSeed,
-                        TransactionResultPayload& resPayload)
+                        TransactionResultPayloadBase& resPayload)
 {
     // By default we ignore the app and seed, but subclasses can override to
     // intercept and use them.
@@ -181,7 +181,7 @@ OperationFrame::isOpSupported(LedgerHeader const&) const
 bool
 OperationFrame::checkSignature(SignatureChecker& signatureChecker,
                                AbstractLedgerTxn& ltx,
-                               TransactionResultPayload& resPayload,
+                               TransactionResultPayloadBase& resPayload,
                                bool forApply)
 {
     ZoneScoped;
@@ -237,7 +237,7 @@ OperationFrame::getResultCode() const
 bool
 OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
                            AbstractLedgerTxn& ltxOuter, bool forApply,
-                           TransactionResultPayload& resPayload)
+                           TransactionResultPayloadBase& resPayload)
 {
     ZoneScoped;
     // Note: ltx is always rolled back so checkValid never modifies the ledger
@@ -287,7 +287,7 @@ OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
 bool
 OperationFrame::doCheckValid(SorobanNetworkConfig const& config,
                              Config const& appConfig, uint32_t ledgerVersion,
-                             TransactionResultPayload& resPayload)
+                             TransactionResultPayloadBase& resPayload)
 {
     return doCheckValid(ledgerVersion);
 }
@@ -295,7 +295,7 @@ OperationFrame::doCheckValid(SorobanNetworkConfig const& config,
 LedgerTxnEntry
 OperationFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
                                   LedgerTxnHeader const& header,
-                                  TransactionResultPayload& resPayload)
+                                  TransactionResultPayloadBase& resPayload)
 {
     ZoneScoped;
     return mParentTx.loadAccount(ltx, header, getSourceID(), resPayload);

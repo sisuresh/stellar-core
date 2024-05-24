@@ -26,7 +26,7 @@ ClawbackOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 ClawbackOpFrame::doApply(AbstractLedgerTxn& ltx,
-                         TransactionResultPayload& resPayload)
+                         TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ClawbackOp apply", true);
 

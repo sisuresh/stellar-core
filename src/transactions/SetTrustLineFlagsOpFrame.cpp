@@ -164,7 +164,7 @@ SetTrustLineFlagsOpFrame::insertLedgerKeysToPrefetch(
 bool
 SetTrustLineFlagsOpFrame::isAuthRevocationValid(
     AbstractLedgerTxn& ltx, bool& authRevocable,
-    TransactionResultPayload& resPayload)
+    TransactionResultPayloadBase& resPayload)
 {
 
     // Load the source account entry

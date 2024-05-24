@@ -50,7 +50,7 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                 TransactionResultPayload& resPayload)
+                                 TransactionResultPayloadBase& resPayload)
 {
     throw std::runtime_error("RestoreFootprintOpFrame::doApply needs Config");
 }
@@ -58,7 +58,7 @@ RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx,
 bool
 RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                  Hash const& sorobanBasePrngSeed,
-                                 TransactionResultPayload& resPayload)
+                                 TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
 
@@ -173,7 +173,7 @@ bool
 RestoreFootprintOpFrame::doCheckValid(SorobanNetworkConfig const& networkConfig,
                                       Config const& appConfig,
                                       uint32_t ledgerVersion,
-                                      TransactionResultPayload& resPayload)
+                                      TransactionResultPayloadBase& resPayload)
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readOnly.empty())

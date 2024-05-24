@@ -21,7 +21,7 @@ class LiquidityPoolWithdrawOpFrame : public OperationFrame
     LiquidityPoolWithdrawOp const& mLiquidityPoolWithdraw;
 
     bool tryAddAssetBalance(AbstractLedgerTxn& ltx,
-                            TransactionResultPayload& resPayload,
+                            TransactionResultPayloadBase& resPayload,
                             LedgerTxnHeader const& header, Asset const& asset,
                             int64_t minAmount, int64_t amount);
 
@@ -32,7 +32,7 @@ class LiquidityPoolWithdrawOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayload& resPayload) override;
+                 TransactionResultPayloadBase& resPayload) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

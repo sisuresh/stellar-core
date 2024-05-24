@@ -23,8 +23,8 @@ PathPaymentStrictReceiveOpFrame::PathPaymentStrictReceiveOpFrame(
 }
 
 bool
-PathPaymentStrictReceiveOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                         TransactionResultPayload& resPayload)
+PathPaymentStrictReceiveOpFrame::doApply(
+    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "PathPaymentStrictReceiveOp apply", true);
     std::string pathStr = assetToString(getSourceAsset());

@@ -52,7 +52,7 @@ TrustFlagsOpFrameBase::removeOffers(AbstractLedgerTxn& ltx)
 
 bool
 TrustFlagsOpFrameBase::doApply(AbstractLedgerTxn& ltx,
-                               TransactionResultPayload& resPayload)
+                               TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "TrustFlagsOpFrameBase apply", true);
 

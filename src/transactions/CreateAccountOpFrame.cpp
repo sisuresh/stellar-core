@@ -35,7 +35,7 @@ CreateAccountOpFrame::CreateAccountOpFrame(Operation const& op,
 
 bool
 CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx,
-                                       TransactionResultPayload& resPayload)
+                                       TransactionResultPayloadBase& resPayload)
 {
     auto header = ltx.loadHeader();
     if (mCreateAccount.startingBalance <
@@ -82,7 +82,7 @@ CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx,
 
 bool
 CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter,
-                                     TransactionResultPayload& resPayload)
+                                     TransactionResultPayloadBase& resPayload)
 {
     LedgerTxn ltx(ltxOuter);
     auto header = ltx.loadHeader();
@@ -139,7 +139,7 @@ CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter,
 
 bool
 CreateAccountOpFrame::doApply(AbstractLedgerTxn& ltx,
-                              TransactionResultPayload& resPayload)
+                              TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "CreateAccountOp apply", true);
     if (stellar::loadAccount(ltx, mCreateAccount.destination))

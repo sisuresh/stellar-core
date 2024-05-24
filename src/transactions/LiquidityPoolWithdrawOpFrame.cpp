@@ -30,7 +30,7 @@ LiquidityPoolWithdrawOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      TransactionResultPayload& resPayload)
+                                      TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "LiquidityPoolWithdrawOpFrame apply", true);
 
@@ -129,7 +129,7 @@ LiquidityPoolWithdrawOpFrame::insertLedgerKeysToPrefetch(
 
 bool
 LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
-    AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload,
+    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload,
     LedgerTxnHeader const& header, Asset const& asset, int64_t minAmount,
     int64_t amount)
 {

@@ -31,7 +31,7 @@ PathPaymentStrictSendOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 PathPaymentStrictSendOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      TransactionResultPayload& resPayload)
+                                      TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "PathPaymentStrictSendOp apply", true);
     std::string pathStr = assetToString(getSourceAsset());

@@ -12,8 +12,8 @@
 namespace stellar
 {
 
-TransactionResultPayloadImpl::TransactionResultPayloadImpl(
-    TransactionFrame const& tx, int64_t feeCharged)
+TransactionResultPayload::TransactionResultPayload(TransactionFrame const& tx,
+                                                   int64_t feeCharged)
 {
     auto const& envelope = tx.getEnvelope();
     auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
@@ -44,25 +44,31 @@ TransactionResultPayloadImpl::TransactionResultPayloadImpl(
 }
 
 TransactionResult&
-TransactionResultPayloadImpl::getResult()
+TransactionResultPayload::getResult()
 {
     return mTxResult;
 }
 
 TransactionResult const&
-TransactionResultPayloadImpl::getResult() const
+TransactionResultPayload::getResult() const
 {
     return mTxResult;
 }
 
 TransactionResultCode
-TransactionResultPayloadImpl::getResultCode() const
+TransactionResultPayload::getResultCode() const
 {
     return getResult().result.code();
 }
 
+void
+TransactionResultPayload::setResultCode(TransactionResultCode code)
+{
+    getResult().result.code(code);
+}
+
 bool
-TransactionResultPayloadImpl::consumeRefundableSorobanResources(
+TransactionResultPayload::consumeRefundableSorobanResources(
     uint32_t contractEventSizeBytes, int64_t rentFee, uint32_t protocolVersion,
     SorobanNetworkConfig const& sorobanConfig, Config const& cfg,
     TransactionFrame const& tx)
@@ -113,34 +119,34 @@ TransactionResultPayloadImpl::consumeRefundableSorobanResources(
 }
 
 void
-TransactionResultPayloadImpl::setSorobanConsumedNonRefundableFee(int64_t fee)
+TransactionResultPayload::setSorobanConsumedNonRefundableFee(int64_t fee)
 {
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mConsumedNonRefundableFee = fee;
 }
 
 int64_t
-TransactionResultPayloadImpl::getSorobanFeeRefund() const
+TransactionResultPayload::getSorobanFeeRefund() const
 {
     releaseAssertOrThrow(mSorobanExtension);
     return mSorobanExtension->mFeeRefund;
 }
 
 void
-TransactionResultPayloadImpl::setSorobanFeeRefund(int64_t fee)
+TransactionResultPayload::setSorobanFeeRefund(int64_t fee)
 {
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mFeeRefund = fee;
 }
 
 std::vector<std::shared_ptr<OperationFrame>> const&
-TransactionResultPayloadImpl::getOpFrames() const
+TransactionResultPayload::getOpFrames() const
 {
     return mOpFrames;
 }
 
 xdr::xvector<DiagnosticEvent> const&
-TransactionResultPayloadImpl::getDiagnosticEvents() const
+TransactionResultPayload::getDiagnosticEvents() const
 {
     static xdr::xvector<DiagnosticEvent> const empty;
     if (mSorobanExtension)
@@ -154,13 +160,13 @@ TransactionResultPayloadImpl::getDiagnosticEvents() const
 }
 
 std::shared_ptr<InternalLedgerEntry const>&
-TransactionResultPayloadImpl::getCachedAccountPtr()
+TransactionResultPayload::getCachedAccountPtr()
 {
     return mCachedAccount;
 }
 
 void
-TransactionResultPayloadImpl::pushContractEvents(
+TransactionResultPayload::pushContractEvents(
     xdr::xvector<ContractEvent> const& evts)
 {
     releaseAssertOrThrow(mSorobanExtension);
@@ -168,7 +174,7 @@ TransactionResultPayloadImpl::pushContractEvents(
 }
 
 void
-TransactionResultPayloadImpl::pushDiagnosticEvents(
+TransactionResultPayload::pushDiagnosticEvents(
     xdr::xvector<DiagnosticEvent> const& evts)
 {
     releaseAssertOrThrow(mSorobanExtension);
@@ -177,16 +183,18 @@ TransactionResultPayloadImpl::pushDiagnosticEvents(
 }
 
 void
-TransactionResultPayloadImpl::pushDiagnosticEvent(DiagnosticEvent const& evt)
+TransactionResultPayload::pushDiagnosticEvent(DiagnosticEvent const& evt)
 {
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mDiagnosticEvents.emplace_back(evt);
 }
 
 void
-TransactionResultPayloadImpl::pushSimpleDiagnosticError(
-    Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
-    xdr::xvector<SCVal>&& args)
+TransactionResultPayload::pushSimpleDiagnosticError(Config const& cfg,
+                                                    SCErrorType ty,
+                                                    SCErrorCode code,
+                                                    std::string&& message,
+                                                    xdr::xvector<SCVal>&& args)
 {
     releaseAssertOrThrow(mSorobanExtension);
 
@@ -220,7 +228,7 @@ TransactionResultPayloadImpl::pushSimpleDiagnosticError(
 }
 
 void
-TransactionResultPayloadImpl::pushApplyTimeDiagnosticError(
+TransactionResultPayload::pushApplyTimeDiagnosticError(
     Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
     xdr::xvector<SCVal>&& args)
 {
@@ -233,7 +241,7 @@ TransactionResultPayloadImpl::pushApplyTimeDiagnosticError(
 }
 
 void
-TransactionResultPayloadImpl::pushValidationTimeDiagnosticError(
+TransactionResultPayload::pushValidationTimeDiagnosticError(
     Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
     xdr::xvector<SCVal>&& args)
 {
@@ -246,14 +254,14 @@ TransactionResultPayloadImpl::pushValidationTimeDiagnosticError(
 }
 
 void
-TransactionResultPayloadImpl::setReturnValue(SCVal const& returnValue)
+TransactionResultPayload::setReturnValue(SCVal const& returnValue)
 {
     releaseAssertOrThrow(mSorobanExtension);
     mSorobanExtension->mReturnValue = returnValue;
 }
 
 void
-TransactionResultPayloadImpl::publishSuccessDiagnosticsToMeta(
+TransactionResultPayload::publishSuccessDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
     releaseAssertOrThrow(mSorobanExtension);
@@ -269,7 +277,7 @@ TransactionResultPayloadImpl::publishSuccessDiagnosticsToMeta(
 }
 
 void
-TransactionResultPayloadImpl::publishFailureDiagnosticsToMeta(
+TransactionResultPayload::publishFailureDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
     releaseAssertOrThrow(mSorobanExtension);
@@ -322,16 +330,17 @@ FeeBumpTransactionResultPayload::updateResult(TransactionFrameBasePtr innerTx)
 
 void
 FeeBumpTransactionResultPayload::setInnerResultPayload(
-    TransactionResultPayloadPtr innerResultPayload)
+    TransactionResultPayloadPtr innerResultPayload,
+    TransactionFrameBasePtr innerTx)
 {
     releaseAssertOrThrow(innerResultPayload);
     mInnerResultPayload = innerResultPayload;
+    updateResult(innerTx);
 }
 
 TransactionResultPayloadPtr
 FeeBumpTransactionResultPayload::getInnerResultPayload()
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload;
 }
 
@@ -353,24 +362,27 @@ FeeBumpTransactionResultPayload::getResultCode() const
     return getResult().result.code();
 }
 
+void
+FeeBumpTransactionResultPayload::setResultCode(TransactionResultCode code)
+{
+    getResult().result.code(code);
+}
+
 std::vector<std::shared_ptr<OperationFrame>> const&
 FeeBumpTransactionResultPayload::getOpFrames() const
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload->getOpFrames();
 }
 
 xdr::xvector<DiagnosticEvent> const&
 FeeBumpTransactionResultPayload::getDiagnosticEvents() const
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload->getDiagnosticEvents();
 }
 
 std::shared_ptr<InternalLedgerEntry const>&
 FeeBumpTransactionResultPayload::getCachedAccountPtr()
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload->getCachedAccountPtr();
 }
 
@@ -380,7 +392,6 @@ FeeBumpTransactionResultPayload::consumeRefundableSorobanResources(
     SorobanNetworkConfig const& sorobanConfig, Config const& cfg,
     TransactionFrame const& tx)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload->consumeRefundableSorobanResources(
         contractEventSizeBytes, rentFee, protocolVersion, sorobanConfig, cfg,
         tx);
@@ -389,21 +400,18 @@ FeeBumpTransactionResultPayload::consumeRefundableSorobanResources(
 void
 FeeBumpTransactionResultPayload::setSorobanConsumedNonRefundableFee(int64_t fee)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->setSorobanConsumedNonRefundableFee(fee);
 }
 
 int64_t
 FeeBumpTransactionResultPayload::getSorobanFeeRefund() const
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     return mInnerResultPayload->getSorobanFeeRefund();
 }
 
 void
 FeeBumpTransactionResultPayload::setSorobanFeeRefund(int64_t fee)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->setSorobanFeeRefund(fee);
 }
 
@@ -411,7 +419,6 @@ void
 FeeBumpTransactionResultPayload::pushContractEvents(
     xdr::xvector<ContractEvent> const& evts)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushContractEvents(evts);
 }
 
@@ -419,14 +426,12 @@ void
 FeeBumpTransactionResultPayload::pushDiagnosticEvents(
     xdr::xvector<DiagnosticEvent> const& evts)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushDiagnosticEvents(evts);
 }
 
 void
 FeeBumpTransactionResultPayload::setReturnValue(SCVal const& returnValue)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->setReturnValue(returnValue);
 }
 
@@ -434,7 +439,6 @@ void
 FeeBumpTransactionResultPayload::pushDiagnosticEvent(
     DiagnosticEvent const& ecvt)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushDiagnosticEvent(ecvt);
 }
 
@@ -443,7 +447,6 @@ FeeBumpTransactionResultPayload::pushSimpleDiagnosticError(
     Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
     xdr::xvector<SCVal>&& args)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushSimpleDiagnosticError(
         cfg, ty, code, std::move(message), std::move(args));
 }
@@ -453,7 +456,6 @@ FeeBumpTransactionResultPayload::pushApplyTimeDiagnosticError(
     Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
     xdr::xvector<SCVal>&& args)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushApplyTimeDiagnosticError(
         cfg, ty, code, std::move(message), std::move(args));
 }
@@ -463,7 +465,6 @@ FeeBumpTransactionResultPayload::pushValidationTimeDiagnosticError(
     Config const& cfg, SCErrorType ty, SCErrorCode code, std::string&& message,
     xdr::xvector<SCVal>&& args)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->pushValidationTimeDiagnosticError(
         cfg, ty, code, std::move(message), std::move(args));
 }
@@ -472,7 +473,6 @@ void
 FeeBumpTransactionResultPayload::publishSuccessDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->publishSuccessDiagnosticsToMeta(meta, cfg);
 }
 
@@ -480,7 +480,6 @@ void
 FeeBumpTransactionResultPayload::publishFailureDiagnosticsToMeta(
     TransactionMetaFrame& meta, Config const& cfg)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
     mInnerResultPayload->publishFailureDiagnosticsToMeta(meta, cfg);
 }
 }

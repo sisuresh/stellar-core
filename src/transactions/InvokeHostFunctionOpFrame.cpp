@@ -250,7 +250,7 @@ InvokeHostFunctionOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayloadBase& resPayload)
 {
     throw std::runtime_error(
         "InvokeHostFunctionOpFrame::doApply needs Config and base PRNG seed");
@@ -259,7 +259,8 @@ InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
 void
 InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     Config const& cfg, InvokeHostFunctionOutput const& output,
-    HostFunctionMetrics const& metrics, TransactionResultPayload& resPayload)
+    HostFunctionMetrics const& metrics,
+    TransactionResultPayloadBase& resPayload)
 {
     if (cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
     {
@@ -326,7 +327,7 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
 bool
 InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                    Hash const& sorobanBasePrngSeed,
-                                   TransactionResultPayload& resPayload)
+                                   TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame apply", true);
 
@@ -696,7 +697,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
 bool
 InvokeHostFunctionOpFrame::doCheckValid(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
-    uint32_t ledgerVersion, TransactionResultPayload& resPayload)
+    uint32_t ledgerVersion, TransactionResultPayloadBase& resPayload)
 {
     // check wasm size if uploading contract
     auto const& hostFn = mInvokeHostFunction.hostFunction;

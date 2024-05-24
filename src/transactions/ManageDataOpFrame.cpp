@@ -31,7 +31,7 @@ ManageDataOpFrame::ManageDataOpFrame(Operation const& op, OperationResult& res,
 
 bool
 ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx,
-                           TransactionResultPayload& resPayload)
+                           TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ManageDataOp apply", true);
     auto header = ltx.loadHeader();

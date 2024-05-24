@@ -27,8 +27,8 @@ ClawbackClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                         TransactionResultPayload& resPayload)
+ClawbackClaimableBalanceOpFrame::doApply(
+    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ClawbackClaimableBalanceOp apply", true);
 

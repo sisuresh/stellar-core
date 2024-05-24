@@ -38,7 +38,7 @@ BumpSequenceOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                             TransactionResultPayload& resPayload)
+                             TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "BumpSequenceOp apply", true);
     LedgerTxn ltxInner(ltx);

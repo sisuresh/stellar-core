@@ -99,9 +99,9 @@ AllowTrustOpFrame::setFlagValue(AbstractLedgerTxn& ltx, LedgerKey const& key,
 }
 
 bool
-AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
-                                         bool& authRevocable,
-                                         TransactionResultPayload& resPayload)
+AllowTrustOpFrame::isAuthRevocationValid(
+    AbstractLedgerTxn& ltx, bool& authRevocable,
+    TransactionResultPayloadBase& resPayload)
 {
     // Load the source account
     LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
