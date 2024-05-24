@@ -39,7 +39,7 @@ class LedgerTxnEntry;
 class LedgerTxnHeader;
 class SecretKey;
 class SignatureChecker;
-class TransactionResultPayload;
+class TransactionResultPayloadBase;
 class XDROutputFileStream;
 class SHA256;
 
@@ -69,7 +69,7 @@ class TransactionFrame : public TransactionFrameBase
 
     LedgerTxnEntry
     loadSourceAccount(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
-                      TransactionResultPayload& resPayload) const;
+                      TransactionResultPayloadBase& resPayload) const;
 
     enum ValidationType
     {
@@ -110,38 +110,36 @@ class TransactionFrame : public TransactionFrameBase
                                TransactionResultPayloadPtr resPayload) const;
 
     void removeOneTimeSignerFromAllSourceAccounts(
-        AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload) const;
+        AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload) const;
 
     void removeAccountSigner(AbstractLedgerTxn& ltxOuter,
                              AccountID const& accountID,
                              SignerKey const& signerKey) const;
 
-    void markResultFailed(TransactionResultPayload& resPayload) const;
-
     bool applyOperations(SignatureChecker& checker, Application& app,
                          AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
-                         TransactionResultPayload& resPayload,
+                         TransactionResultPayloadBase& resPayload,
                          Hash const& sorobanBasePrngSeed) const;
 
-    virtual void processSeqNum(AbstractLedgerTxn& ltx,
-                               TransactionResultPayload& resPayload) const;
+    void processSeqNum(AbstractLedgerTxn& ltx,
+                       TransactionResultPayloadBase& resPayload) const;
 
     bool processSignatures(ValidationType cv,
                            SignatureChecker& signatureChecker,
                            AbstractLedgerTxn& ltxOuter,
-                           TransactionResultPayload& resPayload) const;
+                           TransactionResultPayloadBase& resPayload) const;
 
     std::optional<TimeBounds const> const getTimeBounds() const;
     std::optional<LedgerBounds const> const getLedgerBounds() const;
     bool extraSignersExist() const;
 
     bool validateSorobanOpsConsistency() const;
-    bool validateSorobanResources(SorobanNetworkConfig const& config,
-                                  Config const& appConfig,
-                                  uint32_t protocolVersion,
-                                  TransactionResultPayload& resPayload) const;
+    bool
+    validateSorobanResources(SorobanNetworkConfig const& config,
+                             Config const& appConfig, uint32_t protocolVersion,
+                             TransactionResultPayloadBase& resPayload) const;
     int64_t refundSorobanFee(AbstractLedgerTxn& ltx, AccountID const& feeSource,
-                             TransactionResultPayload& resPayload) const;
+                             TransactionResultPayloadBase& resPayload) const;
     void updateSorobanMetrics(Application& app) const;
 #ifdef BUILD_TESTS
   public:
@@ -256,7 +254,7 @@ class TransactionFrame : public TransactionFrameBase
     int64_t processRefund(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           AccountID const& feeSource,
-                          TransactionResultPayload& resPayload) const;
+                          TransactionResultPayloadBase& resPayload) const;
 
     // version without meta
     bool apply(Application& app, AbstractLedgerTxn& ltx,
@@ -268,7 +266,7 @@ class TransactionFrame : public TransactionFrameBase
     LedgerTxnEntry loadAccount(AbstractLedgerTxn& ltx,
                                LedgerTxnHeader const& header,
                                AccountID const& accountID,
-                               TransactionResultPayload& resPayload) const;
+                               TransactionResultPayloadBase& resPayload) const;
 
     std::optional<SequenceNumber const> const getMinSeqNum() const override;
     Duration getMinSeqAge() const override;
@@ -295,10 +293,10 @@ class TransactionFrame : public TransactionFrameBase
 class TransactionTestFrame;
 using TransactionTestFramePtr = std::shared_ptr<TransactionTestFrame>;
 
-// The normal TransactionFrame object in immutable, and the caller needs to
-// manage mutable result state via TransactionResultPayload. This class wraps an
-// immutable TransactionFrame object with its associated mutable
-// TransactionResultPayload for testing purposes.
+// The normal TransactionFrame object is immutable, and the caller needs to
+// manage mutable result state via TransactionResultPayloadBase. This class
+// wraps an immutable TransactionFrame object with its associated mutable
+// TransactionResultPayloadBase for testing purposes.
 class TransactionTestFrame : public TransactionFrameBase
 {
   private:

@@ -62,7 +62,7 @@ MergeOpFrame::isSeqnumTooFar(AbstractLedgerTxn& ltx,
 // move the XLM to the new account
 bool
 MergeOpFrame::doApply(AbstractLedgerTxn& ltx,
-                      TransactionResultPayload& resPayload)
+                      TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "MergeOp apply", true);
 
@@ -79,7 +79,7 @@ MergeOpFrame::doApply(AbstractLedgerTxn& ltx,
 
 bool
 MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
-                               TransactionResultPayload& resPayload)
+                               TransactionResultPayloadBase& resPayload)
 {
     auto header = ltx.loadHeader();
 
@@ -188,7 +188,7 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
 
 bool
 MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx,
-                             TransactionResultPayload& resPayload)
+                             TransactionResultPayloadBase& resPayload)
 {
     auto header = ltx.loadHeader();
 

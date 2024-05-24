@@ -30,7 +30,7 @@ InflationOpFrame::InflationOpFrame(Operation const& op, OperationResult& res,
 
 bool
 InflationOpFrame::doApply(AbstractLedgerTxn& ltx,
-                          TransactionResultPayload& resPayload)
+                          TransactionResultPayloadBase& resPayload)
 {
     auto header = ltx.loadHeader();
     auto& lh = header.current();

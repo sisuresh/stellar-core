@@ -1837,7 +1837,7 @@ validateContractLedgerEntry(LedgerKey const& lk, size_t entrySize,
                             SorobanNetworkConfig const& config,
                             Config const& appConfig,
                             TransactionFrame const& parentTx,
-                            TransactionResultPayload& resPayload)
+                            TransactionResultPayloadBase& resPayload)
 {
     // check contract code size limit
     if (lk.type() == CONTRACT_CODE && config.maxContractSizeBytes() < entrySize)

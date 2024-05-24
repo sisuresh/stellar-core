@@ -142,7 +142,7 @@ CreateClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                       TransactionResultPayload& resPayload)
+                                       TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "CreateClaimableBalanceOpFrame apply", true);
 

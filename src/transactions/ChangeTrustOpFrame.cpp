@@ -141,7 +141,7 @@ ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
 
 bool
 ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx,
-                            TransactionResultPayload& resPayload)
+                            TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ChangeTrustOp apply", true);
 

@@ -104,7 +104,7 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
 
 bool
 ManageOfferOpFrameBase::computeOfferExchangeParameters(
-    AbstractLedgerTxn& ltxOuter, TransactionResultPayload& resPayload,
+    AbstractLedgerTxn& ltxOuter, TransactionResultPayloadBase& resPayload,
     bool creatingNewOffer, int64_t& maxSheepSend, int64_t& maxWheatReceive)
 {
     LedgerTxn ltx(ltxOuter); // ltx will always be rolled back
@@ -212,7 +212,7 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
 
 bool
 ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
-                                TransactionResultPayload& resPayload)
+                                TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "ManageOfferOp apply", true);
     std::string pairStr = assetToString(mSheep);

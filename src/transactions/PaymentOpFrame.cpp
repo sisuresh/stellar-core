@@ -26,7 +26,7 @@ PaymentOpFrame::PaymentOpFrame(Operation const& op, OperationResult& res,
 
 bool
 PaymentOpFrame::doApply(AbstractLedgerTxn& ltx,
-                        TransactionResultPayload& resPayload)
+                        TransactionResultPayloadBase& resPayload)
 {
     ZoneNamedN(applyZone, "PaymentOp apply", true);
     std::string payStr = assetToString(mPayment.asset);

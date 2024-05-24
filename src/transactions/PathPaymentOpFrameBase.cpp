@@ -140,7 +140,7 @@ PathPaymentOpFrameBase::shouldBypassIssuerCheck(
 
 bool
 PathPaymentOpFrameBase::updateSourceBalance(
-    AbstractLedgerTxn& ltx, TransactionResultPayload& resPayload,
+    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload,
     int64_t amount, bool bypassIssuerCheck, bool doesSourceAccountExist)
 {
     auto const& asset = getSourceAsset();

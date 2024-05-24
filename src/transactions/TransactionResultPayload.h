@@ -20,12 +20,13 @@ class InternalLedgerEntry;
 class SorobanNetworkConfig;
 
 // This class holds all mutable state that is associated with a transaction.
-class TransactionResultPayload : public NonMovableOrCopyable
+class TransactionResultPayloadBase : public NonMovableOrCopyable
 {
   public:
     virtual TransactionResult& getResult() = 0;
     virtual TransactionResult const& getResult() const = 0;
     virtual TransactionResultCode getResultCode() const = 0;
+    virtual void setResultCode(TransactionResultCode code) = 0;
 
     virtual std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const = 0;
@@ -67,7 +68,7 @@ class TransactionResultPayload : public NonMovableOrCopyable
                                                  Config const& cfg) = 0;
 };
 
-class TransactionResultPayloadImpl : public TransactionResultPayload
+class TransactionResultPayload : public TransactionResultPayloadBase
 {
   private:
     struct SorobanData
@@ -89,8 +90,7 @@ class TransactionResultPayloadImpl : public TransactionResultPayload
 
     std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
 
-    TransactionResultPayloadImpl(TransactionFrame const& tx,
-                                 int64_t feeCharged);
+    TransactionResultPayload(TransactionFrame const& tx, int64_t feeCharged);
 
     friend TransactionResultPayloadPtr
     TransactionFrame::createResultPayload() const;
@@ -101,11 +101,12 @@ class TransactionResultPayloadImpl : public TransactionResultPayload
         bool applying) const;
 
   public:
-    virtual ~TransactionResultPayloadImpl() = default;
+    virtual ~TransactionResultPayload() = default;
 
     TransactionResult& getResult() override;
     TransactionResult const& getResult() const override;
     TransactionResultCode getResultCode() const override;
+    void setResultCode(TransactionResultCode code) override;
 
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;
@@ -142,7 +143,7 @@ class TransactionResultPayloadImpl : public TransactionResultPayload
                                          Config const& cfg) override;
 };
 
-class FeeBumpTransactionResultPayload : public TransactionResultPayload
+class FeeBumpTransactionResultPayload : public TransactionResultPayloadBase
 {
     TransactionResult mTxResult;
     TransactionResultPayloadPtr mInnerResultPayload{};
@@ -164,13 +165,15 @@ class FeeBumpTransactionResultPayload : public TransactionResultPayload
     // Updates outer fee bump result based on inner result.
     void updateResult(TransactionFrameBasePtr innerTx);
 
-    void setInnerResultPayload(TransactionResultPayloadPtr innerResultPayload);
+    void setInnerResultPayload(TransactionResultPayloadPtr innerResultPayload,
+                               TransactionFrameBasePtr innerTx);
 
     TransactionResultPayloadPtr getInnerResultPayload();
 
     TransactionResult& getResult() override;
     TransactionResult const& getResult() const override;
     TransactionResultCode getResultCode() const override;
+    void setResultCode(TransactionResultCode code) override;
 
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;

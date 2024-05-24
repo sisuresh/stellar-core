@@ -819,9 +819,7 @@ LoadGenerator::submitCreationTx(uint32_t nAccounts, uint32_t offset,
 {
     uint32_t numToProcess =
         nAccounts < MAX_OPS_PER_TX ? nAccounts : MAX_OPS_PER_TX;
-    TestAccountPtr from;
-    TransactionTestFramePtr tx;
-    std::tie(from, tx) =
+    auto [from, tx] =
         creationTransaction(mAccounts.size() + offset, numToProcess, ledgerNum);
     TransactionResultCode code;
     TransactionQueue::AddResult status;

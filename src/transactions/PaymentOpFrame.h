@@ -24,7 +24,7 @@ class PaymentOpFrame : public OperationFrame
                    TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayload& resPayload) override;
+                 TransactionResultPayloadBase& resPayload) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

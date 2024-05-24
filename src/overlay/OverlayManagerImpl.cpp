@@ -1164,12 +1164,11 @@ OverlayManagerImpl::recvTransaction(StellarMessage const& msg,
 
         // add it to our current set
         // and make sure it is valid
-        auto recvRes = mApp.getHerder().recvTransaction(transaction, false);
+        auto [recvRes, _] =
+            mApp.getHerder().recvTransaction(transaction, false);
         bool pulledRelevantTx = false;
-        if (!(recvRes.first ==
-                  TransactionQueue::AddResult::ADD_STATUS_PENDING ||
-              recvRes.first ==
-                  TransactionQueue::AddResult::ADD_STATUS_DUPLICATE))
+        if (!(recvRes == TransactionQueue::AddResult::ADD_STATUS_PENDING ||
+              recvRes == TransactionQueue::AddResult::ADD_STATUS_DUPLICATE))
         {
             forgetFloodedMsg(msgID);
             CLOG_DEBUG(Overlay,
@@ -1178,8 +1177,8 @@ OverlayManagerImpl::recvTransaction(StellarMessage const& msg,
         }
         else
         {
-            bool dup = recvRes.first ==
-                       TransactionQueue::AddResult::ADD_STATUS_DUPLICATE;
+            bool dup =
+                recvRes == TransactionQueue::AddResult::ADD_STATUS_DUPLICATE;
             if (!dup)
             {
                 pulledRelevantTx = true;

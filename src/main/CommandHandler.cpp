@@ -1024,19 +1024,29 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
             {
                 std::string resultBase64;
                 releaseAssertOrThrow(payload);
-                auto resultBin = xdr::xdr_to_opaque(payload->getResult());
-                resultBase64.reserve(decoder::encoded_size64(resultBin.size()) +
-                                     1);
-                resultBase64 = decoder::encode_b64(resultBin);
-                root["error"] = resultBase64;
-                if (mApp.getConfig().ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION &&
-                    transaction->isSoroban() &&
-                    !payload->getDiagnosticEvents().empty())
+                if (payload)
                 {
-                    auto diagsBin =
-                        xdr::xdr_to_opaque(payload->getDiagnosticEvents());
-                    auto diagsBase64 = decoder::encode_b64(diagsBin);
-                    root["diagnostic_events"] = diagsBase64;
+                    auto resultBin = xdr::xdr_to_opaque(payload->getResult());
+                    resultBase64.reserve(
+                        decoder::encoded_size64(resultBin.size()) + 1);
+                    resultBase64 = decoder::encode_b64(resultBin);
+                    root["error"] = resultBase64;
+                    if (mApp.getConfig().ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION &&
+                        transaction->isSoroban() &&
+                        !payload->getDiagnosticEvents().empty())
+                    {
+                        auto diagsBin =
+                            xdr::xdr_to_opaque(payload->getDiagnosticEvents());
+                        auto diagsBase64 = decoder::encode_b64(diagsBin);
+                        root["diagnostic_events"] = diagsBase64;
+                    }
+                }
+                // This should never happen, but we should not assert here since
+                // we're only reporting diagnostics.
+                else
+                {
+                    root["error"] = "";
+                    root["diagnostic_events"] = "";
                 }
             }
         }
