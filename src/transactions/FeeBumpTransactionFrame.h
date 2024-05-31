@@ -68,6 +68,18 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     virtual ~FeeBumpTransactionFrame(){};
 
+    bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          MutableTxResultPtr resPayload,
+                          bool chargeFee) const override;
+
+    ParallelOpReturnVal parallelApply(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+        uint32_t ledgerSeq, uint32_t ledgerVersion) const override;
+
     bool apply(Application& app, AbstractLedgerTxn& ltx,
                TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                Hash const& sorobanBasePrngSeed) const override;

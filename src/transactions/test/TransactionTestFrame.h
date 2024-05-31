@@ -113,6 +113,18 @@ class TransactionTestFrame : public TransactionFrameBase
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const override;
 
+    bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          MutableTxResultPtr resPayload,
+                          bool chargeFee) const override;
+
+    ParallelOpReturnVal parallelApply(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+        uint32_t ledgerSeq, uint32_t ledgerVersion) const override;
+
     MutableTxResultPtr
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
