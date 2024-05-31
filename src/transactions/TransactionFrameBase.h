@@ -17,6 +17,8 @@
 #include "util/types.h"
 #include <optional>
 
+#include "ledger/SorobanMetrics.h"
+
 namespace stellar
 {
 class AbstractLedgerTxn;
@@ -34,6 +36,99 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+
+using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
+
+struct ThreadEntry
+{
+    // Will not be set if the entry doesn't exist, or if no tx was able to load
+    // it due to hitting read limits.
+    std::optional<LedgerEntry> mLedgerEntry;
+    bool isDirty;
+};
+
+using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
+
+struct ParallelOpReturnVal
+{
+    bool mSuccess{false};
+    ModifiedEntryMap mModifiedEntryMap;
+    std::shared_ptr<LedgerTxnDelta> mDelta;
+};
+
+class ParallelLedgerInfo
+{
+
+  public:
+    ParallelLedgerInfo(uint32_t version, uint32_t seq, uint32_t reserve,
+                       TimePoint time, Hash id)
+        : ledgerVersion(version)
+        , ledgerSeq(seq)
+        , baseReserve(reserve)
+        , closeTime(time)
+        , networkID(id)
+    {
+    }
+
+    uint32_t
+    getLedgerVersion() const
+    {
+        return ledgerVersion;
+    }
+    uint32_t
+    getLedgerSeq() const
+    {
+        return ledgerSeq;
+    }
+    uint32_t
+    getBaseReserve() const
+    {
+        return baseReserve;
+    }
+    TimePoint
+    getCloseTime() const
+    {
+        return closeTime;
+    }
+    Hash
+    getNetworkID() const
+    {
+        return networkID;
+    }
+
+  private:
+    uint32_t ledgerVersion;
+    uint32_t ledgerSeq;
+    uint32_t baseReserve;
+    TimePoint closeTime;
+    Hash networkID;
+};
+
+// TODO: Clean up
+class TxBundle
+{
+  public:
+    TxBundle(TransactionFrameBasePtr tx, MutableTxResultPtr resPayload,
+             TransactionMetaFrame const& meta, uint64_t txNum)
+        : tx(tx), resPayload(resPayload), txNum(txNum), meta(meta)
+    {
+    }
+    TransactionFrameBasePtr tx;
+    MutableTxResultPtr resPayload;
+    uint64_t txNum;
+
+    // TODO: Stop using mutable
+    mutable TransactionMetaFrame meta;
+    mutable std::shared_ptr<LedgerTxnDelta> mDelta;
+};
+
+typedef std::vector<TxBundle> Thread;
+typedef std::vector<Thread> ApplyStage;
+typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
+
+#endif
+
 class TransactionFrameBase
 {
   public:
@@ -44,6 +139,21 @@ class TransactionFrameBase
     virtual bool apply(Application& app, AbstractLedgerTxn& ltx,
                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    virtual void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                  TransactionMetaFrame& meta,
+                                  MutableTxResultPtr resPayload,
+                                  bool chargeFee) const = 0;
+
+    virtual ParallelOpReturnVal parallelApply(
+        ThreadEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta) const = 0;
+#endif
+
     virtual MutableTxResultPtr
     checkValid(Application& app, LedgerSnapshot const& ls,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,

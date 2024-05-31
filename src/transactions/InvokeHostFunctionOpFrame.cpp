@@ -31,6 +31,8 @@
 #include <Tracy.hpp>
 #include <crypto/SHA.h>
 
+#include "util/XDRCereal.h"
+
 namespace stellar
 {
 namespace
@@ -56,15 +58,15 @@ toCxxBuf(T const& t)
 }
 
 CxxLedgerInfo
-getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
-              SorobanNetworkConfig const& sorobanConfig)
+getLedgerInfo(SorobanNetworkConfig const& sorobanConfig, uint32_t ledgerVersion,
+              uint32_t ledgerSeq, uint32_t baseReserve, TimePoint closeTime,
+              Hash const& networkID)
 {
     CxxLedgerInfo info{};
-    auto const& hdr = ltx.loadHeader().current();
-    info.base_reserve = hdr.baseReserve;
-    info.protocol_version = hdr.ledgerVersion;
-    info.sequence_number = hdr.ledgerSeq;
-    info.timestamp = hdr.scpValue.closeTime;
+    info.base_reserve = baseReserve;
+    info.protocol_version = ledgerVersion;
+    info.sequence_number = ledgerSeq;
+    info.timestamp = closeTime;
     info.memory_limit = sorobanConfig.txMemoryLimit();
     info.min_persistent_entry_ttl =
         sorobanConfig.stateArchivalSettings().minPersistentTTL;
@@ -78,7 +80,6 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
     info.cpu_cost_params = toCxxBuf(cpu);
     info.mem_cost_params = toCxxBuf(mem);
 
-    auto& networkID = app.getNetworkID();
     info.network_id.reserve(networkID.size());
     for (auto c : networkID)
     {
@@ -86,6 +87,18 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
     }
     return info;
 }
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+CxxLedgerInfo
+getLedgerInfo(SorobanNetworkConfig const& sorobanConfig,
+              ParallelLedgerInfo const& parallelLedgerInfo)
+{
+    return getLedgerInfo(
+        sorobanConfig, parallelLedgerInfo.getLedgerVersion(),
+        parallelLedgerInfo.getLedgerSeq(), parallelLedgerInfo.getBaseReserve(),
+        parallelLedgerInfo.getCloseTime(), parallelLedgerInfo.getNetworkID());
+}
+#endif
 
 DiagnosticEvent
 metricsEvent(bool success, std::string&& topic, uint64_t value)
@@ -318,16 +331,20 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     }
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 ParallelOpReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-    Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+    Hash const& sorobanBasePrngSeed, ParallelLedgerInfo const& ledgerInfo,
     SorobanMetrics& sorobanMetrics, OperationResult& res,
-    SorobanTxData& sorobanData, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    SorobanTxData& sorobanData) const
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doApplyParallel", true);
+
+    // For testing
+    // auto threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // std::cout << threadID << std::endl;
 
     std::vector<LedgerEntryChange> changes;
 
@@ -348,13 +365,9 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
     auto addReads = [&ledgerEntryCxxBufs, &ttlEntryCxxBufs, &metrics, &entryMap,
                      &resources, &sorobanConfig, &appConfig, &sorobanData, &res,
-                     ledgerSeq, this](auto const& keys) -> bool {
+                     &ledgerInfo, this](auto const& keys) -> bool {
         for (auto const& lk : keys)
         {
-            // For testing
-            /* auto threadID =
-                std::hash<std::thread::id>{}(std::this_thread::get_id()); */
-
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
             uint32_t entrySize = 0u;
             std::optional<TTLEntry> ttlEntry;
@@ -365,9 +378,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             {
                 auto ttlKey = getTTLKey(lk);
                 auto ttlIter = entryMap.find(ttlKey);
-                if (ttlIter != entryMap.end() && ttlIter->second.first)
+                if (ttlIter != entryMap.end() && ttlIter->second.mLedgerEntry)
                 {
-                    if (!isLive(*(ttlIter->second.first), ledgerSeq))
+                    if (!isLive(*(ttlIter->second.mLedgerEntry),
+                                ledgerInfo.getLedgerSeq()))
                     {
                         // For temporary entries, treat the expired entry as
                         // if the key did not exist
@@ -402,7 +416,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                     else
                     {
                         sorobanEntryLive = true;
-                        ttlEntry = ttlIter->second.first.value().data.ttl();
+                        ttlEntry =
+                            ttlIter->second.mLedgerEntry.value().data.ttl();
                     }
                 }
                 // If ttlLtxe doesn't exist, this is a new Soroban entry
@@ -411,10 +426,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             if (!isSorobanEntry(lk) || sorobanEntryLive)
             {
                 auto entryIter = entryMap.find(lk);
-                if (entryIter != entryMap.end())
+                if (entryIter != entryMap.end() &&
+                    entryIter->second.mLedgerEntry)
                 {
-                    releaseAssertOrThrow(entryIter->second.first);
-                    auto leBuf = toCxxBuf(*(entryIter->second.first));
+                    auto leBuf = toCxxBuf(*(entryIter->second.mLedgerEntry));
                     entrySize = static_cast<uint32_t>(leBuf.data->size());
 
                     // For entry types that don't have an ttlEntry (i.e.
@@ -493,12 +508,12 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             appConfig.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS, resources.instructions,
             toCxxBuf(mInvokeHostFunction.hostFunction), toCxxBuf(resources),
             toCxxBuf(getSourceID()), authEntryCxxBufs,
-            ledgerInfo /*This may not work*/, ledgerEntryCxxBufs,
+            getLedgerInfo(sorobanConfig, ledgerInfo), ledgerEntryCxxBufs,
             ttlEntryCxxBufs, basePrngSeedBuf,
             sorobanConfig.rustBridgeRentFeeConfiguration());
         metrics.mCpuInsn = out.cpu_insns;
         metrics.mMemByte = out.mem_bytes;
-        metrics.mInvokeTimeNsecs = out.time_nsecs; 
+        metrics.mInvokeTimeNsecs = out.time_nsecs;
         metrics.mCpuInsnExclVm = out.cpu_insns_excluding_vm_instantiation;
         metrics.mInvokeTimeNsecsExclVm =
             out.time_nsecs_excluding_vm_instantiation;
@@ -680,8 +695,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     }
 
     if (!sorobanData.consumeRefundableSorobanResources(
-            metrics.mEmitEventByte, out.rent_fee, ledgerVersion, sorobanConfig,
-            appConfig, mParentTx))
+            metrics.mEmitEventByte, out.rent_fee, ledgerInfo.getLedgerVersion(),
+            sorobanConfig, appConfig, mParentTx))
     {
         innerResult(res).code(INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
         return {false, {}};
@@ -697,6 +712,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
     return {true, opEntryMap};
 }
+#endif
 
 bool
 InvokeHostFunctionOpFrame::doApply(
@@ -862,13 +878,16 @@ InvokeHostFunctionOpFrame::doApply(
         basePrngSeedBuf.data->assign(sorobanBasePrngSeed.begin(),
                                      sorobanBasePrngSeed.end());
 
+        auto const& lh = ltx.loadHeader().current();
         out = rust_bridge::invoke_host_function(
             appConfig.CURRENT_LEDGER_PROTOCOL_VERSION,
             appConfig.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS, resources.instructions,
             toCxxBuf(mInvokeHostFunction.hostFunction), toCxxBuf(resources),
             toCxxBuf(getSourceID()), authEntryCxxBufs,
-            getLedgerInfo(ltx, app, sorobanConfig), ledgerEntryCxxBufs,
-            ttlEntryCxxBufs, basePrngSeedBuf,
+            getLedgerInfo(sorobanConfig, lh.ledgerVersion, lh.ledgerSeq,
+                          lh.baseReserve, lh.scpValue.closeTime,
+                          app.getNetworkID()),
+            ledgerEntryCxxBufs, ttlEntryCxxBufs, basePrngSeedBuf,
             sorobanConfig.rustBridgeRentFeeConfiguration());
         metrics.mCpuInsn = out.cpu_insns;
         metrics.mMemByte = out.mem_bytes;

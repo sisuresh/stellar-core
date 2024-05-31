@@ -155,6 +155,36 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
     return applyRes;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+ParallelOpReturnVal
+OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
+                              Config const& config,
+                              SorobanNetworkConfig const& sorobanConfig,
+                              ParallelLedgerInfo const& ledgerInfo,
+                              SorobanMetrics& sorobanMetrics,
+                              OperationResult& res, SorobanTxData& sorobanData,
+                              Hash const& txPrngSeed) const
+{
+    ZoneScoped;
+    CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
+    // checkValid is called earlier in preParallelApply
+
+    return doApplyParallel(entryMap, config, sorobanConfig, txPrngSeed,
+                           ledgerInfo, sorobanMetrics, res, sorobanData);
+}
+
+ParallelOpReturnVal
+OperationFrame::doApplyParallel(
+    ThreadEntryMap const& entryMap, Config const& appConfig,
+    SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
+    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    OperationResult& res, SorobanTxData& sorobanData) const
+{
+    throw std::runtime_error(
+        "Cannot call doApplyParallel on a non Soroban operation");
+}
+#endif
+
 ThresholdLevel
 OperationFrame::getThresholdLevel() const
 {

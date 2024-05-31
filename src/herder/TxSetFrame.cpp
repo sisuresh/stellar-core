@@ -626,6 +626,7 @@ applySurgePricing(TxSetPhase phase, TxFrameList const& txs, Application& app)
             auto perOpFee = computePerOpFee(*tx, lclHeader.ledgerVersion);
             lowestLaneFee[lane] = std::min(lowestLaneFee[lane], perOpFee);
         });
+
     auto laneBaseFee =
         computeLaneBaseFee(phase, lclHeader, *surgePricingLaneConfig,
                            lowestLaneFee, hadTxNotFittingLane);
@@ -817,8 +818,10 @@ makeTxSetFromTransactions(PerPhaseTransactionList const& txPhases,
         }
 #endif
         auto phaseType = static_cast<TxSetPhase>(i);
-        auto [includedTxs, inclusionFeeMap] =
-            applySurgePricing(phaseType, validatedTxs, app);
+        auto txsAndFeeMapPair = applySurgePricing(phaseType, validatedTxs, app);
+
+        auto includedTxs = txsAndFeeMapPair.first;
+        auto inclusionFeeMap = txsAndFeeMapPair.second;
 
         std::visit(
             [&validatedPhases, phaseType, inclusionFeeMap](auto&& txs) {
