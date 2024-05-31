@@ -51,6 +51,22 @@ impl From<CxxLedgerInfo> for LedgerInfo {
     }
 }
 
+impl From<&CxxLedgerInfo> for LedgerInfo {
+    fn from(c: &CxxLedgerInfo) -> Self {
+        Self {
+            protocol_version: c.protocol_version,
+            sequence_number: c.sequence_number,
+            timestamp: c.timestamp,
+            network_id: c.network_id.clone().try_into().unwrap(),
+            base_reserve: c.base_reserve,
+            min_temp_entry_ttl: c.min_temp_entry_ttl,
+            min_persistent_entry_ttl: c.min_persistent_entry_ttl,
+            max_entry_ttl: c.max_entry_ttl,
+        }
+    }
+}
+
+//TODO: Is this fine?
 impl From<CxxTransactionResources> for TransactionResources {
     fn from(value: CxxTransactionResources) -> Self {
         Self {
@@ -259,7 +275,7 @@ pub(crate) fn invoke_host_function(
     resources_buf: &CxxBuf,
     source_account_buf: &CxxBuf,
     auth_entries: &Vec<CxxBuf>,
-    ledger_info: CxxLedgerInfo,
+    ledger_info: &CxxLedgerInfo,
     ledger_entries: &Vec<CxxBuf>,
     ttl_entries: &Vec<CxxBuf>,
     base_prng_seed: &CxxBuf,
@@ -316,7 +332,7 @@ fn invoke_host_function_or_maybe_panic(
     resources_buf: &CxxBuf,
     source_account_buf: &CxxBuf,
     auth_entries: &Vec<CxxBuf>,
-    ledger_info: CxxLedgerInfo,
+    ledger_info: &CxxLedgerInfo,
     ledger_entries: &Vec<CxxBuf>,
     ttl_entries: &Vec<CxxBuf>,
     base_prng_seed: &CxxBuf,

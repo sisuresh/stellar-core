@@ -275,6 +275,29 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
     mTransactionFrame->insertKeysForTxApply(keys);
 }
 
+bool
+TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                       TransactionMetaFrame& meta,
+                                       MutableTxResultPtr resPayload,
+                                       bool chargeFee) const
+{
+    return mTransactionFrame->preParallelApply(app, ltx, meta, resPayload,
+                                               chargeFee);
+}
+
+ParallelOpReturnVal
+TransactionTestFrame::parallelApply(
+    ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+    Config const& config, SorobanNetworkConfig const& sorobanConfig,
+    CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+    Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+    uint32_t ledgerSeq, uint32_t ledgerVersion) const
+{
+    return mTransactionFrame->parallelApply(
+        entryMap, config, sorobanConfig, ledgerInfo, resPayload,
+        sorobanBasePrngSeed, meta, ledgerSeq, ledgerVersion);
+}
+
 MutableTxResultPtr
 TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                        std::optional<int64_t> baseFee) const

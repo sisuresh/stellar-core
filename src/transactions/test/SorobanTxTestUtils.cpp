@@ -635,7 +635,7 @@ bool
 TestContract::Invocation::invoke(TestAccount* source)
 {
     auto tx = createTx(source);
-    CLOG_INFO(Tx, "invoke tx {}", xdr::xdr_to_string(tx->getEnvelope()));
+    CLOG_DEBUG(Tx, "invoke tx {}", xdr::xdr_to_string(tx->getEnvelope()));
     mTxMeta.emplace(mTest.getLedgerVersion());
     bool success = mTest.invokeTx(tx, &*mTxMeta);
     if (tx->getResult().result.code() == txFAILED ||
@@ -1202,6 +1202,50 @@ TestContract const&
 AssetContractTestClient::getContract() const
 {
     return mContract;
+}
+
+// TODO:Deduplicate
+TransactionTestFramePtr
+AssetContractTestClient::getTransferTx(TestAccount& fromAcc,
+                                       SCAddress const& toAddr, int64_t amount)
+{
+    SCVal toVal(SCV_ADDRESS);
+    toVal.address() = toAddr;
+
+    SCVal fromVal(SCV_ADDRESS);
+    fromVal.address() = makeAccountAddress(fromAcc.getPublicKey());
+
+    LedgerKey fromBalanceKey = makeBalanceKey(fromAcc.getPublicKey());
+    LedgerKey toBalanceKey = makeBalanceKey(toAddr);
+
+    auto spec = defaultSpec();
+
+    if (mAsset.type() != ASSET_TYPE_NATIVE)
+    {
+        spec = spec.extendReadOnlyFootprint({makeIssuerKey(mAsset)});
+
+        if (!(getIssuer(mAsset) == fromAcc.getPublicKey()))
+        {
+            spec = spec.extendReadWriteFootprint({fromBalanceKey});
+        }
+
+        if (toAddr.type() != SC_ADDRESS_TYPE_ACCOUNT ||
+            !(getIssuer(mAsset) == toAddr.accountId()))
+        {
+            spec = spec.extendReadWriteFootprint({toBalanceKey});
+        }
+    }
+    else
+    {
+        spec = spec.setReadWriteFootprint({fromBalanceKey, toBalanceKey});
+    }
+
+    auto invocation =
+        mContract
+            .prepareInvocation("transfer", {fromVal, toVal, makeI128(amount)},
+                               spec)
+            .withAuthorizedTopCall();
+    return invocation.createTx(&fromAcc);
 }
 
 bool
