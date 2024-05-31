@@ -228,6 +228,20 @@ class TransactionFrame : public TransactionFrameBase
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
 
+    bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          TransactionResultPayloadPtr resPayload,
+                          bool chargeFee) const override;
+
+    std::pair<bool, ModifiedEntryMap> parallelApply(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const override;
+
     // apply this transaction to the current ledger
     // returns true if successfully applied
     bool apply(Application& app, AbstractLedgerTxn& ltx,
@@ -344,6 +358,20 @@ class TransactionTestFrame : public TransactionFrameBase
                TransactionResultPayloadPtr resPayload,
                Hash const& sorobanBasePrngSeed = Hash{}) const override;
 
+    bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          TransactionResultPayloadPtr resPayload,
+                          bool chargeFee) const override;
+
+    std::pair<bool, ModifiedEntryMap> parallelApply(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const override;
+
     std::pair<bool, TransactionResultPayloadPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
@@ -384,6 +412,7 @@ class TransactionTestFrame : public TransactionFrameBase
 
     TransactionResult& getResult();
     TransactionResultCode getResultCode() const;
+    TransactionResultPayloadPtr getResultPayload() const;
 
     SequenceNumber getSeqNum() const override;
     AccountID getFeeSourceID() const override;

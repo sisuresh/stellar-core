@@ -45,6 +45,14 @@ class InvokeHostFunctionOpFrame : public OperationFrame
                  Hash const& sorobanBasePrngSeed,
                  TransactionResultPayloadBase& resPayload) override;
 
+    std::pair<bool, ModifiedEntryMap> doApplyParallel(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!
+        Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
+        Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics /*temporary*/, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) override;
+
     bool doCheckValid(SorobanNetworkConfig const& config,
                       Config const& appConfig, uint32_t ledgerVersion,
                       TransactionResultPayloadBase& resPayload) override;

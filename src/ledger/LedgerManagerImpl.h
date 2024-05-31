@@ -48,6 +48,11 @@ class LedgerManagerImpl : public LedgerManager
     std::weak_ptr<BasicWork> mFlushAndRotateMetaDebugWork;
     std::filesystem::path mMetaDebugPath;
 
+  public:
+    void applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+                            std::vector<Stage> const& stages,
+                            Hash const& sorobanBasePrngSeed);
+
   private:
     LedgerHeaderHistoryEntry mLastClosedLedger;
     std::optional<SorobanNetworkConfig> mSorobanNetworkConfig;
@@ -85,6 +90,27 @@ class LedgerManagerImpl : public LedgerManager
         std::vector<TransactionResultPayloadPtr> const& txResults,
         AbstractLedgerTxn& ltx, TransactionResultSet& txResultSet,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
+
+    ClusterEntryMap collectEntries(AbstractLedgerTxn& ltx, Cluster const& txs);
+
+    TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx, Stage const& stage);
+
+    void applyThread(std::vector<ClusterEntryMap>& entryMapByCluster,
+                     std::vector<Cluster> const& clusters, Config const& config,
+                     SorobanNetworkConfig const& sorobanConfig,
+                     CxxLedgerInfo const& ledgerInfo,
+                     Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
+                     uint32_t ledgerVersion);
+
+    // TODO: Make these three methods const
+    void applyCluster(ClusterEntryMap& entryMap, Config const& config,
+                      SorobanNetworkConfig const& sorobanConfig,
+                      CxxLedgerInfo const& ledgerInfo,
+                      Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
+                      uint32_t ledgerVersion, Cluster const& txs);
+
+    void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+                           Stage const& stage, Hash const& sorobanBasePrngSeed);
 
     // initialLedgerVers must be the ledger version at the start of the ledger.
     // On the ledger in which a protocol upgrade from vN to vN + 1 occurs,

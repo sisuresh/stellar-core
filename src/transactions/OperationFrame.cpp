@@ -156,6 +156,36 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
     return res;
 }
 
+// TODO: Change the entry type to use something
+std::pair<bool, ModifiedEntryMap>
+OperationFrame::applyParallel(
+    ClusterEntryMap const& entryMap, Config const& config,
+    SorobanNetworkConfig const& sorobanConfig, CxxLedgerInfo const& ledgerInfo,
+    TransactionResultPayloadBase& resPayload, SorobanMetrics& sorobanMetrics,
+    Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq, uint32_t ledgerVersion)
+{
+    ZoneScoped;
+    CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
+    // checkValid is called earlier in preParallelApply
+
+    // TODO: Can't use SorobanMetrics like this
+    return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
+                           ledgerInfo, resPayload, sorobanMetrics, ledgerSeq,
+                           ledgerVersion);
+    // CLOG_TRACE(Tx, "{}", xdrToCerealString(mResult, "OperationResult"));
+}
+
+std::pair<bool, ModifiedEntryMap>
+OperationFrame::doApplyParallel(
+    ClusterEntryMap const& entryMap, Config const& appConfig,
+    SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
+    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
+    SorobanMetrics& sorobanMetrics, uint32_t ledgerSeq, uint32_t ledgerVersion)
+{
+    throw std::runtime_error(
+        "Cannot call doApplyParallel on a non Soroban operation");
+}
+
 bool
 OperationFrame::doApply(Application& _app, AbstractLedgerTxn& ltx,
                         Hash const& sorobanBasePrngSeed,

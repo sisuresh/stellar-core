@@ -16,6 +16,8 @@
 #include "util/types.h"
 #include <optional>
 
+#include "ledger/SorobanMetrics.h"
+
 namespace stellar
 {
 class AbstractLedgerTxn;
@@ -34,6 +36,30 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
+using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
+using ClusterEntryMap =
+    UnorderedMap<LedgerKey,
+                 std::pair<std::optional<LedgerEntry>, bool /*dirty*/>>;
+
+// temporary. Remove this
+class TxBundle
+{
+  public:
+    TxBundle(TransactionFrameBasePtr tx, TransactionResultPayloadPtr resPayload,
+             TransactionMetaFrame const& meta)
+        : tx(tx), resPayload(resPayload), meta(meta)
+    {
+    }
+    TransactionFrameBasePtr tx;
+    TransactionResultPayloadPtr resPayload;
+    mutable TransactionMetaFrame meta;
+};
+
+typedef std::vector<TxBundle> Cluster;
+typedef std::vector<Cluster> Thread;
+typedef std::vector<Thread> Stage;
+typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
+
 class TransactionFrameBase
 {
   public:
@@ -45,6 +71,20 @@ class TransactionFrameBase
                        TransactionMetaFrame& meta,
                        TransactionResultPayloadPtr resPayload,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
+
+    virtual bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                  TransactionMetaFrame& meta,
+                                  TransactionResultPayloadPtr resPayload,
+                                  bool chargeFee) const = 0;
+
+    virtual std::pair<bool, ModifiedEntryMap> parallelApply(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const = 0;
 
     virtual std::pair<bool, TransactionResultPayloadPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,

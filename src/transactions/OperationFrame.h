@@ -53,6 +53,14 @@ class OperationFrame
     virtual bool doApply(AbstractLedgerTxn& ltx,
                          TransactionResultPayloadBase& resPayload) = 0;
 
+    virtual std::pair<bool, ModifiedEntryMap> doApplyParallel(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!
+        Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
+        Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics /*temporary*/, uint32_t ledgerSeq,
+        uint32_t ledgerVersion);
+
     // returns the threshold this operation requires
     virtual ThresholdLevel getThresholdLevel() const;
 
@@ -99,6 +107,14 @@ class OperationFrame
     bool apply(Application& app, SignatureChecker& signatureChecker,
                AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
                TransactionResultPayloadBase& resPayload);
+
+    std::pair<bool, ModifiedEntryMap> applyParallel(
+        ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo,
+        TransactionResultPayloadBase& resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        uint32_t ledgerSeq, uint32_t ledgerVersion);
 
     Operation const&
     getOperation() const

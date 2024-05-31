@@ -39,6 +39,8 @@
 #include <type_traits>
 #include <variant>
 
+#include "ledger/LedgerManagerImpl.h"
+
 using namespace stellar;
 using namespace stellar::txtest;
 
@@ -4292,4 +4294,123 @@ TEST_CASE("Vm instantiation tightening", "[tx][soroban]")
         REQUIRE(inputs.nExports == 14);
         REQUIRE(inputs.nDataSegmentBytes == 0);
     }
+}
+
+TEST_CASE("parallel", "[tx][soroban]")
+{
+    auto cfg = getTestConfig();
+    cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
+    SorobanTest test(cfg);
+
+    ContractStorageTestClient client(test);
+
+    auto issuerKey = getAccount("issuer");
+    Asset idr = makeAsset(issuerKey, "IDR");
+    AssetContractTestClient assetClient(test, idr);
+
+    auto& app = test.getApp();
+    auto& lm = app.getLedgerManager();
+
+    const int64_t startingBalance = lm.getLastMinBalance(50);
+
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", startingBalance);
+    auto a2 = root.create("a2", startingBalance);
+    auto a3 = root.create("a3", startingBalance);
+    auto a4 = root.create("a4", startingBalance);
+
+    auto issuer = root.create(issuerKey, startingBalance);
+    auto a5 = root.create("a5", startingBalance);
+    auto a6 = root.create("a6", startingBalance);
+    a5.changeTrust(idr, 200);
+    a6.changeTrust(idr, 75);
+    issuer.pay(a5, idr, 200);
+
+    auto a7 = root.create("a7", startingBalance);
+
+    auto i1 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY));
+    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+
+    auto i2 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key2"), makeU64SCVal(123)},
+        client.writeKeySpec("key2", ContractDataDurability::TEMPORARY));
+    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+
+    // Rewrite key1 value
+    auto i3 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(8)},
+        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY));
+    auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+
+    auto i4 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key3"), makeU64SCVal(1)},
+        client.writeKeySpec("key3", ContractDataDurability::TEMPORARY));
+    auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
+
+    auto i7Spec =
+        client.writeKeySpec("key7", ContractDataDurability::TEMPORARY);
+    i7Spec = i7Spec.setRefundableResourceFee(1);
+    auto i7 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key7"), makeU64SCVal(1)}, i7Spec);
+    auto tx7 = i7.withExactNonRefundableResourceFee().createTx(&a7);
+
+    auto a6Addr = makeAccountAddress(a6.getPublicKey());
+    auto transferTx1 = assetClient.getTransferTx(a5, a6Addr, 50);
+
+    auto issuerAddr = makeAccountAddress(issuer.getPublicKey());
+    auto transferTx2 = assetClient.getTransferTx(issuer, a6Addr, 25);
+
+    LedgerTxn ltx(app.getLedgerTxnRoot());
+
+    TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+    Stage stage;
+    stage.resize(3);
+    auto& cluster1 = stage[0].emplace_back();
+    cluster1.emplace_back(tx1, tx1->getResultPayload(), tm);
+    cluster1.emplace_back(tx3, tx3->getResultPayload(), tm);
+
+    auto& cluster2 = stage[1].emplace_back();
+    cluster2.emplace_back(tx2, tx2->getResultPayload(), tm);
+    cluster2.emplace_back(tx7, tx7->getResultPayload(), tm);
+
+    auto& cluster3 = stage[2].emplace_back();
+    cluster3.emplace_back(tx4, tx4->getResultPayload(), tm);
+    cluster3.emplace_back(transferTx1, transferTx1->getResultPayload(), tm);
+    cluster3.emplace_back(transferTx2, transferTx2->getResultPayload(), tm);
+
+    {
+        auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
+        lmImpl->applySorobanStages(app, ltx, {stage}, Hash{});
+        ltx.commit();
+    }
+
+    REQUIRE(client.has("key1", ContractDataDurability::TEMPORARY, true) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+    REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 8) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+    REQUIRE(client.has("key2", ContractDataDurability::TEMPORARY, true) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+
+    // Key should be missing because the put transaction failed.
+    REQUIRE(client.has("key7", ContractDataDurability::TEMPORARY, false) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+
+    REQUIRE(tx1->getResultCode() == txSUCCESS);
+    REQUIRE(tx2->getResultCode() == txSUCCESS);
+    REQUIRE(tx3->getResultCode() == txSUCCESS);
+    REQUIRE(tx4->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx1->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx2->getResultCode() == txSUCCESS);
+
+    REQUIRE(tx7->getResultCode() == txFAILED);
+    REQUIRE(tx7->getResult()
+                .result.results()[0]
+                .tr()
+                .invokeHostFunctionResult()
+                .code() == INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
+
+    REQUIRE(a5.getTrustlineBalance(idr) == 150);
+    REQUIRE(a6.getTrustlineBalance(idr) == 75);
 }
