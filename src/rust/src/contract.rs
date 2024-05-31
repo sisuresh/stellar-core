@@ -56,6 +56,22 @@ impl TryFrom<&CxxLedgerInfo> for LedgerInfo {
     }
 }
 
+impl From<&CxxLedgerInfo> for LedgerInfo {
+    fn from(c: &CxxLedgerInfo) -> Self {
+        Self {
+            protocol_version: c.protocol_version,
+            sequence_number: c.sequence_number,
+            timestamp: c.timestamp,
+            network_id: c.network_id.clone().try_into().unwrap(),
+            base_reserve: c.base_reserve,
+            min_temp_entry_ttl: c.min_temp_entry_ttl,
+            min_persistent_entry_ttl: c.min_persistent_entry_ttl,
+            max_entry_ttl: c.max_entry_ttl,
+        }
+    }
+}
+
+//TODO: Is this fine?
 impl From<CxxTransactionResources> for TransactionResources {
     fn from(value: CxxTransactionResources) -> Self {
         Self {
