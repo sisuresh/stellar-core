@@ -1922,6 +1922,14 @@ makeStringSCVal(std::string&& str)
 }
 
 SCVal
+makeU32SCVal(uint32_t u)
+{
+    SCVal val(SCV_U32);
+    val.u32() = u;
+    return val;
+}
+
+SCVal
 makeU64SCVal(uint64_t u)
 {
     SCVal val(SCV_U64);

@@ -1,0 +1,63 @@
+[package]
+name = "stellar-core"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.79.0"
+publish = false
+
+[lib]
+name = "rust_stellar_core"
+crate-type = ["rlib"]
+
+[dependencies]
+log = "=0.4.19"
+tracy-client = { version = "=0.16.4", features = ["enable"], default-features = false, optional = true}
+cxx = "=1.0.97"
+base64 = "=0.13.1"
+rustc-simple-version = "=0.1.0"
+# NB: this must match the same rand version used by soroban (but the tooling
+# will complain if it does not match)
+rand = "=0.8.5"
+
+petgraph = "=0.6.4"
+toml = "=0.7.8"
+itertools = "=0.11.0"
+
+[dependencies.soroban-env-host-p22]
+version = "=22.0.0"
+git = "https://github.com/sisuresh/rs-soroban-env"
+package = "soroban-env-host"
+rev = "1c346dec43b64c6bc484cf0c9ecd507a3e0632ae"
+#path = "../../../rs-soroban-env/soroban-env-host"
+
+# The test wasms and synth-wasm crate should usually be taken from the highest
+# supported host, since test material usually just grows over time.
+
+[dependencies.soroban-test-wasms]
+version = "=22.0.0"
+git = "https://github.com/sisuresh/rs-soroban-env"
+rev = "1c346dec43b64c6bc484cf0c9ecd507a3e0632ae"
+#path = "../../../rs-soroban-env/soroban-test-wasms"
+
+[dependencies.soroban-synth-wasm]
+version = "=22.0.0"
+git = "https://github.com/sisuresh/rs-soroban-env"
+rev = "1c346dec43b64c6bc484cf0c9ecd507a3e0632ae"
+#path = "../../../rs-soroban-env/soroban-synth-wasm"
+
+[dependencies.cargo-lock]
+version = "=9.0.0"
+git = "https://github.com/rustsec/rustsec"
+rev = "a5c69fc6e4b6068b43d7143f3a2f68c3f3de37d8"
+features = ["dependency-tree"]
+
+[features]
+
+# The tracy feature should enable the tracy features of all supported hosts.
+tracy = ["dep:tracy-client", "soroban-env-host-p21/tracy", "soroban-env-host-p22/tracy"]
+
+# The "vnext" feature enables not-yet-released features that (a) break protocol
+# but (b) are still under development, in between protocol releases. This
+# feature is not enabled by default, and is only intended for temporary use when
+# staging work across intra-protocol releases.
+core-vnext = ["soroban-env-host-p22/next"]

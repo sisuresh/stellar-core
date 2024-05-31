@@ -17,12 +17,15 @@
 #include "herder/TxSetFrame.h"
 #include "herder/Upgrades.h"
 #include "history/HistoryManager.h"
+#include "invariant/InvariantDoesNotHold.h"
+#include "invariant/InvariantManager.h"
 #include "ledger/FlushAndRotateMetaDebugWork.h"
 #include "ledger/LedgerHeaderUtils.h"
 #include "ledger/LedgerRange.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
+#include "ledger/LedgerTypeUtils.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
@@ -1501,6 +1504,387 @@ LedgerManagerImpl::prefetchTransactionData(ApplicableTxSetFrame const& txSet)
             }
         }
         mApp.getLedgerTxnRoot().prefetchClassic(classicKeys);
+    }
+}
+
+ThreadEntryMap
+LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
+{
+    ThreadEntryMap entryMap;
+    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) {
+        for (auto const& lk : keys)
+        {
+            auto ltxe = ltx.loadWithoutRecord(lk);
+            if (ltxe)
+            {
+                entryMap.emplace(lk, std::make_pair(ltxe.current(), false));
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must exist
+                    releaseAssertOrThrow(ttlLtxe);
+
+                    entryMap.emplace(ttlKey,
+                                     std::make_pair(ttlLtxe.current(), false));
+                }
+            }
+            else
+            {
+                entryMap.emplace(lk, std::make_pair(std::nullopt, false));
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must not exist
+                    releaseAssertOrThrow(!ttlLtxe);
+                    entryMap.emplace(ttlKey,
+                                     std::make_pair(std::nullopt, false));
+                }
+            }
+        }
+    };
+
+    for (auto const& txBundle : txs)
+    {
+        getEntries(txBundle.tx->sorobanResources().footprint.readOnly);
+        getEntries(txBundle.tx->sorobanResources().footprint.readWrite);
+    }
+
+    return entryMap;
+}
+
+TTLs
+LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
+                                            Stage const& stage)
+{
+    UnorderedMap<LedgerKey, TTLEntry> initialTTLs;
+    auto getTTLEntries = [&](xdr::xvector<LedgerKey> const& keys) {
+        for (auto const& lk : keys)
+        {
+            auto ttlKey = getTTLKey(lk);
+            auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+            if (ttlLtxe)
+            {
+                initialTTLs.emplace(ttlKey, ttlLtxe.current().data.ttl());
+            }
+        }
+    };
+
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            getTTLEntries(txBundle.tx->sorobanResources().footprint.readOnly);
+            getTTLEntries(txBundle.tx->sorobanResources().footprint.readWrite);
+        }
+    }
+
+    return initialTTLs;
+}
+
+void
+LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
+                               Config const& config,
+                               SorobanNetworkConfig const& sorobanConfig,
+                               CxxLedgerInfo const& ledgerInfo,
+                               Hash const& sorobanBasePrngSeed,
+                               SorobanMetrics& sorobanMetrics,
+                               uint32_t ledgerSeq, uint32_t ledgerVersion)
+{
+    // TTL extensions can't be observable between transactions, so we track them
+    // separately and update the entry map at the end of the thread.
+
+    UnorderedMap<LedgerKey, TTLEntry> ttlExtensions;
+
+    for (auto const& txBundle : thread)
+    {
+        releaseAssertOrThrow(txBundle.resPayload);
+        auto res = txBundle.tx->parallelApply(
+            entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
+            sorobanMetrics, sorobanBasePrngSeed, txBundle.meta, ledgerSeq,
+            ledgerVersion);
+
+        if (res.mSuccess)
+        {
+            // now apply the entry changes to entryMap
+            for (auto const& entry : res.mModifiedEntryMap)
+            {
+                auto const& lk = entry.first;
+                auto const& updatedLe = entry.second;
+
+                auto it = entryMap.find(lk);
+                releaseAssertOrThrow(it != entryMap.end());
+
+                auto opType = txBundle.tx->getRawOperations().at(0).body.type();
+
+                if (opType != RESTORE_FOOTPRINT && lk.type() == TTL &&
+                    it->second.first && updatedLe)
+                {
+                    // If this is a TTL extension, then record it separately for
+                    // now.
+                    auto ttlIt = ttlExtensions.find(lk);
+                    if (ttlIt != ttlExtensions.end())
+                    {
+                        ttlIt->second.liveUntilLedgerSeq =
+                            std::max(ttlIt->second.liveUntilLedgerSeq,
+                                     updatedLe->data.ttl().liveUntilLedgerSeq);
+                    }
+                    else
+                    {
+                        releaseAssertOrThrow(
+                            updatedLe->data.ttl().liveUntilLedgerSeq >
+                            it->second.first->data.ttl().liveUntilLedgerSeq);
+                        ttlExtensions.emplace(lk, updatedLe->data.ttl());
+                    }
+                }
+                else
+                {
+                    // If this is a TTL entry, it is either being created,
+                    // deleted, or restored, so it should be observable.
+
+                    // TTL entry is being deleted, so extensions can be wiped.
+                    if (lk.type() == TTL && !updatedLe)
+                    {
+                        ttlExtensions.erase(lk);
+                    }
+
+                    // If this is a create or restore, the entry is in the
+                    // readWrite set, so it shouldn't be possible for an
+                    // extension to be accepted prior to the entry being
+                    // accessible.
+                    releaseAssertOrThrow(ttlExtensions.count(lk) == 0);
+
+                    // A entry deletion will be marked by a nullopt le.
+                    // Set the dirty bit so it'll be written to ltx later.
+                    it->second = {updatedLe, true};
+                }
+            }
+        }
+        else
+        {
+            releaseAssertOrThrow(
+                txBundle.resPayload->getResultCode() == txFAILED ||
+                txBundle.resPayload->getResultCode() == txINTERNAL_ERROR);
+        }
+        txBundle.mDelta = res.mDelta;
+    }
+    for (auto const& ttlExtension : ttlExtensions)
+    {
+        auto it = entryMap.find(ttlExtension.first);
+        releaseAssertOrThrow(it != entryMap.end());
+
+        LedgerEntry updatedTtl;
+        updatedTtl.data.type(TTL);
+        updatedTtl.data.ttl() = ttlExtension.second;
+
+        it->second = {updatedTtl, true};
+    }
+}
+
+// This three methods are copies from InvokeHostFunctionOpFrame. Clean up.
+template <typename T>
+std::vector<uint8_t>
+toVec(T const& t)
+{
+    return std::vector<uint8_t>(xdr::xdr_to_opaque(t));
+}
+
+template <typename T>
+CxxBuf
+toCxxBuf(T const& t)
+{
+    return CxxBuf{std::make_unique<std::vector<uint8_t>>(toVec(t))};
+}
+
+CxxLedgerInfo
+getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
+              SorobanNetworkConfig const& sorobanConfig)
+{
+    CxxLedgerInfo info{};
+    auto const& hdr = ltx.loadHeader().current();
+    info.base_reserve = hdr.baseReserve;
+    info.protocol_version = hdr.ledgerVersion;
+    info.sequence_number = hdr.ledgerSeq;
+    info.timestamp = hdr.scpValue.closeTime;
+    info.memory_limit = sorobanConfig.txMemoryLimit();
+    info.min_persistent_entry_ttl =
+        sorobanConfig.stateArchivalSettings().minPersistentTTL;
+    info.min_temp_entry_ttl =
+        sorobanConfig.stateArchivalSettings().minTemporaryTTL;
+    info.max_entry_ttl = sorobanConfig.stateArchivalSettings().maxEntryTTL;
+
+    auto cpu = sorobanConfig.cpuCostParams();
+    auto mem = sorobanConfig.memCostParams();
+
+    info.cpu_cost_params = toCxxBuf(cpu);
+    info.mem_cost_params = toCxxBuf(mem);
+
+    auto& networkID = app.getNetworkID();
+    info.network_id.reserve(networkID.size());
+    for (auto c : networkID)
+    {
+        info.network_id.emplace_back(static_cast<unsigned char>(c));
+    }
+    return info;
+}
+
+void
+LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+                                     Stage const& stage,
+                                     Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            txBundle.tx->preParallelApply(app, ltx, txBundle.meta,
+                                          txBundle.resPayload, true);
+        }
+    }
+
+    auto const& config = app.getConfig();
+    auto const& sorobanConfig =
+        app.getLedgerManager().getSorobanNetworkConfig();
+    auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
+
+    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+    uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+
+    auto const& ledgerInfo = getLedgerInfo(ltx, app, sorobanConfig);
+
+    std::vector<ThreadEntryMap> entryMapsByThread;
+    for (auto const& thread : stage)
+    {
+        entryMapsByThread.emplace_back(collectEntries(ltx, thread));
+    }
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < stage.size(); ++i)
+    {
+        auto& entryMapByThread = entryMapsByThread.at(i);
+
+        auto const& thread = stage.at(i);
+
+        // TODO: We need unique prng seeds per tx instead of
+        // sorobanBasePrngSeed!!!
+        // TODO: entryMap should be moved in.
+        // TODO: Use thread pool
+        threads.push_back(std::thread(
+            &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
+            std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
+            sorobanBasePrngSeed, std::ref(sorobanMetrics), ledgerSeq,
+            ledgerVersion));
+    }
+
+    // TODO: This will change when we use a thread pool.
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
+    LedgerTxn ltxInner(ltx);
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            // First check the invariants
+            if (txBundle.resPayload->isSuccess())
+            {
+                try
+                {
+                    // Soroban transactions don't have access to the ledger
+                    // header, so they can't modify it. Pass in the current
+                    // header as both current and previous.
+                    txBundle.mDelta->header.current =
+                        ltxInner.loadHeader().current();
+                    txBundle.mDelta->header.previous =
+                        ltxInner.loadHeader().current();
+                    app.getInvariantManager().checkOnOperationApply(
+                        txBundle.tx->getRawOperations().at(0),
+                        txBundle.resPayload->getOpResultAt(0),
+                        *txBundle.mDelta);
+                }
+                catch (InvariantDoesNotHold& e)
+                {
+                    printErrorAndAbort(
+                        "Invariant failure while applying operations: ",
+                        e.what());
+                }
+            }
+
+            txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
+                                          txBundle.resPayload);
+
+            // We only increase the internal-error metric count if the
+            // ledger is a newer version.
+            if (txBundle.resPayload->getResultCode() == txINTERNAL_ERROR &&
+                ledgerVersion >=
+                    config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
+            {
+                auto& internalErrorCounter = app.getMetrics().NewCounter(
+                    {"ledger", "transaction", "internal-error"});
+                internalErrorCounter.inc();
+            }
+        }
+    }
+    // TODO: Look into adding invariants checking for conflicting writes between
+    // clusters
+    for (auto const& threadEntryMap : entryMapsByThread)
+    {
+        for (auto const& entry : threadEntryMap)
+        {
+            // Only update if dirty bit is set
+            if (!entry.second.second)
+            {
+                continue;
+            }
+
+            if (entry.second.first)
+            {
+                auto const& updatedTTL = *entry.second.first;
+                auto ltxe = ltxInner.load(entry.first);
+                if (ltxe)
+                {
+                    if (ltxe.current().data.type() == TTL)
+                    {
+                        // Only update TTL if we're increasing it
+                        auto currLiveUntil =
+                            ltxe.current().data.ttl().liveUntilLedgerSeq;
+                        if (currLiveUntil >=
+                            updatedTTL.data.ttl().liveUntilLedgerSeq)
+                        {
+                            continue;
+                        }
+                    }
+                    ltxe.current() = updatedTTL;
+                }
+                else
+                {
+                    ltxInner.create(updatedTTL);
+                }
+            }
+            else
+            {
+                auto ltxe = ltxInner.load(entry.first);
+                if (ltxe)
+                {
+                    ltxInner.erase(entry.first);
+                }
+            }
+        }
+    }
+    ltxInner.commit();
+}
+
+void
+LedgerManagerImpl::applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+                                      std::vector<Stage> const& stages,
+                                      Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& stage : stages)
+    {
+        applySorobanStage(app, ltx, stage, sorobanBasePrngSeed);
     }
 }
 
