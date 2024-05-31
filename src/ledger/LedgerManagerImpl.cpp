@@ -24,6 +24,7 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
+#include "ledger/LedgerTypeUtils.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
@@ -1479,6 +1480,356 @@ LedgerManagerImpl::prefetchTransactionData(
             tx->insertKeysForTxApply(keys);
         }
         mApp.getLedgerTxnRoot().prefetch(keys);
+    }
+}
+
+ClusterEntryMap
+LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Cluster const& txs)
+{
+    ClusterEntryMap entryMap;
+    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) {
+        for (auto const& lk : keys)
+        {
+            auto ltxe = ltx.loadWithoutRecord(lk);
+            if (ltxe)
+            {
+                entryMap.emplace(lk, std::make_pair(ltxe.current(), false));
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must exist
+                    releaseAssertOrThrow(ttlLtxe);
+
+                    entryMap.emplace(ttlKey,
+                                     std::make_pair(ttlLtxe.current(), false));
+                }
+            }
+            else
+            {
+                entryMap.emplace(lk, std::make_pair(std::nullopt, false));
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must not exist
+                    releaseAssertOrThrow(!ttlLtxe);
+                    entryMap.emplace(ttlKey,
+                                     std::make_pair(std::nullopt, false));
+                }
+            }
+        }
+    };
+
+    for (auto const& txBundle : txs)
+    {
+        getEntries(txBundle.tx->sorobanResources().footprint.readOnly);
+        getEntries(txBundle.tx->sorobanResources().footprint.readWrite);
+    }
+
+    return entryMap;
+}
+
+TTLs
+LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
+                                            Stage const& stage)
+{
+    UnorderedMap<LedgerKey, TTLEntry> initialTTLs;
+    auto getTTLEntries = [&](xdr::xvector<LedgerKey> const& keys) {
+        for (auto const& lk : keys)
+        {
+            auto ttlKey = getTTLKey(lk);
+            auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+            if (ttlLtxe)
+            {
+                initialTTLs.emplace(ttlKey, ttlLtxe.current().data.ttl());
+            }
+        }
+    };
+
+    for (auto const& thread : stage)
+    {
+        for (auto const& cluster : thread)
+        {
+            for (auto const& txBundle : cluster)
+            {
+                getTTLEntries(
+                    txBundle.tx->sorobanResources().footprint.readOnly);
+                getTTLEntries(
+                    txBundle.tx->sorobanResources().footprint.readWrite);
+            }
+        }
+    }
+
+    return initialTTLs;
+}
+
+// TODO: Make applyCluster a non-member function
+void
+LedgerManagerImpl::applyCluster(ClusterEntryMap& entryMap, Config const& config,
+                                SorobanNetworkConfig const& sorobanConfig,
+                                CxxLedgerInfo const& ledgerInfo,
+                                Hash const& sorobanBasePrngSeed,
+                                uint32_t ledgerSeq, uint32_t ledgerVersion,
+                                Cluster const& txs)
+{
+    for (auto const& txBundle : txs)
+    {
+        releaseAssertOrThrow(txBundle.resPayload);
+        auto res = txBundle.tx->parallelApply(
+            entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
+            sorobanBasePrngSeed, txBundle.meta, ledgerSeq, ledgerVersion);
+
+        if (res.mSuccess)
+        {
+            // now apply the entry changes to entryMap
+            for (auto const& entry : res.mModifiedEntryMap)
+            {
+                auto const& lk = entry.first;
+                auto const& updatedLe = entry.second;
+
+                auto it = entryMap.find(lk);
+                releaseAssertOrThrow(it != entryMap.end());
+
+                // TODO: Remove this
+                if (lk.type() == TTL && updatedLe && it->second.first)
+                {
+                    releaseAssertOrThrow(
+                        updatedLe->data.ttl().liveUntilLedgerSeq >
+                        it->second.first->data.ttl().liveUntilLedgerSeq);
+                }
+
+                // A entry deletion will be marked by a nullopt le.
+                // Set the dirty bit so it'll be written to ltx later.
+                it->second = {updatedLe, true};
+            }
+        }
+        else
+        {
+            releaseAssertOrThrow(txBundle.resPayload->getResultCode() ==
+                                 txFAILED);
+        }
+        txBundle.opMetrics = res.opMetrics;
+    }
+}
+
+// Each cluster has its own entry map, so TTL updates will not be observable
+// between clusters
+void
+LedgerManagerImpl::applyThread(std::vector<ClusterEntryMap>& entryMapByCluster,
+                               std::vector<Cluster> const& clusters,
+                               Config const& config,
+                               SorobanNetworkConfig const& sorobanConfig,
+                               CxxLedgerInfo const& ledgerInfo,
+                               Hash const& sorobanBasePrngSeed,
+                               uint32_t ledgerSeq, uint32_t ledgerVersion)
+{
+    releaseAssertOrThrow(entryMapByCluster.size() == clusters.size());
+    for (size_t i = 0; i < clusters.size(); ++i)
+    {
+        auto const& cluster = clusters.at(i);
+        auto& entryMap = entryMapByCluster.at(i);
+
+        applyCluster(entryMap, config, sorobanConfig, ledgerInfo,
+                     sorobanBasePrngSeed, ledgerSeq, ledgerVersion, cluster);
+    }
+}
+
+// This three methods are copies from InvokeHostFunctionOpFrame. Clean up.
+template <typename T>
+std::vector<uint8_t>
+toVec(T const& t)
+{
+    return std::vector<uint8_t>(xdr::xdr_to_opaque(t));
+}
+
+template <typename T>
+CxxBuf
+toCxxBuf(T const& t)
+{
+    return CxxBuf{std::make_unique<std::vector<uint8_t>>(toVec(t))};
+}
+
+CxxLedgerInfo
+getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
+              SorobanNetworkConfig const& sorobanConfig)
+{
+    CxxLedgerInfo info{};
+    auto const& hdr = ltx.loadHeader().current();
+    info.base_reserve = hdr.baseReserve;
+    info.protocol_version = hdr.ledgerVersion;
+    info.sequence_number = hdr.ledgerSeq;
+    info.timestamp = hdr.scpValue.closeTime;
+    info.memory_limit = sorobanConfig.txMemoryLimit();
+    info.min_persistent_entry_ttl =
+        sorobanConfig.stateArchivalSettings().minPersistentTTL;
+    info.min_temp_entry_ttl =
+        sorobanConfig.stateArchivalSettings().minTemporaryTTL;
+    info.max_entry_ttl = sorobanConfig.stateArchivalSettings().maxEntryTTL;
+
+    auto cpu = sorobanConfig.cpuCostParams();
+    auto mem = sorobanConfig.memCostParams();
+
+    info.cpu_cost_params = toCxxBuf(cpu);
+    info.mem_cost_params = toCxxBuf(mem);
+
+    auto& networkID = app.getNetworkID();
+    info.network_id.reserve(networkID.size());
+    for (auto c : networkID)
+    {
+        info.network_id.emplace_back(static_cast<unsigned char>(c));
+    }
+    return info;
+}
+
+void
+LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+                                     Stage const& stage,
+                                     Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& thread : stage)
+    {
+        for (auto const& cluster : thread)
+        {
+            for (auto const& txBundle : cluster)
+            {
+                txBundle.tx->preParallelApply(app, ltx, txBundle.meta,
+                                              txBundle.resPayload, true);
+            }
+        }
+    }
+
+    auto const& config = app.getConfig();
+    auto const& sorobanConfig =
+        app.getLedgerManager().getSorobanNetworkConfig();
+
+    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+    uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+
+    auto const& ledgerInfo = getLedgerInfo(ltx, app, sorobanConfig);
+
+    std::vector<std::vector<ClusterEntryMap>> entryMapsByThread;
+    for (auto const& thread : stage)
+    {
+        auto& clusterEntryMaps = entryMapsByThread.emplace_back();
+        for (auto const& cluster : thread)
+        {
+            clusterEntryMaps.emplace_back(collectEntries(ltx, cluster));
+        }
+    }
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < stage.size(); ++i)
+    {
+        auto& entryMapByCluster = entryMapsByThread.at(i);
+
+        auto const& thread = stage.at(i);
+
+        // TODO: We need unique prng seeds per tx instead of
+        // sorobanBasePrngSeed!!!
+        // TODO: entryMap should be moved in.
+        // TODO: Use thread pool
+        threads.push_back(std::thread(
+            &LedgerManagerImpl::applyThread, this, std::ref(entryMapByCluster),
+            std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
+            sorobanBasePrngSeed, ledgerSeq, ledgerVersion));
+    }
+
+    // TODO: This will change when we use a thread pool.
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
+    LedgerTxn ltxInner(ltx);
+
+    for (auto const& thread : stage)
+    {
+        for (auto const& cluster : thread)
+        {
+            for (auto const& txBundle : cluster)
+            {
+                txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
+                                              txBundle.resPayload);
+
+                releaseAssertOrThrow(txBundle.opMetrics);
+                txBundle.opMetrics->updateSorobanMetrics(mSorobanMetrics);
+
+                // We only increase the internal-error metric count if the
+                // ledger is a newer version.
+                if (txBundle.resPayload->getResultCode() == txINTERNAL_ERROR &&
+                    ledgerVersion >=
+                        config
+                            .LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
+                {
+                    auto& internalErrorCounter = app.getMetrics().NewCounter(
+                        {"ledger", "transaction", "internal-error"});
+                    internalErrorCounter.inc();
+                }
+            }
+        }
+    }
+
+    // TODO: Look into adding invariants checking for conflicting writes between
+    // clusters
+    for (auto const& entryMapsByCluster : entryMapsByThread)
+    {
+        for (auto const& clusterEntryMap : entryMapsByCluster)
+        {
+            for (auto const& entry : clusterEntryMap)
+            {
+                // Only update if dirty bit is set
+                if (!entry.second.second)
+                {
+                    continue;
+                }
+
+                if (entry.second.first)
+                {
+                    auto const& updatedTTL = *entry.second.first;
+                    auto ltxe = ltxInner.load(entry.first);
+                    if (ltxe)
+                    {
+                        if (ltxe.current().data.type() == TTL)
+                        {
+                            // Only update TTL if we're increasing it
+                            auto currLiveUntil =
+                                ltxe.current().data.ttl().liveUntilLedgerSeq;
+                            if (currLiveUntil >=
+                                updatedTTL.data.ttl().liveUntilLedgerSeq)
+                            {
+                                continue;
+                            }
+                        }
+                        ltxe.current() = updatedTTL;
+                    }
+                    else
+                    {
+                        ltxInner.create(updatedTTL);
+                    }
+                }
+                else
+                {
+                    auto ltxe = ltxInner.load(entry.first);
+                    if (ltxe)
+                    {
+                        ltxInner.erase(entry.first);
+                    }
+                }
+            }
+        }
+    }
+    ltxInner.commit();
+}
+
+void
+LedgerManagerImpl::applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+                                      std::vector<Stage> const& stages,
+                                      Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& stage : stages)
+    {
+        applySorobanStage(app, ltx, stage, sorobanBasePrngSeed);
     }
 }
 

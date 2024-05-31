@@ -162,6 +162,38 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
     return applyRes;
 }
 
+ParallelOpReturnVal
+OperationFrame::applyParallel(ClusterEntryMap const& entryMap,
+                              Config const& config,
+                              SorobanNetworkConfig const& sorobanConfig,
+                              CxxLedgerInfo const& ledgerInfo,
+                              OperationResult& res, SorobanTxData& sorobanData,
+                              Hash const& sorobanBasePrngSeed,
+                              uint32_t ledgerSeq, uint32_t ledgerVersion) const
+{
+    ZoneScoped;
+    CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
+    // checkValid is called earlier in preParallelApply
+
+    return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
+                           ledgerInfo, res, sorobanData, ledgerSeq,
+                           ledgerVersion);
+}
+
+ParallelOpReturnVal
+OperationFrame::doApplyParallel(ClusterEntryMap const& entryMap,
+                                Config const& appConfig,
+                                SorobanNetworkConfig const& sorobanConfig,
+                                Hash const& sorobanBasePrngSeed,
+                                CxxLedgerInfo const& ledgerInfo,
+                                OperationResult& res,
+                                SorobanTxData& sorobanData, uint32_t ledgerSeq,
+                                uint32_t ledgerVersion) const
+{
+    throw std::runtime_error(
+        "Cannot call doApplyParallel on a non Soroban operation");
+}
+
 bool
 OperationFrame::doApplyForSoroban(Application& _app, AbstractLedgerTxn& ltx,
                                   Hash const& sorobanBasePrngSeed,
