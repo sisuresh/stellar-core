@@ -53,6 +53,14 @@ class OperationFrame
                          Hash const& sorobanBasePrngSeed, OperationResult& res,
                          std::shared_ptr<SorobanTxData> sorobanData) const = 0;
 
+    virtual ParallelOpReturnVal doApplyParallel(
+        ThreadEntryMap const& entryMap, // Must not be shared between threads!
+        Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
+        Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+        SorobanMetrics& sorobanMetrics, OperationResult& res,
+        SorobanTxData& sorobanData, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const;
+
     // returns the threshold this operation requires
     virtual ThresholdLevel getThresholdLevel() const;
 
@@ -87,6 +95,14 @@ class OperationFrame
                AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
                OperationResult& res,
                std::shared_ptr<SorobanTxData> sorobanData) const;
+
+    ParallelOpReturnVal applyParallel(
+        ThreadEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+        OperationResult& res, SorobanTxData& sorobanData,
+        Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const;
 
     Operation const&
     getOperation() const
