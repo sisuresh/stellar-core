@@ -145,10 +145,15 @@ ApplyLoad::setupUpgradeContract()
 
     mUpgradeCodeKey = contractCodeLedgerKey;
 
+    SorobanResources uploadResources;
+    uploadResources.instructions = 1'250'000;
+    uploadResources.readBytes = wasmBytes.size() + 500;
+    uploadResources.writeBytes = wasmBytes.size() + 500;
+
     auto const& lm = mApp.getLedgerManager();
     auto uploadTx = mTxGenerator.createUploadWasmTransaction(
         lm.getLastClosedLedgerNum() + 1, 0, wasmBytes, contractCodeLedgerKey,
-        std::nullopt);
+        std::nullopt, uploadResources);
 
     closeLedger({uploadTx.second});
 
@@ -161,7 +166,6 @@ ApplyLoad::setupUpgradeContract()
 
     mUpgradeInstanceKey =
         createTx.second->sorobanResources().footprint.readWrite.back();
-
     releaseAssert(mTxGenerator.getApplySorobanSuccess().count() == 2);
 }
 
@@ -174,9 +178,14 @@ ApplyLoad::upgradeSettings()
     auto upgradeBytes =
         mTxGenerator.getConfigUpgradeSetFromLoadConfig(mUpgradeConfig);
 
+    SorobanResources resources;
+    resources.instructions = 1'250'000;
+    resources.readBytes = 3'100;
+    resources.writeBytes = 3'100;
+
     auto invokeTx = mTxGenerator.invokeSorobanCreateUpgradeTransaction(
         lm.getLastClosedLedgerNum() + 1, 0, upgradeBytes, mUpgradeCodeKey,
-        mUpgradeInstanceKey, std::nullopt);
+        mUpgradeInstanceKey, std::nullopt, resources);
 
     auto upgradeSetKey = mTxGenerator.getConfigUpgradeSetKey(
         mUpgradeConfig,
@@ -239,6 +248,9 @@ ApplyLoad::benchmark()
 
     auto resources = multiplyByDouble(
         lm.maxLedgerResources(true), SOROBAN_TRANSACTION_QUEUE_SIZE_MULTIPLIER);
+    resources.setVal(Resource::Type::INSTRUCTIONS,
+                     resources.getVal(Resource::Type::INSTRUCTIONS) *
+                         mUpgradeConfig.ledgerMaxParallelThreads);
 
     // Save a snapshot so we can calculate what % we used up.
     auto const resourcesSnapshot = resources;

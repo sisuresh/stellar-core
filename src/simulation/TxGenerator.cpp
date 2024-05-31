@@ -268,14 +268,17 @@ std::pair<TxGenerator::TestAccountPtr, TransactionFrameBaseConstPtr>
 TxGenerator::createUploadWasmTransaction(
     uint32_t ledgerNum, uint64_t accountId, xdr::opaque_vec<> const& wasm,
     LedgerKey const& contractCodeLedgerKey,
-    std::optional<uint32_t> maxGeneratedFeeRate)
+    std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> uploadResources)
 {
     auto account = findAccount(accountId, ledgerNum);
 
-    SorobanResources uploadResources{};
-    uploadResources.instructions = 2'500'000;
-    uploadResources.readBytes = wasm.size() + 500;
-    uploadResources.writeBytes = wasm.size() + 500;
+    if(!uploadResources)
+    {
+        uploadResources = SorobanResources{};
+        uploadResources->instructions = 2'500'000;
+        uploadResources->readBytes = wasm.size() + 500;
+        uploadResources->writeBytes = wasm.size() + 500;
+    }
 
     Operation uploadOp;
     uploadOp.body.type(INVOKE_HOST_FUNCTION);
@@ -283,13 +286,13 @@ TxGenerator::createUploadWasmTransaction(
     uploadHF.type(HOST_FUNCTION_TYPE_UPLOAD_CONTRACT_WASM);
     uploadHF.wasm() = wasm;
 
-    uploadResources.footprint.readWrite = {contractCodeLedgerKey};
+    uploadResources->footprint.readWrite = {contractCodeLedgerKey};
 
     int64_t resourceFee =
-        sorobanResourceFee(mApp, uploadResources, 5000 + wasm.size(), 100);
+        sorobanResourceFee(mApp, *uploadResources, 5000 + wasm.size(), 100);
     resourceFee += 1'000'000;
     auto tx = sorobanTransactionFrameFromOps(mApp.getNetworkID(), *account,
-                                             {uploadOp}, {}, uploadResources,
+                                             {uploadOp}, {}, *uploadResources,
                                              generateFee(maxGeneratedFeeRate,
                                                          /* opsCnt */ 1),
                                              resourceFee);
@@ -552,9 +555,16 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
 {
     xdr::xvector<ConfigSettingEntry> updatedEntries;
 
+    auto lastSetting =
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        static_cast<uint32_t>(CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0) + 1
+#else
+        static_cast<uint32_t>(CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW)
+#endif
+        ;
+
     LedgerSnapshot lsg(mApp);
-    for (uint32_t i = 0;
-         i < static_cast<uint32_t>(CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW); ++i)
+    for (uint32_t i = 0; i < lastSetting; ++i)
     {
         auto entry = lsg.load(configSettingKey(static_cast<ConfigSettingID>(i)))
                          .current();
@@ -741,6 +751,18 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
                     upgradeCfg.ledgerMaxTxCount;
             }
             break;
+        case CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW:
+        case CONFIG_SETTING_EVICTION_ITERATOR:
+            break;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        case CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0:
+            if (upgradeCfg.ledgerMaxParallelThreads > 0)
+            {
+                setting.contractParallelCompute().ledgerMaxParallelThreads =
+                    upgradeCfg.ledgerMaxParallelThreads;
+            }
+            break;
+#endif
         default:
             releaseAssert(false);
             break;
@@ -751,7 +773,11 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
         if (entry.data.configSetting().configSettingID() !=
                 CONFIG_SETTING_CONTRACT_COST_PARAMS_CPU_INSTRUCTIONS &&
             entry.data.configSetting().configSettingID() !=
-                CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES)
+                CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES &&
+            entry.data.configSetting().configSettingID() !=
+                CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW &&
+            entry.data.configSetting().configSettingID() !=
+                CONFIG_SETTING_EVICTION_ITERATOR)
         {
             updatedEntries.emplace_back(entry.data.configSetting());
         }
@@ -767,7 +793,7 @@ std::pair<TxGenerator::TestAccountPtr, TransactionFrameBasePtr>
 TxGenerator::invokeSorobanCreateUpgradeTransaction(
     uint32_t ledgerNum, uint64_t accountId, SCBytes const& upgradeBytes,
     LedgerKey const& codeKey, LedgerKey const& instanceKey,
-    std::optional<uint32_t> maxGeneratedFeeRate)
+    std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> resources)
 {
     auto account = findAccount(accountId, ledgerNum);
     auto const& contractID = instanceKey.contractData().contract;
@@ -785,12 +811,16 @@ TxGenerator::invokeSorobanCreateUpgradeTransaction(
     upgradeSetKey.contentHash = upgradeHash;
     upgradeSetKey.contractID = contractID.contractId();
 
-    SorobanResources resources;
-    resources.footprint.readOnly = {instanceKey, codeKey};
-    resources.footprint.readWrite = {upgradeLK};
-    resources.instructions = 2'500'000;
-    resources.readBytes = 3'100;
-    resources.writeBytes = 3'100;
+    if(!resources)
+    {
+        resources = SorobanResources{};
+        resources->instructions = 2'500'000;
+        resources->readBytes = 3'100;
+        resources->writeBytes = 3'100;
+    }
+
+    resources->footprint.readOnly = {instanceKey, codeKey};
+    resources->footprint.readWrite = {upgradeLK};
 
     SCVal b(SCV_BYTES);
     b.bytes() = upgradeBytes;
@@ -803,11 +833,11 @@ TxGenerator::invokeSorobanCreateUpgradeTransaction(
     ihf.invokeContract().functionName = "write";
     ihf.invokeContract().args.emplace_back(b);
 
-    auto resourceFee = sorobanResourceFee(mApp, resources, 1'000, 40);
+    auto resourceFee = sorobanResourceFee(mApp, *resources, 1'000, 40);
     resourceFee += 1'000'000;
 
     auto tx = sorobanTransactionFrameFromOps(mApp.getNetworkID(), *account,
-                                             {op}, {}, resources,
+                                             {op}, {}, *resources,
                                              generateFee(maxGeneratedFeeRate,
                                                          /* opsCnt */ 1),
                                              resourceFee);

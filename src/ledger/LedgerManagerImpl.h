@@ -48,6 +48,11 @@ class LedgerManagerImpl : public LedgerManager
     std::weak_ptr<BasicWork> mFlushAndRotateMetaDebugWork;
     std::filesystem::path mMetaDebugPath;
 
+  public:
+    void applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+                            std::vector<ApplyStage> const& stages,
+                            Hash const& sorobanBasePrngSeed);
+
   private:
     LedgerHeaderHistoryEntry mLastClosedLedger;
     std::optional<SorobanNetworkConfig> mSorobanNetworkConfig;
@@ -83,6 +88,23 @@ class LedgerManagerImpl : public LedgerManager
         std::vector<MutableTxResultPtr> const& mutableTxResults,
         AbstractLedgerTxn& ltx,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
+
+    ThreadEntryMap collectEntries(AbstractLedgerTxn& ltx, Thread const& txs);
+
+    TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx,
+                                  ApplyStage const& stage);
+
+    void applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
+                     Config const& config,
+                     SorobanNetworkConfig const& sorobanConfig,
+                     CxxLedgerInfo const& ledgerInfo,
+                     Hash const& sorobanBasePrngSeed,
+                     SorobanMetrics& sorobanMetrics, uint32_t ledgerSeq,
+                     uint32_t ledgerVersion);
+
+    void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+                           ApplyStage const& stage,
+                           Hash const& sorobanBasePrngSeed);
 
     // initialLedgerVers must be the ledger version at the start of the ledger.
     // On the ledger in which a protocol upgrade from vN to vN + 1 occurs,

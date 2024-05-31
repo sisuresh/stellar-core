@@ -17,6 +17,8 @@
 #include "util/types.h"
 #include <optional>
 
+#include "ledger/SorobanMetrics.h"
+
 namespace stellar
 {
 class AbstractLedgerTxn;
@@ -34,6 +36,47 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
+using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
+
+struct ThreadEntry
+{
+    std::optional<LedgerEntry> mLedgerEntry;
+    bool isDirty;
+    // Should only be true if this entry does not exist in any RW footprint in
+    // this thread
+    bool isOnlyReadOnly;
+};
+
+using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
+
+struct ParallelOpReturnVal
+{
+    bool mSuccess{false};
+    ModifiedEntryMap mModifiedEntryMap;
+    std::shared_ptr<LedgerTxnDelta> mDelta;
+};
+
+// temporary. Remove this
+class TxBundle
+{
+  public:
+    TxBundle(TransactionFrameBasePtr tx, MutableTxResultPtr resPayload,
+             TransactionMetaFrame const& meta)
+        : tx(tx), resPayload(resPayload), meta(meta)
+    {
+    }
+    TransactionFrameBasePtr tx;
+    MutableTxResultPtr resPayload;
+
+    // TODO: Stop using mutable
+    mutable TransactionMetaFrame meta;
+    mutable std::shared_ptr<LedgerTxnDelta> mDelta;
+};
+
+typedef std::vector<TxBundle> Thread;
+typedef std::vector<Thread> ApplyStage;
+typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
+
 class TransactionFrameBase
 {
   public:
@@ -44,6 +87,20 @@ class TransactionFrameBase
     virtual bool apply(Application& app, AbstractLedgerTxn& ltx,
                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
+
+    virtual bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                  TransactionMetaFrame& meta,
+                                  MutableTxResultPtr resPayload,
+                                  bool chargeFee) const = 0;
+
+    virtual ParallelOpReturnVal parallelApply(
+        ThreadEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const = 0;
+
     virtual MutableTxResultPtr
     checkValid(Application& app, LedgerSnapshot const& ls,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
