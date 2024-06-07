@@ -1016,37 +1016,30 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
         if (transaction)
         {
             // Add it to our current set and make sure it is valid.
-            auto [status, payload] =
+            auto addResult =
                 mApp.getHerder().recvTransaction(transaction, true);
 
-            root["status"] = TX_STATUS_STRING[static_cast<int>(status)];
-            if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
+            root["status"] = TX_STATUS_STRING[static_cast<int>(addResult.code)];
+            if (addResult.code ==
+                TransactionQueue::AddResultCode::ADD_STATUS_ERROR)
             {
                 std::string resultBase64;
-                releaseAssertOrThrow(payload);
-                if (payload)
+                releaseAssertOrThrow(addResult.resultPayload);
+
+                auto const& payload = addResult.resultPayload.value();
+                auto resultBin = xdr::xdr_to_opaque(payload->getResult());
+                resultBase64.reserve(decoder::encoded_size64(resultBin.size()) +
+                                     1);
+                resultBase64 = decoder::encode_b64(resultBin);
+                root["error"] = resultBase64;
+                if (mApp.getConfig().ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION &&
+                    transaction->isSoroban() &&
+                    !payload->getDiagnosticEvents().empty())
                 {
-                    auto resultBin = xdr::xdr_to_opaque(payload->getResult());
-                    resultBase64.reserve(
-                        decoder::encoded_size64(resultBin.size()) + 1);
-                    resultBase64 = decoder::encode_b64(resultBin);
-                    root["error"] = resultBase64;
-                    if (mApp.getConfig().ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION &&
-                        transaction->isSoroban() &&
-                        !payload->getDiagnosticEvents().empty())
-                    {
-                        auto diagsBin =
-                            xdr::xdr_to_opaque(payload->getDiagnosticEvents());
-                        auto diagsBase64 = decoder::encode_b64(diagsBin);
-                        root["diagnostic_events"] = diagsBase64;
-                    }
-                }
-                // This should never happen, but we should not assert here since
-                // we're only reporting diagnostics.
-                else
-                {
-                    root["error"] = "";
-                    root["diagnostic_events"] = "";
+                    auto diagsBin =
+                        xdr::xdr_to_opaque(payload->getDiagnosticEvents());
+                    auto diagsBase64 = decoder::encode_b64(diagsBin);
+                    root["diagnostic_events"] = diagsBase64;
                 }
             }
         }
@@ -1552,14 +1545,14 @@ CommandHandler::testTx(std::string const& params, std::string& retStr)
             txFrame = fromAccount.tx({payment(toAccount, paymentAmount)});
         }
 
-        auto [status, resultPayload] =
-            mApp.getHerder().recvTransaction(txFrame, true);
-        root["status"] = TX_STATUS_STRING[static_cast<int>(status)];
-        if (status == TransactionQueue::AddResult::ADD_STATUS_ERROR)
+        auto addResult = mApp.getHerder().recvTransaction(txFrame, true);
+        root["status"] = TX_STATUS_STRING[static_cast<int>(addResult.code)];
+        if (addResult.code == TransactionQueue::AddResultCode::ADD_STATUS_ERROR)
         {
-            releaseAssert(resultPayload);
-            root["detail"] = xdrToCerealString(resultPayload->getResultCode(),
-                                               "TransactionResultCode");
+            releaseAssert(addResult.resultPayload);
+            root["detail"] = xdrToCerealString(
+                addResult.resultPayload.value()->getResultCode(),
+                "TransactionResultCode");
         }
     }
     else

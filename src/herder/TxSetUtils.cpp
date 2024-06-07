@@ -199,6 +199,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                 std::tie(checkValid, resPayload) =
                     tx->checkValid(app, ltx, lastSeq, lowerBoundCloseTimeOffset,
                                    upperBoundCloseTimeOffset);
+                releaseAssertOrThrow(resPayload);
             }
 
             if (minSeqCheckIsInvalid || !checkValid)
@@ -217,29 +218,14 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                     }
                     else
                     {
-                        if (resPayload)
-                        {
-                            CLOG_DEBUG(
-                                Herder,
-                                "Got bad txSet: tx invalid lastSeq:{} tx: {} "
-                                "result: {}",
-                                lastSeq,
-                                xdrToCerealString(tx->getEnvelope(),
-                                                  "TransactionEnvelope"),
-                                resPayload->getResultCode());
-                        }
-                        // This should never happen, but an assert is not
-                        // appropriate here since resPayload is only used for
-                        // logging.
-                        else
-                        {
-                            CLOG_DEBUG(
-                                Herder,
-                                "Got bad txSet: tx invalid lastSeq:{} tx: {}",
-                                lastSeq,
-                                xdrToCerealString(tx->getEnvelope(),
-                                                  "TransactionEnvelope"));
-                        }
+                        CLOG_DEBUG(
+                            Herder,
+                            "Got bad txSet: tx invalid lastSeq:{} tx: {} "
+                            "result: {}",
+                            lastSeq,
+                            xdrToCerealString(tx->getEnvelope(),
+                                              "TransactionEnvelope"),
+                            resPayload->getResultCode());
                     }
                     return invalidTxs;
                 }
