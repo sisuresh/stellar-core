@@ -40,6 +40,7 @@
 
 #ifdef BUILD_TESTS
 #include "test/TxTests.h"
+#include "transactions/test/TransactionTestFrame.h"
 #endif
 
 namespace stellar
