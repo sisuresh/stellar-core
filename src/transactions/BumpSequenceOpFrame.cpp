@@ -43,7 +43,7 @@ BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx,
     ZoneNamedN(applyZone, "BumpSequenceOp apply", true);
     LedgerTxn ltxInner(ltx);
     auto header = ltxInner.loadHeader();
-    auto sourceAccountEntry = loadSourceAccount(ltxInner, header, txResult);
+    auto sourceAccountEntry = loadSourceAccount(ltxInner, header);
     maybeUpdateAccountOnLedgerSeqUpdate(header, sourceAccountEntry);
 
     auto& sourceAccount = sourceAccountEntry.current().data.account();

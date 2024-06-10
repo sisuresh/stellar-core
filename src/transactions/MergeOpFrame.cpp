@@ -114,7 +114,7 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
         }
     }
 
-    auto sourceAccountEntry = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccountEntry = loadSourceAccount(ltx, header);
     auto const& sourceAccount = sourceAccountEntry.current().data.account();
     // Only set sourceBalance here if it wasn't set in the previous block
     if (protocolVersionIsBefore(header.current().ledgerVersion,
@@ -198,7 +198,7 @@ MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx,
         return false;
     }
 
-    auto sourceAccountEntry = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccountEntry = loadSourceAccount(ltx, header);
 
     if (isImmutableAuth(sourceAccountEntry))
     {

@@ -186,7 +186,7 @@ OperationFrame::checkSignature(SignatureChecker& signatureChecker,
 {
     ZoneScoped;
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
     if (sourceAccount)
     {
         auto neededThreshold =
@@ -261,7 +261,7 @@ OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
     {
         // for ledger versions >= 10 we need to load account here, as for
         // previous versions it is done in checkSignature call
-        if (!loadSourceAccount(ltx, ltx.loadHeader(), txResult))
+        if (!loadSourceAccount(ltx, ltx.loadHeader()))
         {
             mResult.code(opNO_ACCOUNT);
             return false;
@@ -294,11 +294,10 @@ OperationFrame::doCheckValid(SorobanNetworkConfig const& config,
 
 LedgerTxnEntry
 OperationFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
-                                  LedgerTxnHeader const& header,
-                                  MutableTransactionResultBase& txResult)
+                                  LedgerTxnHeader const& header)
 {
     ZoneScoped;
-    return mParentTx.loadAccount(ltx, header, getSourceID(), txResult);
+    return mParentTx.loadAccount(ltx, header, getSourceID());
 }
 
 void

@@ -161,7 +161,7 @@ PathPaymentOpFrameBase::updateSourceBalance(
         }
         else
         {
-            sourceAccount = loadSourceAccount(ltx, header, txResult);
+            sourceAccount = loadSourceAccount(ltx, header);
         }
 
         if (amount > getAvailableBalance(header, sourceAccount))

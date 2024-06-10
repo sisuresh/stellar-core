@@ -32,8 +32,6 @@ class MutableTransactionResultBase : public NonMovableOrCopyable
     getOpFrames() const = 0;
     virtual xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const = 0;
-    virtual std::shared_ptr<InternalLedgerEntry const>&
-    getCachedAccountPtr() = 0;
 
     virtual bool consumeRefundableSorobanResources(
         uint32_t contractEventSizeBytes, int64_t rentFee,
@@ -88,8 +86,6 @@ class MutableTransactionResult : public MutableTransactionResultBase
     std::vector<std::shared_ptr<OperationFrame>> mOpFrames;
     std::optional<SorobanData> mSorobanExtension;
 
-    std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
-
     MutableTransactionResult(TransactionFrame const& tx, int64_t feeCharged);
 
     friend TransactionResultPayloadPtr
@@ -111,7 +107,6 @@ class MutableTransactionResult : public MutableTransactionResultBase
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
-    std::shared_ptr<InternalLedgerEntry const>& getCachedAccountPtr() override;
 
     bool consumeRefundableSorobanResources(
         uint32_t contractEventSizeBytes, int64_t rentFee,
@@ -178,7 +173,6 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
-    std::shared_ptr<InternalLedgerEntry const>& getCachedAccountPtr() override;
 
     bool consumeRefundableSorobanResources(
         uint32_t contractEventSizeBytes, int64_t rentFee,

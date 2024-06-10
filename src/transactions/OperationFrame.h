@@ -61,8 +61,7 @@ class OperationFrame
     virtual bool isOpSupported(LedgerHeader const& header) const;
 
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
-                                     LedgerTxnHeader const& header,
-                                     MutableTransactionResultBase& txResult);
+                                     LedgerTxnHeader const& header);
 
     // given an operation, gives a default value representing "success" for the
     // result

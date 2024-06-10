@@ -106,7 +106,7 @@ AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
     // Load the source account
     LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
     auto header = ltxSource.loadHeader();
-    auto sourceAccountEntry = loadSourceAccount(ltxSource, header, txResult);
+    auto sourceAccountEntry = loadSourceAccount(ltxSource, header);
     auto const& sourceAccount = sourceAccountEntry.current().data.account();
 
     // Check if the source account doesn't require authorization check

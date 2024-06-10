@@ -59,6 +59,10 @@ class TransactionFrame : public TransactionFrameBase
 #endif
         TransactionEnvelope mEnvelope;
 
+    // Only used to preserve a bug before Protocol 8
+    mutable std::shared_ptr<InternalLedgerEntry const>
+        mCachedAccountPreProtocol8;
+
     Hash const& mNetworkID;     // used to change the way we compute signatures
     mutable Hash mContentsHash; // the hash of the contents
     mutable Hash mFullHash;     // the hash of the contents and the sig.
@@ -67,9 +71,8 @@ class TransactionFrame : public TransactionFrameBase
     bool mIsSoroban;
     bool mHasValidSorobanOpsConsistency;
 
-    LedgerTxnEntry
-    loadSourceAccount(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
-                      MutableTransactionResultBase& txResult) const;
+    LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
+                                     LedgerTxnHeader const& header) const;
 
     enum ValidationType
     {
@@ -121,8 +124,7 @@ class TransactionFrame : public TransactionFrameBase
                          MutableTransactionResultBase& txResult,
                          Hash const& sorobanBasePrngSeed) const;
 
-    void processSeqNum(AbstractLedgerTxn& ltx,
-                       MutableTransactionResultBase& txResult) const;
+    void processSeqNum(AbstractLedgerTxn& ltx) const;
 
     bool processSignatures(ValidationType cv,
                            SignatureChecker& signatureChecker,
@@ -262,8 +264,7 @@ class TransactionFrame : public TransactionFrameBase
 
     LedgerTxnEntry loadAccount(AbstractLedgerTxn& ltx,
                                LedgerTxnHeader const& header,
-                               AccountID const& accountID,
-                               MutableTransactionResultBase& txResult) const;
+                               AccountID const& accountID) const;
 
     std::optional<SequenceNumber const> const getMinSeqNum() const override;
     Duration getMinSeqAge() const override;
