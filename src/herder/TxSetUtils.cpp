@@ -14,7 +14,7 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
 #include "main/Config.h"
-#include "transactions/TransactionResultPayload.h"
+#include "transactions/MutableTransactionResult.h"
 #include "transactions/TransactionUtils.h"
 #include "util/GlobalChecks.h"
 #include "util/Logging.h"
@@ -193,13 +193,13 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
 
             // Only call checkValid if we passed the seqNum check
             bool checkValid = false;
-            TransactionResultPayloadPtr resPayload{};
+            TransactionResultPayloadPtr txResult{};
             if (!minSeqCheckIsInvalid)
             {
-                std::tie(checkValid, resPayload) =
+                std::tie(checkValid, txResult) =
                     tx->checkValid(app, ltx, lastSeq, lowerBoundCloseTimeOffset,
                                    upperBoundCloseTimeOffset);
-                releaseAssertOrThrow(resPayload);
+                releaseAssertOrThrow(txResult);
             }
 
             if (minSeqCheckIsInvalid || !checkValid)
@@ -225,7 +225,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                             lastSeq,
                             xdrToCerealString(tx->getEnvelope(),
                                               "TransactionEnvelope"),
-                            resPayload->getResultCode());
+                            txResult->getResultCode());
                     }
                     return invalidTxs;
                 }

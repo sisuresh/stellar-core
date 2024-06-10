@@ -25,7 +25,7 @@ class InflationOpFrame : public OperationFrame
                      TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
     bool isOpSupported(LedgerHeader const& header) const override;
 

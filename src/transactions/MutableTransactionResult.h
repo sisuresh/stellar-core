@@ -20,7 +20,7 @@ class InternalLedgerEntry;
 class SorobanNetworkConfig;
 
 // This class holds all mutable state that is associated with a transaction.
-class TransactionResultPayloadBase : public NonMovableOrCopyable
+class MutableTransactionResultBase : public NonMovableOrCopyable
 {
   public:
     virtual TransactionResult& getResult() = 0;
@@ -68,7 +68,7 @@ class TransactionResultPayloadBase : public NonMovableOrCopyable
                                                  Config const& cfg) = 0;
 };
 
-class TransactionResultPayload : public TransactionResultPayloadBase
+class MutableTransactionResult : public MutableTransactionResultBase
 {
   private:
     struct SorobanData
@@ -90,7 +90,7 @@ class TransactionResultPayload : public TransactionResultPayloadBase
 
     std::shared_ptr<InternalLedgerEntry const> mCachedAccount;
 
-    TransactionResultPayload(TransactionFrame const& tx, int64_t feeCharged);
+    MutableTransactionResult(TransactionFrame const& tx, int64_t feeCharged);
 
     friend TransactionResultPayloadPtr
     TransactionFrame::createResultPayload() const;
@@ -101,7 +101,7 @@ class TransactionResultPayload : public TransactionResultPayloadBase
         bool applying) const;
 
   public:
-    virtual ~TransactionResultPayload() = default;
+    virtual ~MutableTransactionResult() = default;
 
     TransactionResult& getResult() override;
     TransactionResult const& getResult() const override;
@@ -143,12 +143,12 @@ class TransactionResultPayload : public TransactionResultPayloadBase
                                          Config const& cfg) override;
 };
 
-class FeeBumpTransactionResultPayload : public TransactionResultPayloadBase
+class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
 {
     TransactionResult mTxResult;
     TransactionResultPayloadPtr mInnerResultPayload{};
 
-    FeeBumpTransactionResultPayload(
+    FeeBumpMutableTransactionResult(
         TransactionResultPayloadPtr innerResultPayload);
 
     friend TransactionResultPayloadPtr
@@ -160,7 +160,7 @@ class FeeBumpTransactionResultPayload : public TransactionResultPayloadBase
         bool applying) const;
 
   public:
-    virtual ~FeeBumpTransactionResultPayload() = default;
+    virtual ~FeeBumpMutableTransactionResult() = default;
 
     // Updates outer fee bump result based on inner result.
     void updateResult(TransactionFrameBasePtr innerTx);

@@ -27,8 +27,8 @@ ClawbackClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-ClawbackClaimableBalanceOpFrame::doApply(
-    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload)
+ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                         MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "ClawbackClaimableBalanceOp apply", true);
 
@@ -65,7 +65,7 @@ ClawbackClaimableBalanceOpFrame::doApply(
     }
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
+    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
     removeEntryWithPossibleSponsorship(
         ltx, header, claimableBalanceLtxEntry.current(), sourceAccount);
 

@@ -21,7 +21,7 @@ class SetOptionsOpFrame : public OperationFrame
     SetOptionsOp const& mSetOptions;
 
     bool addOrChangeSigner(AbstractLedgerTxn& ltx,
-                           TransactionResultPayloadBase& resPayload);
+                           MutableTransactionResultBase& txResult);
     void deleteSigner(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                       LedgerTxnEntry& sourceAccount);
 
@@ -30,7 +30,7 @@ class SetOptionsOpFrame : public OperationFrame
                       TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     static SetOptionsResultCode

@@ -6,7 +6,7 @@
 #include "TransactionUtils.h"
 #include "ledger/LedgerManagerImpl.h"
 #include "ledger/LedgerTypeUtils.h"
-#include "transactions/TransactionResultPayload.h"
+#include "transactions/MutableTransactionResult.h"
 #include <Tracy.hpp>
 
 namespace stellar
@@ -50,7 +50,7 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                 TransactionResultPayloadBase& resPayload)
+                                 MutableTransactionResultBase& txResult)
 {
     throw std::runtime_error("RestoreFootprintOpFrame::doApply needs Config");
 }
@@ -58,7 +58,7 @@ RestoreFootprintOpFrame::doApply(AbstractLedgerTxn& ltx,
 bool
 RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                  Hash const& sorobanBasePrngSeed,
-                                 TransactionResultPayloadBase& resPayload)
+                                 MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
 
@@ -103,7 +103,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
         metrics.mLedgerReadByte += entrySize;
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
-            resPayload.pushApplyTimeDiagnosticError(
+            txResult.pushApplyTimeDiagnosticError(
                 appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
@@ -116,7 +116,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
         // writes come out of refundable fee, so only add entrySize
         metrics.mLedgerWriteByte += entrySize;
         if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
-                                         appConfig, mParentTx, resPayload))
+                                         appConfig, mParentTx, txResult))
         {
             innerResult().code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
             return false;
@@ -124,7 +124,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
 
         if (resources.writeBytes < metrics.mLedgerWriteByte)
         {
-            resPayload.pushApplyTimeDiagnosticError(
+            txResult.pushApplyTimeDiagnosticError(
                 appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-write resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerWriteByte),
@@ -157,7 +157,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             .getSorobanNetworkConfig()
             .rustBridgeRentFeeConfiguration(),
         ledgerSeq);
-    if (!resPayload.consumeRefundableSorobanResources(
+    if (!txResult.consumeRefundableSorobanResources(
             0, rentFee, ltx.loadHeader().current().ledgerVersion,
             app.getLedgerManager().getSorobanNetworkConfig(), app.getConfig(),
             mParentTx))
@@ -173,13 +173,13 @@ bool
 RestoreFootprintOpFrame::doCheckValid(SorobanNetworkConfig const& networkConfig,
                                       Config const& appConfig,
                                       uint32_t ledgerVersion,
-                                      TransactionResultPayloadBase& resPayload)
+                                      MutableTransactionResultBase& txResult)
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readOnly.empty())
     {
         innerResult().code(RESTORE_FOOTPRINT_MALFORMED);
-        resPayload.pushValidationTimeDiagnosticError(
+        txResult.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-only footprint must be empty for RestoreFootprint operation",
             {});
@@ -191,7 +191,7 @@ RestoreFootprintOpFrame::doCheckValid(SorobanNetworkConfig const& networkConfig,
         if (!isPersistentEntry(lk))
         {
             innerResult().code(RESTORE_FOOTPRINT_MALFORMED);
-            resPayload.pushValidationTimeDiagnosticError(
+            txResult.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only persistent Soroban entries can be restored", {});
             return false;

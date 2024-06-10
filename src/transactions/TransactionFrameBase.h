@@ -25,9 +25,9 @@ class OperationFrame;
 class TransactionFrame;
 class FeeBumpTransactionFrame;
 
-class TransactionResultPayloadBase;
+class MutableTransactionResultBase;
 using TransactionResultPayloadPtr =
-    std::shared_ptr<TransactionResultPayloadBase>;
+    std::shared_ptr<MutableTransactionResultBase>;
 
 class TransactionFrameBase;
 using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
@@ -43,7 +43,7 @@ class TransactionFrameBase
 
     virtual bool apply(Application& app, AbstractLedgerTxn& ltx,
                        TransactionMetaFrame& meta,
-                       TransactionResultPayloadPtr resPayload,
+                       TransactionResultPayloadPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
     virtual std::pair<bool, TransactionResultPayloadPtr>
@@ -52,7 +52,7 @@ class TransactionFrameBase
                uint64_t upperBoundCloseTimeOffset) const = 0;
     virtual bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
-        TransactionResultPayloadPtr resPayload) const = 0;
+        TransactionResultPayloadPtr txResult) const = 0;
 
     virtual TransactionResultPayloadPtr createResultPayload() const = 0;
 
@@ -105,7 +105,7 @@ class TransactionFrameBase
     virtual void
     processPostApply(Application& app, AbstractLedgerTxn& ltx,
                      TransactionMetaFrame& meta,
-                     TransactionResultPayloadPtr resPayload) const = 0;
+                     TransactionResultPayloadPtr txResult) const = 0;
 
     virtual std::shared_ptr<StellarMessage const> toStellarMessage() const = 0;
 

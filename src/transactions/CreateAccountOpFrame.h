@@ -21,9 +21,9 @@ class CreateAccountOpFrame : public OperationFrame
     CreateAccountOp const& mCreateAccount;
 
     bool doApplyBeforeV14(AbstractLedgerTxn& ltx,
-                          TransactionResultPayloadBase& resPayload);
+                          MutableTransactionResultBase& txResult);
     bool doApplyFromV14(AbstractLedgerTxn& ltxOuter,
-                        TransactionResultPayloadBase& resPayload);
+                        MutableTransactionResultBase& txResult);
 
     bool checkLowReserve(AbstractLedgerTxn& ltx);
     bool deductStartingBalance(AbstractLedgerTxn& ltx);
@@ -34,7 +34,7 @@ class CreateAccountOpFrame : public OperationFrame
                          TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

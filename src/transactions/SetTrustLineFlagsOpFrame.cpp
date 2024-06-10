@@ -164,13 +164,13 @@ SetTrustLineFlagsOpFrame::insertLedgerKeysToPrefetch(
 bool
 SetTrustLineFlagsOpFrame::isAuthRevocationValid(
     AbstractLedgerTxn& ltx, bool& authRevocable,
-    TransactionResultPayloadBase& resPayload)
+    MutableTransactionResultBase& txResult)
 {
 
     // Load the source account entry
     LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
     auto header = ltxSource.loadHeader();
-    auto sourceAccountEntry = loadSourceAccount(ltxSource, header, resPayload);
+    auto sourceAccountEntry = loadSourceAccount(ltxSource, header, txResult);
 
     if ((sourceAccountEntry.current().data.account().flags &
          AUTH_REVOCABLE_FLAG) != 0)

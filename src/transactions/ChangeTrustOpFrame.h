@@ -30,7 +30,7 @@ class ChangeTrustOpFrame : public OperationFrame
                        TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     static ChangeTrustResultCode

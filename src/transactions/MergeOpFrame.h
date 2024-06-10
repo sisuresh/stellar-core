@@ -20,9 +20,9 @@ class MergeOpFrame : public OperationFrame
     }
 
     bool doApplyBeforeV16(AbstractLedgerTxn& ltx,
-                          TransactionResultPayloadBase& resPayload);
+                          MutableTransactionResultBase& txResult);
     bool doApplyFromV16(AbstractLedgerTxn& ltx,
-                        TransactionResultPayloadBase& resPayload);
+                        MutableTransactionResultBase& txResult);
 
     ThresholdLevel getThresholdLevel() const override;
 
@@ -35,7 +35,7 @@ class MergeOpFrame : public OperationFrame
                  TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     static AccountMergeResultCode

@@ -31,7 +31,7 @@ PathPaymentStrictSendOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 PathPaymentStrictSendOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      TransactionResultPayloadBase& resPayload)
+                                      MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "PathPaymentStrictSendOp apply", true);
     std::string pathStr = assetToString(getSourceAsset());
@@ -56,7 +56,7 @@ PathPaymentStrictSendOpFrame::doApply(AbstractLedgerTxn& ltx,
         }
     }
 
-    if (!updateSourceBalance(ltx, resPayload, mPathPayment.sendAmount,
+    if (!updateSourceBalance(ltx, txResult, mPathPayment.sendAmount,
                              bypassIssuerCheck, true))
     {
         return false;
