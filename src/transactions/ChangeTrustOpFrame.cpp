@@ -211,7 +211,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx,
 
             // line gets deleted. first release reserves
             auto header = ltx.loadHeader();
-            auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+            auto sourceAccount = loadSourceAccount(ltx, header);
             removeEntryWithPossibleSponsorship(ltx, header, trustLine.current(),
                                                sourceAccount);
             trustLine.erase();
@@ -276,7 +276,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx,
         }
 
         auto header = ltx.loadHeader();
-        auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+        auto sourceAccount = loadSourceAccount(ltx, header);
         switch (createEntryWithPossibleSponsorship(ltx, header, trustLineEntry,
                                                    sourceAccount))
         {

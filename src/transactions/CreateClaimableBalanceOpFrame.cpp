@@ -147,7 +147,7 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     ZoneNamedN(applyZone, "CreateClaimableBalanceOpFrame apply", true);
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto const& claimants = mCreateClaimableBalance.claimants;
 

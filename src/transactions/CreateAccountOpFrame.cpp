@@ -50,7 +50,7 @@ CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx,
                                   ProtocolVersion::V_8) ||
         (bool)ltx.loadWithoutRecord(accountKey(getSourceID()));
 
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
     if (getAvailableBalance(header, sourceAccount) <
         mCreateAccount.startingBalance)
     { // they don't have enough to send

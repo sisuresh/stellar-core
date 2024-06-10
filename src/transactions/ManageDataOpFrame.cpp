@@ -54,7 +54,7 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx,
             dataEntry.dataName = mManageData.dataName;
             dataEntry.dataValue = *mManageData.dataValue;
 
-            auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+            auto sourceAccount = loadSourceAccount(ltx, header);
             switch (createEntryWithPossibleSponsorship(ltx, header, newData,
                                                        sourceAccount))
             {
@@ -91,7 +91,7 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx,
             return false;
         }
 
-        auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+        auto sourceAccount = loadSourceAccount(ltx, header);
         removeEntryWithPossibleSponsorship(ltx, header, data.current(),
                                            sourceAccount);
         data.erase();

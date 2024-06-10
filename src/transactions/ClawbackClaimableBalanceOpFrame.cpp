@@ -65,7 +65,7 @@ ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     }
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
     removeEntryWithPossibleSponsorship(
         ltx, header, claimableBalanceLtxEntry.current(), sourceAccount);
 

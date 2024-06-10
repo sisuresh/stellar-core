@@ -170,7 +170,7 @@ SetTrustLineFlagsOpFrame::isAuthRevocationValid(
     // Load the source account entry
     LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
     auto header = ltxSource.loadHeader();
-    auto sourceAccountEntry = loadSourceAccount(ltxSource, header, txResult);
+    auto sourceAccountEntry = loadSourceAccount(ltxSource, header);
 
     if ((sourceAccountEntry.current().data.account().flags &
          AUTH_REVOCABLE_FLAG) != 0)

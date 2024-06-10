@@ -105,7 +105,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     auto amount = claimableBalance.amount;
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
-        auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+        auto sourceAccount = loadSourceAccount(ltx, header);
         if (!addBalance(header, sourceAccount, amount))
         {
             innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
@@ -132,7 +132,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         }
     }
 
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
     removeEntryWithPossibleSponsorship(
         ltx, header, claimableBalanceLtxEntry.current(), sourceAccount);
 

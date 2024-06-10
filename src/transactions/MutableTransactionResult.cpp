@@ -159,12 +159,6 @@ MutableTransactionResult::getDiagnosticEvents() const
     }
 }
 
-std::shared_ptr<InternalLedgerEntry const>&
-MutableTransactionResult::getCachedAccountPtr()
-{
-    return mCachedAccount;
-}
-
 void
 MutableTransactionResult::pushContractEvents(
     xdr::xvector<ContractEvent> const& evts)
@@ -378,12 +372,6 @@ xdr::xvector<DiagnosticEvent> const&
 FeeBumpMutableTransactionResult::getDiagnosticEvents() const
 {
     return mInnerResultPayload->getDiagnosticEvents();
-}
-
-std::shared_ptr<InternalLedgerEntry const>&
-FeeBumpMutableTransactionResult::getCachedAccountPtr()
-{
-    return mInnerResultPayload->getCachedAccountPtr();
 }
 
 bool

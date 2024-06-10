@@ -47,7 +47,7 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
                                      MutableTransactionResultBase& txResult)
 {
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto& account = sourceAccount.current().data.account();
     auto& signers = account.signers;
@@ -128,7 +128,7 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx,
     ZoneNamedN(applyZone, "SetOptionsOp apply", true);
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
     auto& account = sourceAccount.current().data.account();
     if (mSetOptions.inflationDest)
     {

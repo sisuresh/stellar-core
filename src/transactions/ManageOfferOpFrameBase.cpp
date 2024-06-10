@@ -110,7 +110,7 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
     LedgerTxn ltx(ltxOuter); // ltx will always be rolled back
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+    auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto ledgerVersion = header.current().ledgerVersion;
     if (protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_14) &&
@@ -398,7 +398,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
         {
             if (mWheat.type() == ASSET_TYPE_NATIVE)
             {
-                auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+                auto sourceAccount = loadSourceAccount(ltx, header);
                 if (!addBalance(header, sourceAccount, wheatReceived))
                 {
                     // this would indicate a bug in OfferExchange
@@ -417,7 +417,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
 
             if (mSheep.type() == ASSET_TYPE_NATIVE)
             {
-                auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+                auto sourceAccount = loadSourceAccount(ltx, header);
                 if (!addBalance(header, sourceAccount, -sheepSent))
                 {
                     // this would indicate a bug in OfferExchange
@@ -477,7 +477,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
             {
                 // make sure we don't allow us to add offers when we don't have
                 // the minbalance (should never happen at this stage in v9+)
-                auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+                auto sourceAccount = loadSourceAccount(ltx, header);
                 switch (canCreateEntryWithoutSponsorship(
                     header.current(), newOffer, sourceAccount.current()))
                 {
@@ -529,7 +529,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
             protocolVersionStartsFrom(header.current().ledgerVersion,
                                       ProtocolVersion::V_14))
         {
-            auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+            auto sourceAccount = loadSourceAccount(ltx, header);
             auto le = buildOffer(0, 0, extension);
             removeEntryWithPossibleSponsorship(ltx, header, le, sourceAccount);
         }

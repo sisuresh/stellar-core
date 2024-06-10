@@ -141,7 +141,7 @@ LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
 
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
-        auto sourceAccount = loadSourceAccount(ltx, header, txResult);
+        auto sourceAccount = loadSourceAccount(ltx, header);
         if (!addBalance(header, sourceAccount, amount))
         {
             innerResult().code(LIQUIDITY_POOL_WITHDRAW_LINE_FULL);

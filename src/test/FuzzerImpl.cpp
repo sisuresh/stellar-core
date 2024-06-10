@@ -940,8 +940,8 @@ class FuzzTransactionFrame : public TransactionFrame
         // while the following method's result is not captured, regardless, for
         // protocols < 8, this triggered buggy caching, and potentially may do
         // so in the future
-        loadSourceAccount(ltx, ltx.loadHeader(), *mResultPayload);
-        processSeqNum(ltx, *mResultPayload);
+        loadSourceAccount(ltx, ltx.loadHeader());
+        processSeqNum(ltx);
         TransactionMetaFrame tm(2);
         applyOperations(signatureChecker, app, ltx, tm, *mResultPayload,
                         Hash{});
