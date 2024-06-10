@@ -62,7 +62,7 @@ BeginSponsoringFutureReservesOpFrame::createSponsorshipCounter(
 
 bool
 BeginSponsoringFutureReservesOpFrame::doApply(
-    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload)
+    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "BeginSponsoringFutureReservesOpFrame apply", true);
     if (loadSponsorship(ltx, mBeginSponsoringFutureReservesOp.sponsoredID))

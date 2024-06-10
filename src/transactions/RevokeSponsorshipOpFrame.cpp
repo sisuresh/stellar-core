@@ -378,7 +378,7 @@ RevokeSponsorshipOpFrame::updateSignerSponsorship(AbstractLedgerTxn& ltx)
 
 bool
 RevokeSponsorshipOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                  TransactionResultPayloadBase& resPayload)
+                                  MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "RevokeSponsorshipOpFrame apply", true);
 

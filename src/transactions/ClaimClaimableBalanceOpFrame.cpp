@@ -71,7 +71,7 @@ validatePredicate(ClaimPredicate const& pred, TimePoint closeTime)
 
 bool
 ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      TransactionResultPayloadBase& resPayload)
+                                      MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "ClaimClaimableBalanceOpFrame apply", true);
 
@@ -105,7 +105,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     auto amount = claimableBalance.amount;
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
-        auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
+        auto sourceAccount = loadSourceAccount(ltx, header, txResult);
         if (!addBalance(header, sourceAccount, amount))
         {
             innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
@@ -132,7 +132,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         }
     }
 
-    auto sourceAccount = loadSourceAccount(ltx, header, resPayload);
+    auto sourceAccount = loadSourceAccount(ltx, header, txResult);
     removeEntryWithPossibleSponsorship(
         ltx, header, claimableBalanceLtxEntry.current(), sourceAccount);
 

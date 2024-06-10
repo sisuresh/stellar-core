@@ -19,16 +19,16 @@ using namespace stellar;
 using namespace stellar::txtest;
 
 static OperationResultCode
-getOperationResultCode(TransactionTestFramePtr& tx, size_t i)
+getOperationResultCode(TransactionTestFrame& tx, size_t i)
 {
-    auto const& opRes = tx->getResult().result.results()[i];
+    auto const& opRes = tx.getResult().result.results()[i];
     return opRes.code();
 }
 
 static BeginSponsoringFutureReservesResultCode
-getBeginSponsoringFutureReservesResultCode(TransactionTestFramePtr tx, size_t i)
+getBeginSponsoringFutureReservesResultCode(TransactionTestFrame& tx, size_t i)
 {
-    auto const& opRes = tx->getResult().result.results()[i];
+    auto const& opRes = tx.getResult().result.results()[i];
     return opRes.tr().beginSponsoringFutureReservesResult().code();
 }
 
@@ -52,7 +52,7 @@ TEST_CASE_VERSIONS("sponsor future reserves", "[tx][sponsorship]")
             REQUIRE(!tx->checkValidForTesting(*app, ltx, 0, 0, 0));
             ltx.commit();
 
-            REQUIRE(getOperationResultCode(tx, 0) == opNOT_SUPPORTED);
+            REQUIRE(getOperationResultCode(*tx, 0) == opNOT_SUPPORTED);
         });
     }
 
@@ -67,7 +67,7 @@ TEST_CASE_VERSIONS("sponsor future reserves", "[tx][sponsorship]")
             REQUIRE(!tx->checkValidForTesting(*app, ltx, 0, 0, 0));
             ltx.commit();
 
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 0) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 0) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_MALFORMED);
         });
     }
@@ -89,9 +89,9 @@ TEST_CASE_VERSIONS("sponsor future reserves", "[tx][sponsorship]")
             ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 0) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 0) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_SUCCESS);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 1) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 1) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_ALREADY_SPONSORED);
         });
     }
@@ -134,9 +134,9 @@ TEST_CASE_VERSIONS("sponsor future reserves", "[tx][sponsorship]")
             ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 0) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 0) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_SUCCESS);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 1) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 1) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_RECURSIVE);
         });
     }
@@ -161,9 +161,9 @@ TEST_CASE_VERSIONS("sponsor future reserves", "[tx][sponsorship]")
             ltx.commit();
 
             REQUIRE(tx->getResult().result.code() == txFAILED);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 0) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 0) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_SUCCESS);
-            REQUIRE(getBeginSponsoringFutureReservesResultCode(tx, 1) ==
+            REQUIRE(getBeginSponsoringFutureReservesResultCode(*tx, 1) ==
                     BEGIN_SPONSORING_FUTURE_RESERVES_RECURSIVE);
         });
     }

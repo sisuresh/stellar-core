@@ -28,7 +28,7 @@ EndSponsoringFutureReservesOpFrame::isOpSupported(
 
 bool
 EndSponsoringFutureReservesOpFrame::doApply(
-    AbstractLedgerTxn& ltx, TransactionResultPayloadBase& resPayload)
+    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult)
 {
     ZoneNamedN(applyZone, "EndSponsoringFutureReservesOpFrame apply", true);
 

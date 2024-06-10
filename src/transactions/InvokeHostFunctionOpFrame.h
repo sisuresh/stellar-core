@@ -12,7 +12,7 @@
 namespace stellar
 {
 class AbstractLedgerTxn;
-class TransactionResultPayloadBase;
+class MutableTransactionResultBase;
 
 static constexpr ContractDataDurability CONTRACT_INSTANCE_ENTRY_DURABILITY =
     ContractDataDurability::PERSISTENT;
@@ -25,11 +25,10 @@ class InvokeHostFunctionOpFrame : public OperationFrame
         return mResult.tr().invokeHostFunctionResult();
     }
 
-    void
-    maybePopulateDiagnosticEvents(Config const& cfg,
-                                  InvokeHostFunctionOutput const& output,
-                                  HostFunctionMetrics const& metrics,
-                                  TransactionResultPayloadBase& resPayload);
+    void maybePopulateDiagnosticEvents(Config const& cfg,
+                                       InvokeHostFunctionOutput const& output,
+                                       HostFunctionMetrics const& metrics,
+                                       MutableTransactionResultBase& txResult);
 
     InvokeHostFunctionOp const& mInvokeHostFunction;
 
@@ -40,14 +39,14 @@ class InvokeHostFunctionOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doApply(Application& app, AbstractLedgerTxn& ltx,
                  Hash const& sorobanBasePrngSeed,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
 
     bool doCheckValid(SorobanNetworkConfig const& config,
                       Config const& appConfig, uint32_t ledgerVersion,
-                      TransactionResultPayloadBase& resPayload) override;
+                      MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     void

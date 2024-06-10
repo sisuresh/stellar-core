@@ -10,7 +10,7 @@
 namespace stellar
 {
 class AbstractLedgerTxn;
-class TransactionResultPayloadBase;
+class MutableTransactionResultBase;
 
 class RestoreFootprintOpFrame : public OperationFrame
 {
@@ -29,14 +29,14 @@ class RestoreFootprintOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
     bool doApply(Application& app, AbstractLedgerTxn& ltx,
                  Hash const& sorobanBasePrngSeed,
-                 TransactionResultPayloadBase& resPayload) override;
+                 MutableTransactionResultBase& txResult) override;
 
     bool doCheckValid(SorobanNetworkConfig const& networkConfig,
                       Config const& appConfig, uint32_t ledgerVersion,
-                      TransactionResultPayloadBase& resPayload) override;
+                      MutableTransactionResultBase& txResult) override;
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     void

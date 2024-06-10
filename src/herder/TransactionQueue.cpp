@@ -13,9 +13,9 @@
 #include "main/Application.h"
 #include "overlay/OverlayManager.h"
 #include "transactions/FeeBumpTransactionFrame.h"
+#include "transactions/MutableTransactionResult.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionBridge.h"
-#include "transactions/TransactionResultPayload.h"
 #include "transactions/TransactionUtils.h"
 #include "util/BitSet.h"
 #include "util/GlobalChecks.h"
@@ -324,16 +324,15 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             // appropriate error message
             if (tx->isSoroban())
             {
-                auto resPayload = tx->createResultPayload();
+                auto txResult = tx->createResultPayload();
                 if (!tx->checkSorobanResourceAndSetError(
                         mApp,
                         mApp.getLedgerManager()
                             .getLastClosedLedgerHeader()
                             .header.ledgerVersion,
-                        resPayload))
+                        txResult))
                 {
-                    return AddResult(AddResultCode::ADD_STATUS_ERROR,
-                                     resPayload);
+                    return AddResult(AddResultCode::ADD_STATUS_ERROR, txResult);
                 }
             }
 
@@ -407,12 +406,12 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
     }
 
-    auto [isValid, resPayload] = tx->checkValid(
+    auto [isValid, txResult] = tx->checkValid(
         mApp, ltx, 0, 0, getUpperBoundCloseTimeOffset(mApp, closeTime));
     if (!isValid)
     {
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
-                         resPayload);
+                         txResult);
     }
 
     // Note: stateIter corresponds to getSourceID() which is not necessarily
@@ -425,13 +424,13 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     if (getAvailableBalance(ltx.loadHeader(), feeSource) - newFullFee <
         totalFees)
     {
-        resPayload->setResultCode(txINSUFFICIENT_BALANCE);
+        txResult->setResultCode(txINSUFFICIENT_BALANCE);
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
-                         resPayload);
+                         txResult);
     }
 
     return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_PENDING,
-                     resPayload);
+                     txResult);
 }
 
 void

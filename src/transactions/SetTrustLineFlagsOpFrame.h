@@ -27,9 +27,8 @@ class SetTrustLineFlagsOpFrame : public TrustFlagsOpFrameBase
     void setResultLowReserve() override;
     void setResultSuccess() override;
 
-    bool
-    isAuthRevocationValid(AbstractLedgerTxn& ltx, bool& authRevocable,
-                          TransactionResultPayloadBase& resPayload) override;
+    bool isAuthRevocationValid(AbstractLedgerTxn& ltx, bool& authRevocable,
+                               MutableTransactionResultBase& txResult) override;
     bool isRevocationToMaintainLiabilitiesValid(bool authRevocable,
                                                 LedgerTxnEntry const& trust,
                                                 uint32_t flags) override;

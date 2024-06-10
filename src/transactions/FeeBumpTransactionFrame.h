@@ -32,7 +32,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                         int32_t neededWeight) const;
 
     bool commonValidPreSeqNum(AbstractLedgerTxn& ltx,
-                              TransactionResultPayloadBase& resPayload) const;
+                              MutableTransactionResultBase& txResult) const;
 
     enum ValidationType
     {
@@ -44,7 +44,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     ValidationType commonValid(SignatureChecker& signatureChecker,
                                AbstractLedgerTxn& ltxOuter, bool applying,
-                               TransactionResultPayloadBase& resPayload) const;
+                               MutableTransactionResultBase& txResult) const;
 
     void removeOneTimeSignerKeyFromFeeSource(AbstractLedgerTxn& ltx) const;
 
@@ -69,14 +69,12 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     virtual ~FeeBumpTransactionFrame(){};
 
     bool apply(Application& app, AbstractLedgerTxn& ltx,
-               TransactionMetaFrame& meta,
-               TransactionResultPayloadPtr resPayload,
+               TransactionMetaFrame& meta, TransactionResultPayloadPtr txResult,
                Hash const& sorobanBasePrngSeed) const override;
 
-    void
-    processPostApply(Application& app, AbstractLedgerTxn& ltx,
-                     TransactionMetaFrame& meta,
-                     TransactionResultPayloadPtr resPayload) const override;
+    void processPostApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          TransactionResultPayloadPtr txResult) const override;
 
     std::pair<bool, TransactionResultPayloadPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
@@ -84,7 +82,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                uint64_t upperBoundCloseTimeOffset) const override;
     bool checkSorobanResourceAndSetError(
         Application& app, uint32_t ledgerVersion,
-        TransactionResultPayloadPtr resPayload) const override;
+        TransactionResultPayloadPtr txResult) const override;
 
     TransactionResultPayloadPtr createResultPayload() const override;
 

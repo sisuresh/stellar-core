@@ -26,7 +26,7 @@ class LedgerTxnHeader;
 
 class SignatureChecker;
 class TransactionFrame;
-class TransactionResultPayloadBase;
+class MutableTransactionResultBase;
 
 enum class ThresholdLevel
 {
@@ -44,14 +44,14 @@ class OperationFrame
 
     virtual bool doCheckValid(SorobanNetworkConfig const& config,
                               Config const& appConfig, uint32_t ledgerVersion,
-                              TransactionResultPayloadBase& resPayload);
+                              MutableTransactionResultBase& txResult);
     virtual bool doCheckValid(uint32_t ledgerVersion) = 0;
 
     virtual bool doApply(Application& app, AbstractLedgerTxn& ltx,
                          Hash const& sorobanBasePrngSeed,
-                         TransactionResultPayloadBase& resPayload);
+                         MutableTransactionResultBase& txResult);
     virtual bool doApply(AbstractLedgerTxn& ltx,
-                         TransactionResultPayloadBase& resPayload) = 0;
+                         MutableTransactionResultBase& txResult) = 0;
 
     // returns the threshold this operation requires
     virtual ThresholdLevel getThresholdLevel() const;
@@ -62,7 +62,7 @@ class OperationFrame
 
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header,
-                                     TransactionResultPayloadBase& resPayload);
+                                     MutableTransactionResultBase& txResult);
 
     // given an operation, gives a default value representing "success" for the
     // result
@@ -80,8 +80,7 @@ class OperationFrame
 
     bool checkSignature(SignatureChecker& signatureChecker,
                         AbstractLedgerTxn& ltx,
-                        TransactionResultPayloadBase& resPayload,
-                        bool forApply);
+                        MutableTransactionResultBase& txResult, bool forApply);
 
     AccountID getSourceID() const;
 
@@ -94,11 +93,11 @@ class OperationFrame
 
     bool checkValid(Application& app, SignatureChecker& signatureChecker,
                     AbstractLedgerTxn& ltxOuter, bool forApply,
-                    TransactionResultPayloadBase& resPayload);
+                    MutableTransactionResultBase& txResult);
 
     bool apply(Application& app, SignatureChecker& signatureChecker,
                AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
-               TransactionResultPayloadBase& resPayload);
+               MutableTransactionResultBase& txResult);
 
     Operation const&
     getOperation() const
