@@ -18,7 +18,7 @@ class ManageBuyOfferOpFrame : public ManageOfferOpFrameBase
     bool isOpSupported(LedgerHeader const& header) const override;
 
     ManageBuyOfferResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().manageBuyOfferResult();
     }
@@ -35,25 +35,26 @@ class ManageBuyOfferOpFrame : public ManageOfferOpFrameBase
 
     void applyOperationSpecificLimits(int64_t& maxSheepSend, int64_t sheepSent,
                                       int64_t& maxWheatReceive,
-                                      int64_t wheatReceived) override;
-    void getExchangeParametersBeforeV10(int64_t& maxSheepSend,
-                                        int64_t& maxWheatReceive) override;
+                                      int64_t wheatReceived) const override;
+    void
+    getExchangeParametersBeforeV10(int64_t& maxSheepSend,
+                                   int64_t& maxWheatReceive) const override;
 
-    ManageOfferSuccessResult& getSuccessResult() override;
+    ManageOfferSuccessResult& getSuccessResult() const override;
 
-    void setResultSuccess() override;
-    void setResultMalformed() override;
-    void setResultSellNoTrust() override;
-    void setResultBuyNoTrust() override;
-    void setResultSellNotAuthorized() override;
-    void setResultBuyNotAuthorized() override;
-    void setResultLineFull() override;
-    void setResultUnderfunded() override;
-    void setResultCrossSelf() override;
-    void setResultSellNoIssuer() override;
-    void setResultBuyNoIssuer() override;
-    void setResultNotFound() override;
-    void setResultLowReserve() override;
+    void setResultSuccess() const override;
+    void setResultMalformed() const override;
+    void setResultSellNoTrust() const override;
+    void setResultBuyNoTrust() const override;
+    void setResultSellNotAuthorized() const override;
+    void setResultBuyNotAuthorized() const override;
+    void setResultLineFull() const override;
+    void setResultUnderfunded() const override;
+    void setResultCrossSelf() const override;
+    void setResultSellNoIssuer() const override;
+    void setResultBuyNoIssuer() const override;
+    void setResultNotFound() const override;
+    void setResultLowReserve() const override;
 
     static ManageBuyOfferResultCode
     getInnerCode(OperationResult const& res)

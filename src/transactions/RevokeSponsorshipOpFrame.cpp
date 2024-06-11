@@ -50,7 +50,7 @@ getAccountID(LedgerEntry const& le)
 }
 
 bool
-RevokeSponsorshipOpFrame::processSponsorshipResult(SponsorshipResult sr)
+RevokeSponsorshipOpFrame::processSponsorshipResult(SponsorshipResult sr) const
 {
     switch (sr)
     {
@@ -71,7 +71,8 @@ RevokeSponsorshipOpFrame::processSponsorshipResult(SponsorshipResult sr)
 }
 
 bool
-RevokeSponsorshipOpFrame::updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx)
+RevokeSponsorshipOpFrame::updateLedgerEntrySponsorship(
+    AbstractLedgerTxn& ltx) const
 {
     auto ltxe = ltx.load(mRevokeSponsorshipOp.ledgerKey());
     if (!ltxe)
@@ -214,7 +215,7 @@ RevokeSponsorshipOpFrame::updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx)
 bool
 RevokeSponsorshipOpFrame::tryRemoveEntrySponsorship(
     AbstractLedgerTxn& ltx, LedgerTxnHeader const& header, LedgerEntry& le,
-    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc)
+    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc) const
 {
     auto res = canRemoveEntrySponsorship(header.current(), le, sponsoringAcc,
                                          &sponsoredAcc);
@@ -228,7 +229,7 @@ RevokeSponsorshipOpFrame::tryRemoveEntrySponsorship(
 bool
 RevokeSponsorshipOpFrame::tryEstablishEntrySponsorship(
     AbstractLedgerTxn& ltx, LedgerTxnHeader const& header, LedgerEntry& le,
-    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc)
+    LedgerEntry& sponsoringAcc, LedgerEntry& sponsoredAcc) const
 {
     auto res = canEstablishEntrySponsorship(header.current(), le, sponsoringAcc,
                                             &sponsoredAcc);
@@ -241,7 +242,7 @@ RevokeSponsorshipOpFrame::tryEstablishEntrySponsorship(
 }
 
 bool
-RevokeSponsorshipOpFrame::updateSignerSponsorship(AbstractLedgerTxn& ltx)
+RevokeSponsorshipOpFrame::updateSignerSponsorship(AbstractLedgerTxn& ltx) const
 {
     auto const& accountID = mRevokeSponsorshipOp.signer().accountID;
     auto sponsoredAcc = loadAccount(ltx, accountID);
@@ -378,7 +379,7 @@ RevokeSponsorshipOpFrame::updateSignerSponsorship(AbstractLedgerTxn& ltx)
 
 bool
 RevokeSponsorshipOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                  MutableTransactionResultBase& txResult)
+                                  OperationResult& res) const
 {
     ZoneNamedN(applyZone, "RevokeSponsorshipOpFrame apply", true);
 
@@ -394,7 +395,8 @@ RevokeSponsorshipOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-RevokeSponsorshipOpFrame::doCheckValid(uint32_t ledgerVersion)
+RevokeSponsorshipOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                       OperationResult& res) const
 {
     if (mRevokeSponsorshipOp.type() == REVOKE_SPONSORSHIP_LEDGER_ENTRY)
     {

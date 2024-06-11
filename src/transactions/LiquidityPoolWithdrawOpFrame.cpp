@@ -30,7 +30,7 @@ LiquidityPoolWithdrawOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      MutableTransactionResultBase& txResult)
+                                      OperationResult& res) const
 {
     ZoneNamedN(applyZone, "LiquidityPoolWithdrawOpFrame apply", true);
 
@@ -63,8 +63,7 @@ LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
     auto amountA = getPoolWithdrawalAmount(mLiquidityPoolWithdraw.amount,
                                            constantProduct().totalPoolShares,
                                            constantProduct().reserveA);
-    if (!tryAddAssetBalance(ltx, txResult, header,
-                            constantProduct().params.assetA,
+    if (!tryAddAssetBalance(ltx, res, header, constantProduct().params.assetA,
                             mLiquidityPoolWithdraw.minAmountA, amountA))
     {
         return false;
@@ -73,8 +72,7 @@ LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
     auto amountB = getPoolWithdrawalAmount(mLiquidityPoolWithdraw.amount,
                                            constantProduct().totalPoolShares,
                                            constantProduct().reserveB);
-    if (!tryAddAssetBalance(ltx, txResult, header,
-                            constantProduct().params.assetB,
+    if (!tryAddAssetBalance(ltx, res, header, constantProduct().params.assetB,
                             mLiquidityPoolWithdraw.minAmountB, amountB))
     {
         return false;
@@ -106,7 +104,8 @@ LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-LiquidityPoolWithdrawOpFrame::doCheckValid(uint32_t ledgerVersion)
+LiquidityPoolWithdrawOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                           OperationResult& res) const
 {
     if (mLiquidityPoolWithdraw.amount <= 0 ||
         mLiquidityPoolWithdraw.minAmountA < 0 ||
@@ -129,9 +128,8 @@ LiquidityPoolWithdrawOpFrame::insertLedgerKeysToPrefetch(
 
 bool
 LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
-    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult,
-    LedgerTxnHeader const& header, Asset const& asset, int64_t minAmount,
-    int64_t amount)
+    AbstractLedgerTxn& ltx, OperationResult& res, LedgerTxnHeader const& header,
+    Asset const& asset, int64_t minAmount, int64_t amount) const
 {
     if (amount < minAmount)
     {

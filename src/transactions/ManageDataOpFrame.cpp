@@ -30,8 +30,7 @@ ManageDataOpFrame::ManageDataOpFrame(Operation const& op, OperationResult& res,
 }
 
 bool
-ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx,
-                           MutableTransactionResultBase& txResult)
+ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "ManageDataOp apply", true);
     auto header = ltx.loadHeader();
@@ -102,7 +101,8 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-ManageDataOpFrame::doCheckValid(uint32_t ledgerVersion)
+ManageDataOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                OperationResult& res) const
 {
     if (protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_2))
     {

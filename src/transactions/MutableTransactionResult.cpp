@@ -139,6 +139,12 @@ MutableTransactionResult::setSorobanFeeRefund(int64_t fee)
     mSorobanExtension->mFeeRefund = fee;
 }
 
+OperationResult&
+MutableTransactionResult::getOpResultAt(size_t index)
+{
+    return mTxResult.result.results().at(index);
+}
+
 std::vector<std::shared_ptr<OperationFrame>> const&
 MutableTransactionResult::getOpFrames() const
 {
@@ -360,6 +366,12 @@ void
 FeeBumpMutableTransactionResult::setResultCode(TransactionResultCode code)
 {
     getResult().result.code(code);
+}
+
+OperationResult&
+FeeBumpMutableTransactionResult::getOpResultAt(size_t index)
+{
+    return mTxResult.result.results().at(index);
 }
 
 std::vector<std::shared_ptr<OperationFrame>> const&

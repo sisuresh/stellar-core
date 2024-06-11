@@ -30,7 +30,8 @@ BeginSponsoringFutureReservesOpFrame::isOpSupported(
 }
 
 void
-BeginSponsoringFutureReservesOpFrame::createSponsorship(AbstractLedgerTxn& ltx)
+BeginSponsoringFutureReservesOpFrame::createSponsorship(
+    AbstractLedgerTxn& ltx) const
 {
     InternalLedgerEntry gle(InternalLedgerEntryType::SPONSORSHIP);
     auto& se = gle.sponsorshipEntry();
@@ -46,7 +47,7 @@ BeginSponsoringFutureReservesOpFrame::createSponsorship(AbstractLedgerTxn& ltx)
 
 void
 BeginSponsoringFutureReservesOpFrame::createSponsorshipCounter(
-    AbstractLedgerTxn& ltx)
+    AbstractLedgerTxn& ltx) const
 {
     InternalLedgerEntry gle(InternalLedgerEntryType::SPONSORSHIP_COUNTER);
     auto& sce = gle.sponsorshipCounterEntry();
@@ -61,8 +62,8 @@ BeginSponsoringFutureReservesOpFrame::createSponsorshipCounter(
 }
 
 bool
-BeginSponsoringFutureReservesOpFrame::doApply(
-    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult)
+BeginSponsoringFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                              OperationResult& res) const
 {
     ZoneNamedN(applyZone, "BeginSponsoringFutureReservesOpFrame apply", true);
     if (loadSponsorship(ltx, mBeginSponsoringFutureReservesOp.sponsoredID))
@@ -100,7 +101,8 @@ BeginSponsoringFutureReservesOpFrame::doApply(
 }
 
 bool
-BeginSponsoringFutureReservesOpFrame::doCheckValid(uint32_t ledgerVersion)
+BeginSponsoringFutureReservesOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                                   OperationResult& res) const
 {
     if (mBeginSponsoringFutureReservesOp.sponsoredID == getSourceID())
     {

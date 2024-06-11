@@ -44,7 +44,7 @@ SetOptionsOpFrame::getThresholdLevel() const
 
 bool
 SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
-                                     MutableTransactionResultBase& txResult)
+                                     OperationResult& res) const
 {
     auto header = ltx.loadHeader();
     auto sourceAccount = loadSourceAccount(ltx, header);
@@ -107,7 +107,7 @@ SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx,
 void
 SetOptionsOpFrame::deleteSigner(AbstractLedgerTxn& ltx,
                                 LedgerTxnHeader const& header,
-                                LedgerTxnEntry& sourceAccount)
+                                LedgerTxnEntry& sourceAccount) const
 {
     auto& account = sourceAccount.current().data.account();
     auto& signers = account.signers;
@@ -122,8 +122,7 @@ SetOptionsOpFrame::deleteSigner(AbstractLedgerTxn& ltx,
 }
 
 bool
-SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx,
-                           MutableTransactionResultBase& txResult)
+SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "SetOptionsOp apply", true);
 
@@ -211,7 +210,7 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx,
         if (mSetOptions.signer->weight)
         {
             LedgerTxn ltxInner(ltx);
-            if (!addOrChangeSigner(ltxInner, txResult))
+            if (!addOrChangeSigner(ltxInner, res))
             {
                 return false;
             }
@@ -228,7 +227,8 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-SetOptionsOpFrame::doCheckValid(uint32_t ledgerVersion)
+SetOptionsOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                OperationResult& res) const
 {
     if ((mSetOptions.setFlags &&
          !accountFlagMaskCheckIsValid(*mSetOptions.setFlags, ledgerVersion)) ||

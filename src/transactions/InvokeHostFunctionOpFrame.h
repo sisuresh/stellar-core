@@ -20,15 +20,16 @@ static constexpr ContractDataDurability CONTRACT_INSTANCE_ENTRY_DURABILITY =
 class InvokeHostFunctionOpFrame : public OperationFrame
 {
     InvokeHostFunctionResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().invokeHostFunctionResult();
     }
 
-    void maybePopulateDiagnosticEvents(Config const& cfg,
-                                       InvokeHostFunctionOutput const& output,
-                                       HostFunctionMetrics const& metrics,
-                                       MutableTransactionResultBase& txResult);
+    void
+    maybePopulateDiagnosticEvents(Config const& cfg,
+                                  InvokeHostFunctionOutput const& output,
+                                  HostFunctionMetrics const& metrics,
+                                  MutableTransactionResultBase& txResult) const;
 
     InvokeHostFunctionOp const& mInvokeHostFunction;
 
@@ -38,16 +39,17 @@ class InvokeHostFunctionOpFrame : public OperationFrame
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doApply(Application& app, AbstractLedgerTxn& ltx,
-                 Hash const& sorobanBasePrngSeed,
-                 MutableTransactionResultBase& txResult) override;
+                 Hash const& sorobanBasePrngSeed, OperationResult& res,
+                 MutableTransactionResultBase& txResult) const override;
 
-    bool doCheckValid(SorobanNetworkConfig const& config,
+    bool doCheckValid(SorobanNetworkConfig const& networkConfig,
                       Config const& appConfig, uint32_t ledgerVersion,
-                      MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+                      OperationResult& res,
+                      MutableTransactionResultBase& txResult) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
 
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

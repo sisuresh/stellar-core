@@ -14,7 +14,7 @@ class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
     PathPaymentStrictSendOp const& mPathPayment;
 
     PathPaymentStrictSendResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().pathPaymentStrictSendResult();
     }
@@ -25,9 +25,9 @@ class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
 
     bool checkTransfer(int64_t maxSend, int64_t amountSend, int64_t maxRecv,
                        int64_t amountRecv) const override;
@@ -37,19 +37,19 @@ class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
     MuxedAccount const& getDestMuxedAccount() const override;
     xdr::xvector<Asset, 5> const& getPath() const override;
 
-    void setResultSuccess() override;
-    void setResultMalformed() override;
-    void setResultUnderfunded() override;
-    void setResultSourceNoTrust() override;
-    void setResultSourceNotAuthorized() override;
-    void setResultNoDest() override;
-    void setResultDestNoTrust() override;
-    void setResultDestNotAuthorized() override;
-    void setResultLineFull() override;
-    void setResultNoIssuer(Asset const& asset) override;
-    void setResultTooFewOffers() override;
-    void setResultOfferCrossSelf() override;
-    void setResultConstraintNotMet() override;
+    void setResultSuccess() const override;
+    void setResultMalformed() const override;
+    void setResultUnderfunded() const override;
+    void setResultSourceNoTrust() const override;
+    void setResultSourceNotAuthorized() const override;
+    void setResultNoDest() const override;
+    void setResultDestNoTrust() const override;
+    void setResultDestNotAuthorized() const override;
+    void setResultLineFull() const override;
+    void setResultNoIssuer(Asset const& asset) const override;
+    void setResultTooFewOffers() const override;
+    void setResultOfferCrossSelf() const override;
+    void setResultConstraintNotMet() const override;
 
     static PathPaymentStrictSendResultCode
     getInnerCode(OperationResult const& res)

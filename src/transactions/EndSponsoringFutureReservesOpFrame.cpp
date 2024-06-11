@@ -27,8 +27,8 @@ EndSponsoringFutureReservesOpFrame::isOpSupported(
 }
 
 bool
-EndSponsoringFutureReservesOpFrame::doApply(
-    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult)
+EndSponsoringFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx,
+                                            OperationResult& res) const
 {
     ZoneNamedN(applyZone, "EndSponsoringFutureReservesOpFrame apply", true);
 
@@ -66,7 +66,8 @@ EndSponsoringFutureReservesOpFrame::doApply(
 }
 
 bool
-EndSponsoringFutureReservesOpFrame::doCheckValid(uint32_t ledgerVersion)
+EndSponsoringFutureReservesOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                                 OperationResult& res) const
 {
     return true;
 }

@@ -37,8 +37,7 @@ BumpSequenceOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                             MutableTransactionResultBase& txResult)
+BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "BumpSequenceOp apply", true);
     LedgerTxn ltxInner(ltx);
@@ -69,7 +68,8 @@ BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-BumpSequenceOpFrame::doCheckValid(uint32_t ledgerVersion)
+BumpSequenceOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                  OperationResult& res) const
 {
     if (mBumpSequenceOp.bumpTo < 0)
     {

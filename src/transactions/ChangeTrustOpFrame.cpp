@@ -19,8 +19,8 @@ namespace stellar
 {
 
 void
-ChangeTrustOpFrame::managePoolOnDeletedTrustLine(AbstractLedgerTxn& ltx,
-                                                 TrustLineAsset const& tlAsset)
+ChangeTrustOpFrame::managePoolOnDeletedTrustLine(
+    AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset) const
 {
     LedgerTxn ltxInner(ltx);
 
@@ -47,7 +47,7 @@ ChangeTrustOpFrame::managePoolOnDeletedTrustLine(AbstractLedgerTxn& ltx,
 
 bool
 ChangeTrustOpFrame::tryIncrementPoolUseCount(AbstractLedgerTxn& ltx,
-                                             Asset const& asset)
+                                             Asset const& asset) const
 {
     if (!isIssuer(getSourceID(), asset) && asset.type() != ASSET_TYPE_NATIVE)
     {
@@ -80,8 +80,8 @@ ChangeTrustOpFrame::tryIncrementPoolUseCount(AbstractLedgerTxn& ltx,
 }
 
 bool
-ChangeTrustOpFrame::tryManagePoolOnNewTrustLine(AbstractLedgerTxn& ltx,
-                                                TrustLineAsset const& tlAsset)
+ChangeTrustOpFrame::tryManagePoolOnNewTrustLine(
+    AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset) const
 {
     LedgerTxn ltxInner(ltx);
 
@@ -140,8 +140,7 @@ ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
 }
 
 bool
-ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx,
-                            MutableTransactionResultBase& txResult)
+ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "ChangeTrustOp apply", true);
 
@@ -306,7 +305,8 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-ChangeTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
+ChangeTrustOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                 OperationResult& res) const
 {
     if (mChangeTrust.limit < 0)
     {

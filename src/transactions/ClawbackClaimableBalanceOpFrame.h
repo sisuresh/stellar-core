@@ -14,7 +14,7 @@ class AbstractLedgerTxn;
 class ClawbackClaimableBalanceOpFrame : public OperationFrame
 {
     ClawbackClaimableBalanceResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().clawbackClaimableBalanceResult();
     }
@@ -28,8 +28,9 @@ class ClawbackClaimableBalanceOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+                 OperationResult& res) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
 

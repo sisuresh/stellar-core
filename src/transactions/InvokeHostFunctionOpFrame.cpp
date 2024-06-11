@@ -250,7 +250,7 @@ InvokeHostFunctionOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                   MutableTransactionResultBase& txResult)
+                                   OperationResult& res) const
 {
     throw std::runtime_error(
         "InvokeHostFunctionOpFrame::doApply needs Config and base PRNG seed");
@@ -259,7 +259,8 @@ InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
 void
 InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     Config const& cfg, InvokeHostFunctionOutput const& output,
-    HostFunctionMetrics const& metrics, MutableTransactionResultBase& txResult)
+    HostFunctionMetrics const& metrics,
+    MutableTransactionResultBase& txResult) const
 {
     if (cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
     {
@@ -326,7 +327,8 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
 bool
 InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                    Hash const& sorobanBasePrngSeed,
-                                   MutableTransactionResultBase& txResult)
+                                   OperationResult& res,
+                                   MutableTransactionResultBase& txResult) const
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame apply", true);
 
@@ -696,7 +698,8 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
 bool
 InvokeHostFunctionOpFrame::doCheckValid(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
-    uint32_t ledgerVersion, MutableTransactionResultBase& txResult)
+    uint32_t ledgerVersion, OperationResult& res,
+    MutableTransactionResultBase& txResult) const
 {
     // check wasm size if uploading contract
     auto const& hostFn = mInvokeHostFunction.hostFunction;
@@ -726,7 +729,8 @@ InvokeHostFunctionOpFrame::doCheckValid(
 }
 
 bool
-InvokeHostFunctionOpFrame::doCheckValid(uint32_t ledgerVersion)
+InvokeHostFunctionOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                        OperationResult& res) const
 {
     throw std::runtime_error(
         "InvokeHostFunctionOpFrame::doCheckValid needs Config");

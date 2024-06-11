@@ -35,7 +35,7 @@ CreateAccountOpFrame::CreateAccountOpFrame(Operation const& op,
 
 bool
 CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx,
-                                       MutableTransactionResultBase& txResult)
+                                       OperationResult& res) const
 {
     auto header = ltx.loadHeader();
     if (mCreateAccount.startingBalance <
@@ -82,7 +82,7 @@ CreateAccountOpFrame::doApplyBeforeV14(AbstractLedgerTxn& ltx,
 
 bool
 CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter,
-                                     MutableTransactionResultBase& txResult)
+                                     OperationResult& res) const
 {
     LedgerTxn ltx(ltxOuter);
     auto header = ltx.loadHeader();
@@ -139,7 +139,7 @@ CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter,
 
 bool
 CreateAccountOpFrame::doApply(AbstractLedgerTxn& ltx,
-                              MutableTransactionResultBase& txResult)
+                              OperationResult& res) const
 {
     ZoneNamedN(applyZone, "CreateAccountOp apply", true);
     if (stellar::loadAccount(ltx, mCreateAccount.destination))
@@ -151,16 +151,17 @@ CreateAccountOpFrame::doApply(AbstractLedgerTxn& ltx,
     if (protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 ProtocolVersion::V_14))
     {
-        return doApplyBeforeV14(ltx, txResult);
+        return doApplyBeforeV14(ltx, res);
     }
     else
     {
-        return doApplyFromV14(ltx, txResult);
+        return doApplyFromV14(ltx, res);
     }
 }
 
 bool
-CreateAccountOpFrame::doCheckValid(uint32_t ledgerVersion)
+CreateAccountOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                   OperationResult& res) const
 {
     int64_t minStartingBalance =
         protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_14) ? 0 : 1;

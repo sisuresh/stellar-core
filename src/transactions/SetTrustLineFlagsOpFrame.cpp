@@ -31,25 +31,25 @@ SetTrustLineFlagsOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultSelfNotAllowed()
+SetTrustLineFlagsOpFrame::setResultSelfNotAllowed() const
 {
     throw std::runtime_error("Not implemented.");
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultNoTrustLine()
+SetTrustLineFlagsOpFrame::setResultNoTrustLine() const
 {
     innerResult().code(SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultLowReserve()
+SetTrustLineFlagsOpFrame::setResultLowReserve() const
 {
     innerResult().code(SET_TRUST_LINE_FLAGS_LOW_RESERVE);
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultSuccess()
+SetTrustLineFlagsOpFrame::setResultSuccess() const
 {
     innerResult().code(SET_TRUST_LINE_FLAGS_SUCCESS);
 }
@@ -74,7 +74,7 @@ SetTrustLineFlagsOpFrame::getOpIndex() const
 
 bool
 SetTrustLineFlagsOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
-                                                uint32_t& expectedVal)
+                                                uint32_t& expectedVal) const
 {
     expectedVal = trust.current().data.trustLine().flags;
     expectedVal &= ~mSetTrustLineFlags.clearFlags;
@@ -90,14 +90,16 @@ SetTrustLineFlagsOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
 
 void
 SetTrustLineFlagsOpFrame::setFlagValue(AbstractLedgerTxn& ltx,
-                                       LedgerKey const& key, uint32_t flagVal)
+                                       LedgerKey const& key,
+                                       uint32_t flagVal) const
 {
     auto trust = ltx.load(key);
     trust.current().data.trustLine().flags = flagVal;
 }
 
 bool
-SetTrustLineFlagsOpFrame::doCheckValid(uint32_t ledgerVersion)
+SetTrustLineFlagsOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                       OperationResult& res) const
 {
     if (mSetTrustLineFlags.asset.type() == ASSET_TYPE_NATIVE)
     {
@@ -162,9 +164,9 @@ SetTrustLineFlagsOpFrame::insertLedgerKeysToPrefetch(
 }
 
 bool
-SetTrustLineFlagsOpFrame::isAuthRevocationValid(
-    AbstractLedgerTxn& ltx, bool& authRevocable,
-    MutableTransactionResultBase& txResult)
+SetTrustLineFlagsOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
+                                                bool& authRevocable,
+                                                OperationResult& res) const
 {
 
     // Load the source account entry
@@ -209,7 +211,7 @@ SetTrustLineFlagsOpFrame::isAuthRevocationValid(
 
 bool
 SetTrustLineFlagsOpFrame::isRevocationToMaintainLiabilitiesValid(
-    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags)
+    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags) const
 {
     // This has already been checked in isAuthRevocationValid,
     // always return true here.

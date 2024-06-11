@@ -46,7 +46,8 @@ isBadPrice(int64_t amountA, int64_t amountB, Price const& minPrice,
 bool
 LiquidityPoolDepositOpFrame::depositIntoEmptyPool(
     int64_t& amountA, int64_t& amountB, int64_t& amountPoolShares,
-    int64_t availableA, int64_t availableB, int64_t availableLimitPoolShares)
+    int64_t availableA, int64_t availableB,
+    int64_t availableLimitPoolShares) const
 {
     amountA = mLiquidityPoolDeposit.maxAmountA;
     amountB = mLiquidityPoolDeposit.maxAmountB;
@@ -100,7 +101,7 @@ bool
 LiquidityPoolDepositOpFrame::depositIntoNonEmptyPool(
     int64_t& amountA, int64_t& amountB, int64_t& amountPoolShares,
     int64_t availableA, int64_t availableB, int64_t availableLimitPoolShares,
-    LiquidityPoolConstantProduct const& cp)
+    LiquidityPoolConstantProduct const& cp) const
 {
     int64_t sharesA = 0;
     int64_t sharesB = 0;
@@ -189,7 +190,7 @@ updateBalance(LedgerTxnHeader& header, TrustLineWrapper& tl,
 
 bool
 LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                     MutableTransactionResultBase& txResult)
+                                     OperationResult& res) const
 {
     ZoneNamedN(applyZone, "LiquidityPoolDepositOpFrame apply", true);
 
@@ -316,7 +317,8 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-LiquidityPoolDepositOpFrame::doCheckValid(uint32_t ledgerVersion)
+LiquidityPoolDepositOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                          OperationResult& res) const
 {
     if (mLiquidityPoolDeposit.maxAmountA <= 0 ||
         mLiquidityPoolDeposit.maxAmountB <= 0)

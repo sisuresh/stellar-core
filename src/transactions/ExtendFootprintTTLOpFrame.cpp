@@ -48,7 +48,7 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 ExtendFootprintTTLOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                   MutableTransactionResultBase& txResult)
+                                   OperationResult& res) const
 {
     throw std::runtime_error("ExtendFootprintTTLOpFrame::doApply needs Config");
 }
@@ -56,7 +56,8 @@ ExtendFootprintTTLOpFrame::doApply(AbstractLedgerTxn& ltx,
 bool
 ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                    Hash const& sorobanBasePrngSeed,
-                                   MutableTransactionResultBase& txResult)
+                                   OperationResult& res,
+                                   MutableTransactionResultBase& txResult) const
 {
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame apply", true);
 
@@ -163,7 +164,8 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
 bool
 ExtendFootprintTTLOpFrame::doCheckValid(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
-    uint32_t ledgerVersion, MutableTransactionResultBase& txResult)
+    uint32_t ledgerVersion, OperationResult& res,
+    MutableTransactionResultBase& txResult) const
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readWrite.empty())
@@ -210,7 +212,8 @@ ExtendFootprintTTLOpFrame::doCheckValid(
 }
 
 bool
-ExtendFootprintTTLOpFrame::doCheckValid(uint32_t ledgerVersion)
+ExtendFootprintTTLOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                        OperationResult& res) const
 {
     throw std::runtime_error(
         "ExtendFootprintTTLOpFrame::doCheckValid needs Config");

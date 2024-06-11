@@ -25,7 +25,7 @@ TrustFlagsOpFrameBase::getThresholdLevel() const
 }
 
 bool
-TrustFlagsOpFrameBase::removeOffers(AbstractLedgerTxn& ltx)
+TrustFlagsOpFrameBase::removeOffers(AbstractLedgerTxn& ltx) const
 {
     // Delete all offers owned by the trustor that are either buying or
     // selling the asset which had authorization revoked. Also redeem pool
@@ -52,7 +52,7 @@ TrustFlagsOpFrameBase::removeOffers(AbstractLedgerTxn& ltx)
 
 bool
 TrustFlagsOpFrameBase::doApply(AbstractLedgerTxn& ltx,
-                               MutableTransactionResultBase& txResult)
+                               OperationResult& res) const
 {
     ZoneNamedN(applyZone, "TrustFlagsOpFrameBase apply", true);
 
@@ -71,7 +71,7 @@ TrustFlagsOpFrameBase::doApply(AbstractLedgerTxn& ltx,
     }
 
     bool authRevocable = true;
-    if (!isAuthRevocationValid(ltx, authRevocable, txResult))
+    if (!isAuthRevocationValid(ltx, authRevocable, res))
     {
         return false;
     }

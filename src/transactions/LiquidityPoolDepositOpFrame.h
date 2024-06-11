@@ -17,7 +17,7 @@ typedef LiquidityPoolEntry::_body_t::_constantProduct_t
 class LiquidityPoolDepositOpFrame : public OperationFrame
 {
     LiquidityPoolDepositResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().liquidityPoolDepositResult();
     }
@@ -25,13 +25,13 @@ class LiquidityPoolDepositOpFrame : public OperationFrame
     bool depositIntoEmptyPool(int64_t& amountA, int64_t& amountB,
                               int64_t& amountPoolShares, int64_t availableA,
                               int64_t availableB,
-                              int64_t availableLimitPoolShares);
+                              int64_t availableLimitPoolShares) const;
 
     bool depositIntoNonEmptyPool(int64_t& amountA, int64_t& amountB,
                                  int64_t& amountPoolShares, int64_t availableA,
                                  int64_t availableB,
                                  int64_t availableLimitPoolShares,
-                                 LiquidityPoolConstantProduct const& cp);
+                                 LiquidityPoolConstantProduct const& cp) const;
 
     LiquidityPoolDepositOp const& mLiquidityPoolDeposit;
 
@@ -41,9 +41,9 @@ class LiquidityPoolDepositOpFrame : public OperationFrame
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
 

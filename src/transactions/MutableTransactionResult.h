@@ -28,6 +28,7 @@ class MutableTransactionResultBase : public NonMovableOrCopyable
     virtual TransactionResultCode getResultCode() const = 0;
     virtual void setResultCode(TransactionResultCode code) = 0;
 
+    virtual OperationResult& getOpResultAt(size_t index) = 0;
     virtual std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const = 0;
     virtual xdr::xvector<DiagnosticEvent> const&
@@ -104,6 +105,7 @@ class MutableTransactionResult : public MutableTransactionResultBase
     TransactionResultCode getResultCode() const override;
     void setResultCode(TransactionResultCode code) override;
 
+    OperationResult& getOpResultAt(size_t index) override;
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
@@ -170,6 +172,7 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
     TransactionResultCode getResultCode() const override;
     void setResultCode(TransactionResultCode code) override;
 
+    OperationResult& getOpResultAt(size_t index) override;
     std::vector<std::shared_ptr<OperationFrame>> const&
     getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
