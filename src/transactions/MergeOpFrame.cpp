@@ -35,7 +35,7 @@ MergeOpFrame::getThresholdLevel() const
 bool
 MergeOpFrame::isSeqnumTooFar(AbstractLedgerTxn& ltx,
                              LedgerTxnHeader const& header,
-                             AccountEntry const& sourceAccount)
+                             AccountEntry const& sourceAccount) const
 {
     // don't allow the account to be merged if recreating it would cause it
     // to jump backwards
@@ -61,25 +61,24 @@ MergeOpFrame::isSeqnumTooFar(AbstractLedgerTxn& ltx,
 // make sure the we delete all the trustlines
 // move the XLM to the new account
 bool
-MergeOpFrame::doApply(AbstractLedgerTxn& ltx,
-                      MutableTransactionResultBase& txResult)
+MergeOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "MergeOp apply", true);
 
     if (protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 ProtocolVersion::V_16))
     {
-        return doApplyBeforeV16(ltx, txResult);
+        return doApplyBeforeV16(ltx, res);
     }
     else
     {
-        return doApplyFromV16(ltx, txResult);
+        return doApplyFromV16(ltx, res);
     }
 }
 
 bool
 MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
-                               MutableTransactionResultBase& txResult)
+                               OperationResult& res) const
 {
     auto header = ltx.loadHeader();
 
@@ -187,8 +186,7 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
 }
 
 bool
-MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx,
-                             MutableTransactionResultBase& txResult)
+MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     auto header = ltx.loadHeader();
 
@@ -263,7 +261,7 @@ MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx,
 }
 
 bool
-MergeOpFrame::doCheckValid(uint32_t ledgerVersion)
+MergeOpFrame::doCheckValid(uint32_t ledgerVersion, OperationResult& res) const
 {
     // makes sure not merging into self
     if (getSourceID() == toAccountID(mOperation.body.destination()))

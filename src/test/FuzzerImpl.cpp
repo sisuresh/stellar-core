@@ -926,17 +926,23 @@ class FuzzTransactionFrame : public TransactionFrame
             ltx.loadHeader().current().ledgerVersion, getContentsHash(),
             mEnvelope.v1().signatures};
         // if any ill-formed Operations, do not attempt transaction application
-        auto isInvalidOperation = [&](auto const& op) {
-            return !op->checkValid(app, signatureChecker, ltx, false,
+        auto isInvalidOperation = [&](auto const& op, auto& opResult) {
+            return !op->checkValid(app, signatureChecker, ltx, false, opResult,
                                    *mResultPayload);
         };
-        if (std::any_of(mResultPayload->getOpFrames().begin(),
-                        mResultPayload->getOpFrames().end(),
-                        isInvalidOperation))
+
+        auto const& ops = mResultPayload->getOpFrames();
+        for (size_t i = 0; i < ops.size(); ++i)
         {
-            mResultPayload->setResultCode(txFAILED);
-            return;
+            auto const& op = ops[i];
+            auto& opResult = mResultPayload->getOpResultAt(i);
+            if (isInvalidOperation(op, opResult))
+            {
+                mResultPayload->setResultCode(txFAILED);
+                return;
+            }
         }
+
         // while the following method's result is not captured, regardless, for
         // protocols < 8, this triggered buggy caching, and potentially may do
         // so in the future

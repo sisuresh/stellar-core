@@ -25,8 +25,7 @@ ClawbackOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-ClawbackOpFrame::doApply(AbstractLedgerTxn& ltx,
-                         MutableTransactionResultBase& txResult)
+ClawbackOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "ClawbackOp apply", true);
 
@@ -56,7 +55,8 @@ ClawbackOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-ClawbackOpFrame::doCheckValid(uint32_t ledgerVersion)
+ClawbackOpFrame::doCheckValid(uint32_t ledgerVersion,
+                              OperationResult& res) const
 {
     if (mClawback.from == toMuxedAccount(getSourceID()))
     {

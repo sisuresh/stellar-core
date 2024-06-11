@@ -25,8 +25,7 @@ PaymentOpFrame::PaymentOpFrame(Operation const& op, OperationResult& res,
 }
 
 bool
-PaymentOpFrame::doApply(AbstractLedgerTxn& ltx,
-                        MutableTransactionResultBase& txResult)
+PaymentOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     ZoneNamedN(applyZone, "PaymentOp apply", true);
     std::string payStr = assetToString(mPayment.asset);
@@ -66,8 +65,8 @@ PaymentOpFrame::doApply(AbstractLedgerTxn& ltx,
     opRes.tr().type(PATH_PAYMENT_STRICT_RECEIVE);
     PathPaymentStrictReceiveOpFrame ppayment(op, opRes, mParentTx);
 
-    if (!ppayment.doCheckValid(ledgerVersion) ||
-        !ppayment.doApply(ltx, txResult))
+    if (!ppayment.doCheckValid(ledgerVersion, res) ||
+        !ppayment.doApply(ltx, res))
     {
         if (ppayment.getResultCode() != opINNER)
         {
@@ -121,7 +120,7 @@ PaymentOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-PaymentOpFrame::doCheckValid(uint32_t ledgerVersion)
+PaymentOpFrame::doCheckValid(uint32_t ledgerVersion, OperationResult& res) const
 {
     if (mPayment.amount <= 0)
     {

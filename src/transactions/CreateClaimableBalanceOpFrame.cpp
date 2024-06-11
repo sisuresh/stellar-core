@@ -142,7 +142,7 @@ CreateClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                       MutableTransactionResultBase& txResult)
+                                       OperationResult& res) const
 {
     ZoneNamedN(applyZone, "CreateClaimableBalanceOpFrame apply", true);
 
@@ -254,7 +254,8 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-CreateClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion)
+CreateClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                            OperationResult& res) const
 {
     auto const& claimants = mCreateClaimableBalance.claimants;
 
@@ -302,7 +303,7 @@ CreateClaimableBalanceOpFrame::insertLedgerKeysToPrefetch(
 }
 
 Hash
-CreateClaimableBalanceOpFrame::getBalanceID()
+CreateClaimableBalanceOpFrame::getBalanceID() const
 {
     HashIDPreimage hashPreimage;
     hashPreimage.type(ENVELOPE_TYPE_OP_ID);

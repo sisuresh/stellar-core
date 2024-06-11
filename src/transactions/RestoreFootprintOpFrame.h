@@ -15,7 +15,7 @@ class MutableTransactionResultBase;
 class RestoreFootprintOpFrame : public OperationFrame
 {
     RestoreFootprintResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().restoreFootprintResult();
     }
@@ -28,16 +28,17 @@ class RestoreFootprintOpFrame : public OperationFrame
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doApply(Application& app, AbstractLedgerTxn& ltx,
-                 Hash const& sorobanBasePrngSeed,
-                 MutableTransactionResultBase& txResult) override;
+                 Hash const& sorobanBasePrngSeed, OperationResult& res,
+                 MutableTransactionResultBase& txResult) const override;
 
     bool doCheckValid(SorobanNetworkConfig const& networkConfig,
                       Config const& appConfig, uint32_t ledgerVersion,
-                      MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+                      OperationResult& res,
+                      MutableTransactionResultBase& txResult) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
 
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

@@ -54,7 +54,8 @@ PathPaymentOpFrameBase::isDexOperation() const
 }
 
 bool
-PathPaymentOpFrameBase::checkIssuer(AbstractLedgerTxn& ltx, Asset const& asset)
+PathPaymentOpFrameBase::checkIssuer(AbstractLedgerTxn& ltx,
+                                    Asset const& asset) const
 {
     if (asset.type() != ASSET_TYPE_NATIVE)
     {
@@ -76,7 +77,7 @@ PathPaymentOpFrameBase::convert(AbstractLedgerTxn& ltx,
                                 int64_t& amountSend, Asset const& recvAsset,
                                 int64_t maxRecv, int64_t& amountRecv,
                                 RoundingType round,
-                                std::vector<ClaimAtom>& offerTrail)
+                                std::vector<ClaimAtom>& offerTrail) const
 {
     releaseAssertOrThrow(offerTrail.empty());
     releaseAssertOrThrow(!(sendAsset == recvAsset));
@@ -139,9 +140,11 @@ PathPaymentOpFrameBase::shouldBypassIssuerCheck(
 }
 
 bool
-PathPaymentOpFrameBase::updateSourceBalance(
-    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult,
-    int64_t amount, bool bypassIssuerCheck, bool doesSourceAccountExist)
+PathPaymentOpFrameBase::updateSourceBalance(AbstractLedgerTxn& ltx,
+                                            OperationResult& res,
+                                            int64_t amount,
+                                            bool bypassIssuerCheck,
+                                            bool doesSourceAccountExist) const
 {
     auto const& asset = getSourceAsset();
 
@@ -211,7 +214,7 @@ PathPaymentOpFrameBase::updateSourceBalance(
 bool
 PathPaymentOpFrameBase::updateDestBalance(AbstractLedgerTxn& ltx,
                                           int64_t amount,
-                                          bool bypassIssuerCheck)
+                                          bool bypassIssuerCheck) const
 {
     auto destID = getDestID();
     auto const& asset = getDestAsset();

@@ -1135,9 +1135,14 @@ TransactionFrame::processSignatures(
     {
         // scope here to avoid potential side effects of loading source accounts
         LedgerTxn ltx(ltxOuter);
-        for (auto op : txResult.getOpFrames())
+
+        // TODO: Move op frames into TxFrame
+        auto& opFrames = txResult.getOpFrames();
+        for (size_t i = 0; i < opFrames.size(); ++i)
         {
-            if (!op->checkSignature(signatureChecker, ltx, txResult, false))
+            auto const& op = opFrames[i];
+            auto& opResult = txResult.getOpResultAt(i);
+            if (!op->checkSignature(signatureChecker, ltx, opResult, false))
             {
                 allOpsValid = false;
             }
@@ -1445,9 +1450,15 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
                            txResult) == ValidationType::kMaybeValid;
     if (res)
     {
-        for (auto op : txResult->getOpFrames())
+        // TODO: Move op frames into TxFrame
+        auto& opFrames = txResult->getOpFrames();
+        for (size_t i = 0; i < opFrames.size(); ++i)
         {
-            if (!op->checkValid(app, signatureChecker, ltx, false, *txResult))
+            auto const& op = opFrames[i];
+            auto& opResult = txResult->getOpResultAt(i);
+
+            if (!op->checkValid(app, signatureChecker, ltx, false, opResult,
+                                *txResult))
             {
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
@@ -1557,11 +1568,17 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         uint64_t opNum{0};
-        for (auto op : txResult.getOpFrames())
+
+        // TODO: Move op frames into TxFrame
+        auto& opFrames = txResult.getOpFrames();
+        for (size_t i = 0; i < opFrames.size(); ++i)
         {
             auto time = opTimer.TimeScope();
-            LedgerTxn ltxOp(ltxTx);
 
+            auto const& op = opFrames[i];
+            auto& opResult = txResult.getOpResultAt(i);
+
+            LedgerTxn ltxOp(ltxTx);
             Hash subSeed = sorobanBasePrngSeed;
             // If op can use the seed, we need to compute a sub-seed for it.
             if (op->isSoroban())
@@ -1573,8 +1590,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             }
             ++opNum;
 
-            bool txRes =
-                op->apply(app, signatureChecker, ltxOp, subSeed, txResult);
+            bool txRes = op->apply(app, signatureChecker, ltxOp, subSeed,
+                                   opResult, txResult);
 
             if (!txRes)
             {
@@ -1583,7 +1600,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             if (success)
             {
                 app.getInvariantManager().checkOnOperationApply(
-                    op->getOperation(), op->getResult(), ltxOp.getDelta());
+                    op->getOperation(), opResult, ltxOp.getDelta());
 
                 // The operation meta will be empty if the transaction
                 // doesn't succeed so we may as well not do any work in that

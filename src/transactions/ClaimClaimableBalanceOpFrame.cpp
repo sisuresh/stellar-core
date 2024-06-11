@@ -71,7 +71,7 @@ validatePredicate(ClaimPredicate const& pred, TimePoint closeTime)
 
 bool
 ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                      MutableTransactionResultBase& txResult)
+                                      OperationResult& res) const
 {
     ZoneNamedN(applyZone, "ClaimClaimableBalanceOpFrame apply", true);
 
@@ -143,7 +143,8 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-ClaimClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion)
+ClaimClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                           OperationResult& res) const
 {
     return true;
 }

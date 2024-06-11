@@ -29,8 +29,7 @@ InflationOpFrame::InflationOpFrame(Operation const& op, OperationResult& res,
 }
 
 bool
-InflationOpFrame::doApply(AbstractLedgerTxn& ltx,
-                          MutableTransactionResultBase& txResult)
+InflationOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
 {
     auto header = ltx.loadHeader();
     auto& lh = header.current();
@@ -119,7 +118,8 @@ InflationOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-InflationOpFrame::doCheckValid(uint32_t ledgerVersion)
+InflationOpFrame::doCheckValid(uint32_t ledgerVersion,
+                               OperationResult& res) const
 {
     return true;
 }

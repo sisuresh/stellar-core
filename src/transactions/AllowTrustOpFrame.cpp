@@ -28,25 +28,25 @@ AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op, OperationResult& res,
 }
 
 void
-AllowTrustOpFrame::setResultSelfNotAllowed()
+AllowTrustOpFrame::setResultSelfNotAllowed() const
 {
     innerResult().code(ALLOW_TRUST_SELF_NOT_ALLOWED);
 }
 
 void
-AllowTrustOpFrame::setResultNoTrustLine()
+AllowTrustOpFrame::setResultNoTrustLine() const
 {
     innerResult().code(ALLOW_TRUST_NO_TRUST_LINE);
 }
 
 void
-AllowTrustOpFrame::setResultLowReserve()
+AllowTrustOpFrame::setResultLowReserve() const
 {
     innerResult().code(ALLOW_TRUST_LOW_RESERVE);
 }
 
 void
-AllowTrustOpFrame::setResultSuccess()
+AllowTrustOpFrame::setResultSuccess() const
 {
     innerResult().code(ALLOW_TRUST_SUCCESS);
 }
@@ -71,7 +71,7 @@ AllowTrustOpFrame::getOpIndex() const
 
 bool
 AllowTrustOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
-                                         uint32_t& expectedVal)
+                                         uint32_t& expectedVal) const
 {
     expectedVal = trust.current().data.trustLine().flags;
     expectedVal &= ~TRUSTLINE_AUTH_FLAGS;
@@ -81,7 +81,7 @@ AllowTrustOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
 
 void
 AllowTrustOpFrame::setFlagValue(AbstractLedgerTxn& ltx, LedgerKey const& key,
-                                uint32_t flagVal)
+                                uint32_t flagVal) const
 {
     if (!trustLineFlagIsValid(mAllowTrust.authorize, ltx.loadHeader()))
     {
@@ -101,7 +101,7 @@ AllowTrustOpFrame::setFlagValue(AbstractLedgerTxn& ltx, LedgerKey const& key,
 bool
 AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
                                          bool& authRevocable,
-                                         MutableTransactionResultBase& txResult)
+                                         OperationResult& res) const
 {
     // Load the source account
     LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
@@ -132,7 +132,7 @@ AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
 
 bool
 AllowTrustOpFrame::isRevocationToMaintainLiabilitiesValid(
-    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags)
+    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags) const
 {
     // There are two cases where we set the result to
     // ALLOW_TRUST_CANT_REVOKE -
@@ -151,7 +151,8 @@ AllowTrustOpFrame::isRevocationToMaintainLiabilitiesValid(
 }
 
 bool
-AllowTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
+AllowTrustOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                OperationResult& res) const
 {
     if (mAllowTrust.asset.type() == ASSET_TYPE_NATIVE)
     {

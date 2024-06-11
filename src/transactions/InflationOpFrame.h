@@ -13,7 +13,7 @@ class AbstractLedgerTxn;
 class InflationOpFrame : public OperationFrame
 {
     InflationResult&
-    innerResult()
+    innerResult() const
     {
         return mResult.tr().inflationResult();
     }
@@ -24,9 +24,9 @@ class InflationOpFrame : public OperationFrame
     InflationOpFrame(Operation const& op, OperationResult& res,
                      TransactionFrame const& parentTx);
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 MutableTransactionResultBase& txResult) override;
-    bool doCheckValid(uint32_t ledgerVersion) override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
+    bool doCheckValid(uint32_t ledgerVersion,
+                      OperationResult& res) const override;
     bool isOpSupported(LedgerHeader const& header) const override;
 
     static InflationResultCode

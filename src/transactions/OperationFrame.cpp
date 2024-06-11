@@ -135,35 +135,36 @@ OperationFrame::OperationFrame(Operation const& op, OperationResult& res,
                                TransactionFrame const& parentTx)
     : mOperation(op), mParentTx(parentTx), mResult(res)
 {
-    resetResultSuccess();
+    resetResultSuccess(res);
 }
 
 bool
 OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
                       AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
-                      MutableTransactionResultBase& txResult)
+                      OperationResult& res,
+                      MutableTransactionResultBase& txResult) const
 {
     ZoneScoped;
-    bool res;
+    bool applyRes;
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
-    res = checkValid(app, signatureChecker, ltx, true, txResult);
-    if (res)
+    applyRes = checkValid(app, signatureChecker, ltx, true, res, txResult);
+    if (applyRes)
     {
-        res = doApply(app, ltx, sorobanBasePrngSeed, txResult);
-        CLOG_TRACE(Tx, "{}", xdrToCerealString(mResult, "OperationResult"));
+        applyRes = doApply(app, ltx, sorobanBasePrngSeed, res, txResult);
+        CLOG_TRACE(Tx, "{}", xdrToCerealString(res, "OperationResult"));
     }
 
-    return res;
+    return applyRes;
 }
 
 bool
 OperationFrame::doApply(Application& _app, AbstractLedgerTxn& ltx,
-                        Hash const& sorobanBasePrngSeed,
-                        MutableTransactionResultBase& txResult)
+                        Hash const& sorobanBasePrngSeed, OperationResult& res,
+                        MutableTransactionResultBase& txResult) const
 {
     // By default we ignore the app and seed, but subclasses can override to
     // intercept and use them.
-    return doApply(ltx, txResult);
+    return doApply(ltx, res);
 }
 
 ThresholdLevel
@@ -180,9 +181,8 @@ OperationFrame::isOpSupported(LedgerHeader const&) const
 
 bool
 OperationFrame::checkSignature(SignatureChecker& signatureChecker,
-                               AbstractLedgerTxn& ltx,
-                               MutableTransactionResultBase& txResult,
-                               bool forApply)
+                               AbstractLedgerTxn& ltx, OperationResult& res,
+                               bool forApply) const
 {
     ZoneScoped;
     auto header = ltx.loadHeader();
@@ -194,7 +194,7 @@ OperationFrame::checkSignature(SignatureChecker& signatureChecker,
         if (!mParentTx.checkSignature(signatureChecker, sourceAccount,
                                       neededThreshold))
         {
-            mResult.code(opBAD_AUTH);
+            res.code(opBAD_AUTH);
             return false;
         }
     }
@@ -202,14 +202,14 @@ OperationFrame::checkSignature(SignatureChecker& signatureChecker,
     {
         if (forApply || !mOperation.sourceAccount)
         {
-            mResult.code(opNO_ACCOUNT);
+            res.code(opNO_ACCOUNT);
             return false;
         }
 
         if (!mParentTx.checkSignatureNoAccount(
                 signatureChecker, toAccountID(*mOperation.sourceAccount)))
         {
-            mResult.code(opBAD_AUTH);
+            res.code(opBAD_AUTH);
             return false;
         }
     }
@@ -237,14 +237,15 @@ OperationFrame::getResultCode() const
 bool
 OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
                            AbstractLedgerTxn& ltxOuter, bool forApply,
-                           MutableTransactionResultBase& txResult)
+                           OperationResult& res,
+                           MutableTransactionResultBase& txResult) const
 {
     ZoneScoped;
     // Note: ltx is always rolled back so checkValid never modifies the ledger
     LedgerTxn ltx(ltxOuter);
     if (!isOpSupported(ltx.loadHeader().current()))
     {
-        mResult.code(opNOT_SUPPORTED);
+        res.code(opNOT_SUPPORTED);
         return false;
     }
 
@@ -252,7 +253,7 @@ OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
     if (!forApply ||
         protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_10))
     {
-        if (!checkSignature(signatureChecker, ltx, txResult, forApply))
+        if (!checkSignature(signatureChecker, ltx, res, forApply))
         {
             return false;
         }
@@ -263,48 +264,49 @@ OperationFrame::checkValid(Application& app, SignatureChecker& signatureChecker,
         // previous versions it is done in checkSignature call
         if (!loadSourceAccount(ltx, ltx.loadHeader()))
         {
-            mResult.code(opNO_ACCOUNT);
+            res.code(opNO_ACCOUNT);
             return false;
         }
     }
 
-    resetResultSuccess();
+    resetResultSuccess(res);
 
     if (protocolVersionStartsFrom(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
     {
         auto const& sorobanConfig =
             app.getLedgerManager().getSorobanNetworkConfig();
 
-        return doCheckValid(sorobanConfig, app.getConfig(), ledgerVersion,
+        return doCheckValid(sorobanConfig, app.getConfig(), ledgerVersion, res,
                             txResult);
     }
     else
     {
-        return doCheckValid(ledgerVersion);
+        return doCheckValid(ledgerVersion, res);
     }
 }
 
 bool
 OperationFrame::doCheckValid(SorobanNetworkConfig const& config,
                              Config const& appConfig, uint32_t ledgerVersion,
-                             MutableTransactionResultBase& txResult)
+                             OperationResult& res,
+                             MutableTransactionResultBase& txResult) const
 {
-    return doCheckValid(ledgerVersion);
+    return doCheckValid(ledgerVersion, res);
 }
 
 LedgerTxnEntry
 OperationFrame::loadSourceAccount(AbstractLedgerTxn& ltx,
-                                  LedgerTxnHeader const& header)
+                                  LedgerTxnHeader const& header) const
 {
     ZoneScoped;
     return mParentTx.loadAccount(ltx, header, getSourceID());
 }
 
 void
-OperationFrame::resetResultSuccess()
+OperationFrame::resetResultSuccess(OperationResult& res) const
 {
-    mResult.code(opINNER);
-    mResult.tr().type(mOperation.body.type());
+    res.code(opINNER);
+    res.tr().type(mOperation.body.type());
 }
 
 bool

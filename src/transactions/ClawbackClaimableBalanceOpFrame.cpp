@@ -28,7 +28,7 @@ ClawbackClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
-                                         MutableTransactionResultBase& txResult)
+                                         OperationResult& res) const
 {
     ZoneNamedN(applyZone, "ClawbackClaimableBalanceOp apply", true);
 
@@ -76,7 +76,8 @@ ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 }
 
 bool
-ClawbackClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion)
+ClawbackClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
+                                              OperationResult& res) const
 {
     return true;
 }

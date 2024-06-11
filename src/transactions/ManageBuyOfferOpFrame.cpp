@@ -72,101 +72,101 @@ void
 ManageBuyOfferOpFrame::applyOperationSpecificLimits(int64_t& maxSheepSend,
                                                     int64_t sheepSent,
                                                     int64_t& maxWheatReceive,
-                                                    int64_t wheatReceived)
+                                                    int64_t wheatReceived) const
 {
     maxWheatReceive =
         std::min(mManageBuyOffer.buyAmount - wheatReceived, maxWheatReceive);
 }
 
 void
-ManageBuyOfferOpFrame::getExchangeParametersBeforeV10(int64_t& maxSheepSend,
-                                                      int64_t& maxWheatReceive)
+ManageBuyOfferOpFrame::getExchangeParametersBeforeV10(
+    int64_t& maxSheepSend, int64_t& maxWheatReceive) const
 {
     throw std::runtime_error("ManageBuyOffer used before protocol version 10");
 }
 
 ManageOfferSuccessResult&
-ManageBuyOfferOpFrame::getSuccessResult()
+ManageBuyOfferOpFrame::getSuccessResult() const
 {
     return mResult.tr().manageBuyOfferResult().success();
 }
 
 void
-ManageBuyOfferOpFrame::setResultSuccess()
+ManageBuyOfferOpFrame::setResultSuccess() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SUCCESS);
 }
 
 void
-ManageBuyOfferOpFrame::setResultMalformed()
+ManageBuyOfferOpFrame::setResultMalformed() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_MALFORMED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNoTrust()
+ManageBuyOfferOpFrame::setResultSellNoTrust() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_TRUST);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNoTrust()
+ManageBuyOfferOpFrame::setResultBuyNoTrust() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_TRUST);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNotAuthorized()
+ManageBuyOfferOpFrame::setResultSellNotAuthorized() const
 {
     mResult.tr().manageBuyOfferResult().code(
         MANAGE_BUY_OFFER_SELL_NOT_AUTHORIZED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNotAuthorized()
+ManageBuyOfferOpFrame::setResultBuyNotAuthorized() const
 {
     mResult.tr().manageBuyOfferResult().code(
         MANAGE_BUY_OFFER_BUY_NOT_AUTHORIZED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultLineFull()
+ManageBuyOfferOpFrame::setResultLineFull() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LINE_FULL);
 }
 
 void
-ManageBuyOfferOpFrame::setResultUnderfunded()
+ManageBuyOfferOpFrame::setResultUnderfunded() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_UNDERFUNDED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultCrossSelf()
+ManageBuyOfferOpFrame::setResultCrossSelf() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_CROSS_SELF);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNoIssuer()
+ManageBuyOfferOpFrame::setResultSellNoIssuer() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_ISSUER);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNoIssuer()
+ManageBuyOfferOpFrame::setResultBuyNoIssuer() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_ISSUER);
 }
 
 void
-ManageBuyOfferOpFrame::setResultNotFound()
+ManageBuyOfferOpFrame::setResultNotFound() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_NOT_FOUND);
 }
 
 void
-ManageBuyOfferOpFrame::setResultLowReserve()
+ManageBuyOfferOpFrame::setResultLowReserve() const
 {
     mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LOW_RESERVE);
 }
