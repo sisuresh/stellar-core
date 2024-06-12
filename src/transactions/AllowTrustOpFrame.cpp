@@ -17,10 +17,10 @@
 namespace stellar
 {
 
-AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op, OperationResult& res,
+AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op,
                                      TransactionFrame const& parentTx,
                                      uint32_t index)
-    : TrustFlagsOpFrameBase(op, res, parentTx)
+    : TrustFlagsOpFrameBase(op, parentTx)
     , mAllowTrust(mOperation.body.allowTrustOp())
     , mAsset(getAsset(getSourceID(), mAllowTrust.asset))
     , mOpIndex(index)

@@ -29,8 +29,6 @@ class MutableTransactionResultBase : public NonMovableOrCopyable
     virtual void setResultCode(TransactionResultCode code) = 0;
 
     virtual OperationResult& getOpResultAt(size_t index) = 0;
-    virtual std::vector<std::shared_ptr<OperationFrame>> const&
-    getOpFrames() const = 0;
     virtual xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const = 0;
 
@@ -84,7 +82,6 @@ class MutableTransactionResult : public MutableTransactionResultBase
     };
 
     TransactionResult mTxResult;
-    std::vector<std::shared_ptr<OperationFrame>> mOpFrames;
     std::optional<SorobanData> mSorobanExtension;
 
     MutableTransactionResult(TransactionFrame const& tx, int64_t feeCharged);
@@ -106,8 +103,6 @@ class MutableTransactionResult : public MutableTransactionResultBase
     void setResultCode(TransactionResultCode code) override;
 
     OperationResult& getOpResultAt(size_t index) override;
-    std::vector<std::shared_ptr<OperationFrame>> const&
-    getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
 
     bool consumeRefundableSorobanResources(
@@ -173,8 +168,6 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
     void setResultCode(TransactionResultCode code) override;
 
     OperationResult& getOpResultAt(size_t index) override;
-    std::vector<std::shared_ptr<OperationFrame>> const&
-    getOpFrames() const override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
 
     bool consumeRefundableSorobanResources(

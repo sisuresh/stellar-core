@@ -26,18 +26,15 @@ namespace stellar
 using namespace std;
 
 ManageSellOfferOpFrame::ManageSellOfferOpFrame(Operation const& op,
-                                               OperationResult& res,
                                                TransactionFrame const& parentTx)
-    : ManageSellOfferOpFrame(op, res, parentTx, false)
+    : ManageSellOfferOpFrame(op, parentTx, false)
 {
 }
 
 ManageSellOfferOpFrame::ManageSellOfferOpFrame(Operation const& op,
-                                               OperationResult& res,
                                                TransactionFrame const& parentTx,
                                                bool passive)
-    : ManageOfferOpFrameBase(op, res, parentTx,
-                             op.body.manageSellOfferOp().selling,
+    : ManageOfferOpFrameBase(op, parentTx, op.body.manageSellOfferOp().selling,
                              op.body.manageSellOfferOp().buying,
                              op.body.manageSellOfferOp().offerID,
                              op.body.manageSellOfferOp().price, passive)

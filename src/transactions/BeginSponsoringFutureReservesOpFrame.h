@@ -25,7 +25,6 @@ class BeginSponsoringFutureReservesOpFrame : public OperationFrame
 
   public:
     BeginSponsoringFutureReservesOpFrame(Operation const& op,
-                                         OperationResult& res,
                                          TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;

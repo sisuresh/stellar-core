@@ -43,8 +43,8 @@ class AllowTrustOpFrame : public TrustFlagsOpFrameBase
                       uint32_t flagVal) const override;
 
   public:
-    AllowTrustOpFrame(Operation const& op, OperationResult& res,
-                      TransactionFrame const& parentTx, uint32_t index);
+    AllowTrustOpFrame(Operation const& op, TransactionFrame const& parentTx,
+                      uint32_t index);
 
     bool doCheckValid(uint32_t ledgerVersion,
                       OperationResult& res) const override;

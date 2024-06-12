@@ -22,10 +22,9 @@ static const uint32 allAccountAuthFlags =
     (AUTH_REQUIRED_FLAG | AUTH_REVOCABLE_FLAG | AUTH_IMMUTABLE_FLAG |
      AUTH_CLAWBACK_ENABLED_FLAG);
 
-SetOptionsOpFrame::SetOptionsOpFrame(Operation const& op, OperationResult& res,
+SetOptionsOpFrame::SetOptionsOpFrame(Operation const& op,
                                      TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
-    , mSetOptions(mOperation.body.setOptionsOp())
+    : OperationFrame(op, parentTx), mSetOptions(mOperation.body.setOptionsOp())
 {
 }
 

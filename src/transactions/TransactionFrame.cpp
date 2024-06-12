@@ -60,62 +60,18 @@ int64_t const MAX_RESOURCE_FEE = 1LL << 50;
 using namespace std;
 using namespace stellar::txbridge;
 
-namespace
-{
-bool
-hasDexOperationsInternal(
-    std::vector<std::shared_ptr<OperationFrame>> const& ops)
-{
-    for (auto const& op : ops)
-    {
-        if (op->isDexOperation())
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool
-isSorobanInternal(std::vector<std::shared_ptr<OperationFrame>> const& ops)
-{
-    return !ops.empty() && ops[0]->isSoroban();
-}
-
-bool
-validateSorobanOpsConsistencyInternal(
-    std::vector<std::shared_ptr<OperationFrame>> const& ops)
-{
-    bool hasSorobanOp = isSorobanInternal(ops);
-    for (auto const& op : ops)
-    {
-        bool isSorobanOp = op->isSoroban();
-        // Mixing Soroban ops with non-Soroban ops is not allowed.
-        if (isSorobanOp != hasSorobanOp)
-        {
-            return false;
-        }
-    }
-    // Only one operation is allowed per Soroban transaction.
-    if (hasSorobanOp && ops.size() != 1)
-    {
-        return false;
-    }
-    return true;
-}
-}
-
 TransactionFrame::TransactionFrame(Hash const& networkID,
                                    TransactionEnvelope const& envelope)
     : mEnvelope(envelope), mNetworkID(networkID)
 {
-    // We need information from the underlying OperationFrame objects, but we
-    // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = createResultPayload();
-    mHasDexOperations = hasDexOperationsInternal(dummyPayload->getOpFrames());
-    mIsSoroban = isSorobanInternal(dummyPayload->getOpFrames());
-    mHasValidSorobanOpsConsistency =
-        validateSorobanOpsConsistencyInternal(dummyPayload->getOpFrames());
+    auto const& ops = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
+                          ? mEnvelope.v0().tx.operations
+                          : mEnvelope.v1().tx.operations;
+
+    for (uint32_t i = 0; i < ops.size(); i++)
+    {
+        mOperations.push_back(OperationFrame::makeHelper(ops[i], *this, i));
+    }
 }
 
 Hash const&
@@ -421,13 +377,20 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
 bool
 TransactionFrame::hasDexOperations() const
 {
-    return mHasDexOperations;
+    for (auto const& op : mOperations)
+    {
+        if (op->isDexOperation())
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool
 TransactionFrame::isSoroban() const
 {
-    return mIsSoroban;
+    return !mOperations.empty() && mOperations[0]->isSoroban();
 }
 
 SorobanResources const&
@@ -554,7 +517,22 @@ TransactionFrame::extraSignersExist() const
 bool
 TransactionFrame::validateSorobanOpsConsistency() const
 {
-    return mHasValidSorobanOpsConsistency;
+    bool hasSorobanOp = mOperations[0]->isSoroban();
+    for (auto const& op : mOperations)
+    {
+        bool isSorobanOp = op->isSoroban();
+        // Mixing Soroban ops with non-Soroban ops is not allowed.
+        if (isSorobanOp != hasSorobanOp)
+        {
+            return false;
+        }
+    }
+    // Only one operation is allowed per Soroban transaction.
+    if (hasSorobanOp && mOperations.size() != 1)
+    {
+        return false;
+    }
+    return true;
 }
 
 bool
@@ -1121,7 +1099,7 @@ TransactionFrame::processSignatures(
     if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_13) &&
         !maybeValid)
     {
-        removeOneTimeSignerFromAllSourceAccounts(ltxOuter, txResult);
+        removeOneTimeSignerFromAllSourceAccounts(ltxOuter);
         return false;
     }
     // older versions of the protocol only fast fail in a subset of cases
@@ -1141,12 +1119,9 @@ TransactionFrame::processSignatures(
     {
         // scope here to avoid potential side effects of loading source accounts
         LedgerTxn ltx(ltxOuter);
-
-        // TODO: Move op frames into TxFrame
-        auto& opFrames = txResult.getOpFrames();
-        for (size_t i = 0; i < opFrames.size(); ++i)
+        for (size_t i = 0; i < mOperations.size(); ++i)
         {
-            auto const& op = opFrames[i];
+            auto const& op = mOperations[i];
             auto& opResult = txResult.getOpResultAt(i);
             if (!op->checkSignature(signatureChecker, ltx, opResult, false))
             {
@@ -1155,7 +1130,7 @@ TransactionFrame::processSignatures(
         }
     }
 
-    removeOneTimeSignerFromAllSourceAccounts(ltxOuter, txResult);
+    removeOneTimeSignerFromAllSourceAccounts(ltxOuter);
 
     if (!allOpsValid)
     {
@@ -1362,10 +1337,9 @@ TransactionFrame::XDRProvidesValidFee() const
     return true;
 }
 
-// TODO: Remove txResult
 void
 TransactionFrame::removeOneTimeSignerFromAllSourceAccounts(
-    AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult) const
+    AbstractLedgerTxn& ltx) const
 {
     auto ledgerVersion = ltx.loadHeader().current().ledgerVersion;
     if (ledgerVersion == 7)
@@ -1374,7 +1348,7 @@ TransactionFrame::removeOneTimeSignerFromAllSourceAccounts(
     }
 
     UnorderedSet<AccountID> accounts{getSourceID()};
-    for (auto& op : txResult.getOpFrames())
+    for (auto const& op : mOperations)
     {
         accounts.emplace(op->getSourceID());
     }
@@ -1456,11 +1430,9 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
                            txResult) == ValidationType::kMaybeValid;
     if (res)
     {
-        // TODO: Move op frames into TxFrame
-        auto& opFrames = txResult->getOpFrames();
-        for (size_t i = 0; i < opFrames.size(); ++i)
+        for (size_t i = 0; i < mOperations.size(); ++i)
         {
-            auto const& op = opFrames[i];
+            auto const& op = mOperations[i];
             auto& opResult = txResult->getOpResultAt(i);
 
             if (!op->checkValid(app, signatureChecker, ltx, false, opResult,
@@ -1521,10 +1493,7 @@ TransactionFrame::insertKeysForFeeProcessing(
 void
 TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 {
-    // We need information from the underlying OperationFrame objects, but we
-    // don't want to store mutable state, so use a throw away ResultPayload.
-    auto dummyPayload = createResultPayload();
-    for (auto const& op : dummyPayload->getOpFrames())
+    for (auto const& op : mOperations)
     {
         if (!(getSourceID() == op->getSourceID()))
         {
@@ -1574,14 +1543,11 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         uint64_t opNum{0};
-
-        // TODO: Move op frames into TxFrame
-        auto& opFrames = txResult.getOpFrames();
-        for (size_t i = 0; i < opFrames.size(); ++i)
+        for (size_t i = 0; i < mOperations.size(); ++i)
         {
             auto time = opTimer.TimeScope();
 
-            auto const& op = opFrames[i];
+            auto const& op = mOperations[i];
             auto& opResult = txResult.getOpResultAt(i);
 
             LedgerTxn ltxOp(ltxTx);
@@ -1639,7 +1605,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 // if an error occurred, it is responsibility of account's
                 // owner to remove that signer
                 LedgerTxn ltxAfter(ltxTx);
-                removeOneTimeSignerFromAllSourceAccounts(ltxAfter, txResult);
+                removeOneTimeSignerFromAllSourceAccounts(ltxAfter);
                 changesAfter = ltxAfter.getChanges();
                 ltxAfter.commit();
             }

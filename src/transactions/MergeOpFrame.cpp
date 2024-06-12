@@ -20,9 +20,9 @@ using namespace soci;
 namespace stellar
 {
 
-MergeOpFrame::MergeOpFrame(Operation const& op, OperationResult& res,
+MergeOpFrame::MergeOpFrame(Operation const& op,
                            TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    : OperationFrame(op, parentTx)
 {
 }
 

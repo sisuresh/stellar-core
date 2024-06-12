@@ -25,7 +25,7 @@ class LiquidityPoolWithdrawOpFrame : public OperationFrame
                             int64_t minAmount, int64_t amount) const;
 
   public:
-    LiquidityPoolWithdrawOpFrame(Operation const& op, OperationResult& res,
+    LiquidityPoolWithdrawOpFrame(Operation const& op,
                                  TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

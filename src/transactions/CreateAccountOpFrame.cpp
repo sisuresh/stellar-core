@@ -26,9 +26,8 @@ namespace stellar
 using namespace std;
 
 CreateAccountOpFrame::CreateAccountOpFrame(Operation const& op,
-                                           OperationResult& res,
                                            TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    : OperationFrame(op, parentTx)
     , mCreateAccount(mOperation.body.createAccountOp())
 {
 }

@@ -23,7 +23,7 @@ class ClaimClaimableBalanceOpFrame : public OperationFrame
     ClaimClaimableBalanceOp const& mClaimClaimableBalance;
 
   public:
-    ClaimClaimableBalanceOpFrame(Operation const& op, OperationResult& res,
+    ClaimClaimableBalanceOpFrame(Operation const& op,
                                  TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

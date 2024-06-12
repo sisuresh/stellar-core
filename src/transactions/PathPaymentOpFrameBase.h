@@ -33,7 +33,7 @@ class PathPaymentOpFrameBase : public OperationFrame
                      OperationResult& res) const;
 
   public:
-    PathPaymentOpFrameBase(Operation const& op, OperationResult& res,
+    PathPaymentOpFrameBase(Operation const& op,
                            TransactionFrame const& parentTx);
 
     void

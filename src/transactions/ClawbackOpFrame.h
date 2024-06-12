@@ -22,8 +22,7 @@ class ClawbackOpFrame : public OperationFrame
     ClawbackOp const& mClawback;
 
   public:
-    ClawbackOpFrame(Operation const& op, OperationResult& res,
-                    TransactionFrame const& parentTx);
+    ClawbackOpFrame(Operation const& op, TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;
 

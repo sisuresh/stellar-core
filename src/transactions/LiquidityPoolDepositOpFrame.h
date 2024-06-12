@@ -38,7 +38,7 @@ class LiquidityPoolDepositOpFrame : public OperationFrame
     LiquidityPoolDepositOp const& mLiquidityPoolDeposit;
 
   public:
-    LiquidityPoolDepositOpFrame(Operation const& op, OperationResult& res,
+    LiquidityPoolDepositOpFrame(Operation const& op,
                                 TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

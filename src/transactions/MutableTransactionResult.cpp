@@ -15,23 +15,17 @@ namespace stellar
 MutableTransactionResult::MutableTransactionResult(TransactionFrame const& tx,
                                                    int64_t feeCharged)
 {
-    auto const& envelope = tx.getEnvelope();
-    auto const& ops = envelope.type() == ENVELOPE_TYPE_TX_V0
-                          ? envelope.v0().tx.operations
-                          : envelope.v1().tx.operations;
+    auto const& ops = tx.getOperations();
 
     // pre-allocates the results for all operations
     mTxResult.result.code(txSUCCESS);
     mTxResult.result.results().resize(static_cast<uint32_t>(ops.size()));
 
-    mOpFrames.clear();
-
-    // bind operations to the results
+    // Initialize op results to the correct op type
     for (size_t i = 0; i < ops.size(); i++)
     {
-        mOpFrames.push_back(
-            OperationFrame::makeHelper(ops[i], mTxResult.result.results()[i],
-                                       tx, static_cast<uint32_t>(i)));
+        auto const& opFrame = ops[i];
+        opFrame->resetResultSuccess(mTxResult.result.results()[i]);
     }
 
     mTxResult.feeCharged = feeCharged;
@@ -143,12 +137,6 @@ OperationResult&
 MutableTransactionResult::getOpResultAt(size_t index)
 {
     return mTxResult.result.results().at(index);
-}
-
-std::vector<std::shared_ptr<OperationFrame>> const&
-MutableTransactionResult::getOpFrames() const
-{
-    return mOpFrames;
 }
 
 xdr::xvector<DiagnosticEvent> const&
@@ -372,12 +360,6 @@ OperationResult&
 FeeBumpMutableTransactionResult::getOpResultAt(size_t index)
 {
     return mTxResult.result.results().at(index);
-}
-
-std::vector<std::shared_ptr<OperationFrame>> const&
-FeeBumpMutableTransactionResult::getOpFrames() const
-{
-    return mInnerResultPayload->getOpFrames();
 }
 
 xdr::xvector<DiagnosticEvent> const&

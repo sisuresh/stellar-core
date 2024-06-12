@@ -20,7 +20,7 @@ class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
     }
 
   public:
-    PathPaymentStrictSendOpFrame(Operation const& op, OperationResult& res,
+    PathPaymentStrictSendOpFrame(Operation const& op,
                                  TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;
