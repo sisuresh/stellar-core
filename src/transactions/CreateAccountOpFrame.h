@@ -14,9 +14,9 @@ class AbstractLedgerTxn;
 class CreateAccountOpFrame : public OperationFrame
 {
     CreateAccountResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().createAccountResult();
+        return res.tr().createAccountResult();
     }
     CreateAccountOp const& mCreateAccount;
 

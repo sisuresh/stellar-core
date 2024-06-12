@@ -17,9 +17,9 @@ class BumpSequenceOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     BumpSequenceResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().bumpSeqResult();
+        return res.tr().bumpSeqResult();
     }
     BumpSequenceOp const& mBumpSequenceOp;
 

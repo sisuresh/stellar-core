@@ -63,7 +63,7 @@ BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
     }
 
     // Return successful results
-    innerResult().code(BUMP_SEQUENCE_SUCCESS);
+    innerResult(res).code(BUMP_SEQUENCE_SUCCESS);
     return true;
 }
 
@@ -73,7 +73,7 @@ BumpSequenceOpFrame::doCheckValid(uint32_t ledgerVersion,
 {
     if (mBumpSequenceOp.bumpTo < 0)
     {
-        innerResult().code(BUMP_SEQUENCE_BAD_SEQ);
+        innerResult(res).code(BUMP_SEQUENCE_BAD_SEQ);
         return false;
     }
     return true;

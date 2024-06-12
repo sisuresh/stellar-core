@@ -109,7 +109,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 "operation byte-read resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
-            innerResult().code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -119,7 +119,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
         if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                          appConfig, mParentTx, txResult))
         {
-            innerResult().code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -130,7 +130,7 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 "operation byte-write resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerWriteByte),
                  makeU64SCVal(resources.writeBytes)});
-            innerResult().code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -163,10 +163,10 @@ RestoreFootprintOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             app.getLedgerManager().getSorobanNetworkConfig(), app.getConfig(),
             mParentTx))
     {
-        innerResult().code(RESTORE_FOOTPRINT_INSUFFICIENT_REFUNDABLE_FEE);
+        innerResult(res).code(RESTORE_FOOTPRINT_INSUFFICIENT_REFUNDABLE_FEE);
         return false;
     }
-    innerResult().code(RESTORE_FOOTPRINT_SUCCESS);
+    innerResult(res).code(RESTORE_FOOTPRINT_SUCCESS);
     return true;
 }
 
@@ -179,7 +179,7 @@ RestoreFootprintOpFrame::doCheckValid(
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readOnly.empty())
     {
-        innerResult().code(RESTORE_FOOTPRINT_MALFORMED);
+        innerResult(res).code(RESTORE_FOOTPRINT_MALFORMED);
         txResult.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-only footprint must be empty for RestoreFootprint operation",
@@ -191,7 +191,7 @@ RestoreFootprintOpFrame::doCheckValid(
     {
         if (!isPersistentEntry(lk))
         {
-            innerResult().code(RESTORE_FOOTPRINT_MALFORMED);
+            innerResult(res).code(RESTORE_FOOTPRINT_MALFORMED);
             txResult.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only persistent Soroban entries can be restored", {});

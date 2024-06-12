@@ -14,9 +14,9 @@ class AbstractLedgerTxn;
 class LiquidityPoolWithdrawOpFrame : public OperationFrame
 {
     LiquidityPoolWithdrawResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().liquidityPoolWithdrawResult();
+        return res.tr().liquidityPoolWithdrawResult();
     }
     LiquidityPoolWithdrawOp const& mLiquidityPoolWithdraw;
 

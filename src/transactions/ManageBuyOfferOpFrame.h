@@ -18,9 +18,9 @@ class ManageBuyOfferOpFrame : public ManageOfferOpFrameBase
     bool isOpSupported(LedgerHeader const& header) const override;
 
     ManageBuyOfferResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().manageBuyOfferResult();
+        return res.tr().manageBuyOfferResult();
     }
 
   public:
@@ -40,21 +40,22 @@ class ManageBuyOfferOpFrame : public ManageOfferOpFrameBase
     getExchangeParametersBeforeV10(int64_t& maxSheepSend,
                                    int64_t& maxWheatReceive) const override;
 
-    ManageOfferSuccessResult& getSuccessResult() const override;
+    ManageOfferSuccessResult&
+    getSuccessResult(OperationResult& res) const override;
 
-    void setResultSuccess() const override;
-    void setResultMalformed() const override;
-    void setResultSellNoTrust() const override;
-    void setResultBuyNoTrust() const override;
-    void setResultSellNotAuthorized() const override;
-    void setResultBuyNotAuthorized() const override;
-    void setResultLineFull() const override;
-    void setResultUnderfunded() const override;
-    void setResultCrossSelf() const override;
-    void setResultSellNoIssuer() const override;
-    void setResultBuyNoIssuer() const override;
-    void setResultNotFound() const override;
-    void setResultLowReserve() const override;
+    void setResultSuccess(OperationResult& res) const override;
+    void setResultMalformed(OperationResult& res) const override;
+    void setResultSellNoTrust(OperationResult& res) const override;
+    void setResultBuyNoTrust(OperationResult& res) const override;
+    void setResultSellNotAuthorized(OperationResult& res) const override;
+    void setResultBuyNotAuthorized(OperationResult& res) const override;
+    void setResultLineFull(OperationResult& res) const override;
+    void setResultUnderfunded(OperationResult& res) const override;
+    void setResultCrossSelf(OperationResult& res) const override;
+    void setResultSellNoIssuer(OperationResult& res) const override;
+    void setResultBuyNoIssuer(OperationResult& res) const override;
+    void setResultNotFound(OperationResult& res) const override;
+    void setResultLowReserve(OperationResult& res) const override;
 
     static ManageBuyOfferResultCode
     getInnerCode(OperationResult const& res)

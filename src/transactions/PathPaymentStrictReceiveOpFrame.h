@@ -14,9 +14,9 @@ class PathPaymentStrictReceiveOpFrame : public PathPaymentOpFrameBase
     PathPaymentStrictReceiveOp const& mPathPayment;
 
     PathPaymentStrictReceiveResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().pathPaymentStrictReceiveResult();
+        return res.tr().pathPaymentStrictReceiveResult();
     }
 
   public:
@@ -35,19 +35,20 @@ class PathPaymentStrictReceiveOpFrame : public PathPaymentOpFrameBase
     MuxedAccount const& getDestMuxedAccount() const override;
     xdr::xvector<Asset, 5> const& getPath() const override;
 
-    void setResultSuccess() const override;
-    void setResultMalformed() const override;
-    void setResultUnderfunded() const override;
-    void setResultSourceNoTrust() const override;
-    void setResultSourceNotAuthorized() const override;
-    void setResultNoDest() const override;
-    void setResultDestNoTrust() const override;
-    void setResultDestNotAuthorized() const override;
-    void setResultLineFull() const override;
-    void setResultNoIssuer(Asset const& asset) const override;
-    void setResultTooFewOffers() const override;
-    void setResultOfferCrossSelf() const override;
-    void setResultConstraintNotMet() const override;
+    void setResultSuccess(OperationResult& res) const override;
+    void setResultMalformed(OperationResult& res) const override;
+    void setResultUnderfunded(OperationResult& res) const override;
+    void setResultSourceNoTrust(OperationResult& res) const override;
+    void setResultSourceNotAuthorized(OperationResult& res) const override;
+    void setResultNoDest(OperationResult& res) const override;
+    void setResultDestNoTrust(OperationResult& res) const override;
+    void setResultDestNotAuthorized(OperationResult& res) const override;
+    void setResultLineFull(OperationResult& res) const override;
+    void setResultNoIssuer(Asset const& asset,
+                           OperationResult& res) const override;
+    void setResultTooFewOffers(OperationResult& res) const override;
+    void setResultOfferCrossSelf(OperationResult& res) const override;
+    void setResultConstraintNotMet(OperationResult& res) const override;
 
     static PathPaymentStrictReceiveResultCode
     getInnerCode(OperationResult const& res)

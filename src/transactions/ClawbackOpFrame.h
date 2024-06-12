@@ -14,9 +14,9 @@ class AbstractLedgerTxn;
 class ClawbackOpFrame : public OperationFrame
 {
     ClawbackResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().clawbackResult();
+        return res.tr().clawbackResult();
     }
 
     ClawbackOp const& mClawback;

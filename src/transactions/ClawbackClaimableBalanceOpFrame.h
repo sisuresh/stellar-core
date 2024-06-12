@@ -14,9 +14,9 @@ class AbstractLedgerTxn;
 class ClawbackClaimableBalanceOpFrame : public OperationFrame
 {
     ClawbackClaimableBalanceResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().clawbackClaimableBalanceResult();
+        return res.tr().clawbackClaimableBalanceResult();
     }
 
     ClawbackClaimableBalanceOp const& mClawbackClaimableBalance;
@@ -27,8 +27,7 @@ class ClawbackClaimableBalanceOpFrame : public OperationFrame
 
     bool isOpSupported(LedgerHeader const& header) const override;
 
-    bool doApply(AbstractLedgerTxn& ltx,
-                 OperationResult& res) const override;
+    bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doCheckValid(uint32_t ledgerVersion,
                       OperationResult& res) const override;
     void

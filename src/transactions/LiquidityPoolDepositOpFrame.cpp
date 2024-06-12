@@ -46,29 +46,29 @@ isBadPrice(int64_t amountA, int64_t amountB, Price const& minPrice,
 bool
 LiquidityPoolDepositOpFrame::depositIntoEmptyPool(
     int64_t& amountA, int64_t& amountB, int64_t& amountPoolShares,
-    int64_t availableA, int64_t availableB,
-    int64_t availableLimitPoolShares) const
+    int64_t availableA, int64_t availableB, int64_t availableLimitPoolShares,
+    OperationResult& res) const
 {
     amountA = mLiquidityPoolDeposit.maxAmountA;
     amountB = mLiquidityPoolDeposit.maxAmountB;
 
     if (availableA < amountA || availableB < amountB)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_UNDERFUNDED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_UNDERFUNDED);
         return false;
     }
 
     if (isBadPrice(amountA, amountB, mLiquidityPoolDeposit.minPrice,
                    mLiquidityPoolDeposit.maxPrice))
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_BAD_PRICE);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_BAD_PRICE);
         return false;
     }
 
     amountPoolShares = bigSquareRoot(amountA, amountB);
     if (availableLimitPoolShares < amountPoolShares)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_LINE_FULL);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_LINE_FULL);
         return false;
     }
 
@@ -101,7 +101,7 @@ bool
 LiquidityPoolDepositOpFrame::depositIntoNonEmptyPool(
     int64_t& amountA, int64_t& amountB, int64_t& amountPoolShares,
     int64_t availableA, int64_t availableB, int64_t availableLimitPoolShares,
-    LiquidityPoolConstantProduct const& cp) const
+    LiquidityPoolConstantProduct const& cp, OperationResult& res) const
 {
     int64_t sharesA = 0;
     int64_t sharesB = 0;
@@ -148,20 +148,20 @@ LiquidityPoolDepositOpFrame::depositIntoNonEmptyPool(
 
     if (availableA < amountA || availableB < amountB)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_UNDERFUNDED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_UNDERFUNDED);
         return false;
     }
 
     if (isBadPrice(amountA, amountB, mLiquidityPoolDeposit.minPrice,
                    mLiquidityPoolDeposit.maxPrice))
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_BAD_PRICE);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_BAD_PRICE);
         return false;
     }
 
     if (availableLimitPoolShares < amountPoolShares)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_LINE_FULL);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_LINE_FULL);
         return false;
     }
 
@@ -200,7 +200,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
                                          mLiquidityPoolDeposit.liquidityPoolID);
     if (!tlPool)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_NO_TRUST);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_NO_TRUST);
         return false;
     }
 
@@ -227,7 +227,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
     }
     if ((tlA && !tlA.isAuthorized()) || (tlB && !tlB.isAuthorized()))
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_NOT_AUTHORIZED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_NOT_AUTHORIZED);
         return false;
     }
 
@@ -261,7 +261,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
     {
         if (!depositIntoNonEmptyPool(amountA, amountB, amountPoolShares,
                                      availableA, availableB,
-                                     availableLimitPoolShares, cp()))
+                                     availableLimitPoolShares, cp(), res))
         {
             return false;
         }
@@ -270,7 +270,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
     {
         if (!depositIntoEmptyPool(amountA, amountB, amountPoolShares,
                                   availableA, availableB,
-                                  availableLimitPoolShares))
+                                  availableLimitPoolShares, res))
         {
             return false;
         }
@@ -280,7 +280,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
         INT64_MAX - amountB < cp().reserveB ||
         INT64_MAX - amountPoolShares < cp().totalPoolShares)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_POOL_FULL);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_POOL_FULL);
         return false;
     }
 
@@ -312,7 +312,7 @@ LiquidityPoolDepositOpFrame::doApply(AbstractLedgerTxn& ltx,
         throw std::runtime_error("insufficient liquidity pool limit");
     }
 
-    innerResult().code(LIQUIDITY_POOL_DEPOSIT_SUCCESS);
+    innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_SUCCESS);
     return true;
 }
 
@@ -323,21 +323,21 @@ LiquidityPoolDepositOpFrame::doCheckValid(uint32_t ledgerVersion,
     if (mLiquidityPoolDeposit.maxAmountA <= 0 ||
         mLiquidityPoolDeposit.maxAmountB <= 0)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
         return false;
     }
 
     if (mLiquidityPoolDeposit.minPrice.n <= 0 ||
         mLiquidityPoolDeposit.minPrice.d <= 0)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
         return false;
     }
 
     if (mLiquidityPoolDeposit.maxPrice.n <= 0 ||
         mLiquidityPoolDeposit.maxPrice.d <= 0)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
         return false;
     }
 
@@ -349,7 +349,7 @@ LiquidityPoolDepositOpFrame::doCheckValid(uint32_t ledgerVersion,
         (int64_t)mLiquidityPoolDeposit.minPrice.d *
             (int64_t)mLiquidityPoolDeposit.maxPrice.n)
     {
-        innerResult().code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
+        innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_MALFORMED);
         return false;
     }
 

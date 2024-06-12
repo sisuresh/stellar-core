@@ -133,7 +133,7 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
 
 OperationFrame::OperationFrame(Operation const& op, OperationResult& res,
                                TransactionFrame const& parentTx)
-    : mOperation(op), mParentTx(parentTx), mResult(res)
+    : mOperation(op), mParentTx(parentTx)
 {
     resetResultSuccess(res);
 }
@@ -222,12 +222,6 @@ OperationFrame::getSourceID() const
 {
     return mOperation.sourceAccount ? toAccountID(*mOperation.sourceAccount)
                                     : mParentTx.getSourceID();
-}
-
-OperationResultCode
-OperationFrame::getResultCode() const
-{
-    return mResult.code();
 }
 
 // called when determining if we should accept this operation.

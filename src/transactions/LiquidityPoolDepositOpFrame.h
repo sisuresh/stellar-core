@@ -17,21 +17,23 @@ typedef LiquidityPoolEntry::_body_t::_constantProduct_t
 class LiquidityPoolDepositOpFrame : public OperationFrame
 {
     LiquidityPoolDepositResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().liquidityPoolDepositResult();
+        return res.tr().liquidityPoolDepositResult();
     }
 
     bool depositIntoEmptyPool(int64_t& amountA, int64_t& amountB,
                               int64_t& amountPoolShares, int64_t availableA,
                               int64_t availableB,
-                              int64_t availableLimitPoolShares) const;
+                              int64_t availableLimitPoolShares,
+                              OperationResult& res) const;
 
     bool depositIntoNonEmptyPool(int64_t& amountA, int64_t& amountB,
                                  int64_t& amountPoolShares, int64_t availableA,
                                  int64_t availableB,
                                  int64_t availableLimitPoolShares,
-                                 LiquidityPoolConstantProduct const& cp) const;
+                                 LiquidityPoolConstantProduct const& cp,
+                                 OperationResult& res) const;
 
     LiquidityPoolDepositOp const& mLiquidityPoolDeposit;
 

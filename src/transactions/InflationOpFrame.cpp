@@ -39,7 +39,7 @@ InflationOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
     time_t inflationTime = (INFLATION_START_TIME + seq * INFLATION_FREQUENCY);
     if (closeTime < inflationTime)
     {
-        innerResult().code(INFLATION_NOT_TIME);
+        innerResult(res).code(INFLATION_NOT_TIME);
         return false;
     }
 
@@ -66,8 +66,8 @@ InflationOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
     lh.inflationSeq++;
 
     // now credit each account
-    innerResult().code(INFLATION_SUCCESS);
-    auto& payouts = innerResult().payouts();
+    innerResult(res).code(INFLATION_SUCCESS);
+    auto& payouts = innerResult(res).payouts();
 
     int64 leftAfterDole = amountToDole;
 

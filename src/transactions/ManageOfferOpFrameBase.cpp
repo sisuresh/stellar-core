@@ -31,7 +31,8 @@ ManageOfferOpFrameBase::ManageOfferOpFrameBase(
 }
 
 bool
-ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter) const
+ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter,
+                                        OperationResult& res) const
 {
     LedgerTxn ltx(ltxOuter); // ltx will always be rolled back
 
@@ -51,24 +52,24 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter) const
             auto issuer = stellar::loadAccount(ltx, getIssuer(mSheep));
             if (!issuer)
             {
-                setResultSellNoIssuer();
+                setResultSellNoIssuer(res);
                 return false;
             }
         }
         if (!sheepLineA)
         { // we don't have what we are trying to sell
-            setResultSellNoTrust();
+            setResultSellNoTrust(res);
             return false;
         }
         if (sheepLineA.getBalance() == 0)
         {
-            setResultUnderfunded();
+            setResultUnderfunded(res);
             return false;
         }
         if (!sheepLineA.isAuthorized())
         {
             // we are not authorized to sell
-            setResultSellNotAuthorized();
+            setResultSellNotAuthorized(res);
             return false;
         }
     }
@@ -82,19 +83,19 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter) const
             auto issuer = stellar::loadAccount(ltx, getIssuer(mWheat));
             if (!issuer)
             {
-                setResultBuyNoIssuer();
+                setResultBuyNoIssuer(res);
                 return false;
             }
         }
         if (!wheatLineA)
         { // we can't hold what we are trying to buy
-            setResultBuyNoTrust();
+            setResultBuyNoTrust(res);
             return false;
         }
         if (!wheatLineA.isAuthorized())
         { // we are not authorized to hold what we
             // are trying to buy
-            setResultBuyNotAuthorized();
+            setResultBuyNotAuthorized(res);
             return false;
         }
     }
@@ -129,10 +130,10 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
         case SponsorshipResult::SUCCESS:
             break;
         case SponsorshipResult::LOW_RESERVE:
-            setResultLowReserve();
+            setResultLowReserve(res);
             return false;
         case SponsorshipResult::TOO_MANY_SUBENTRIES:
-            mResult.code(opTOO_MANY_SUBENTRIES);
+            res.code(opTOO_MANY_SUBENTRIES);
             return false;
         default:
             // Includes of SponsorshipResult::TOO_MANY_SPONSORING
@@ -171,7 +172,7 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
                 : wheatLineA.getMaxAmountReceive(header);
         if (availableLimit < getOfferBuyingLiabilities())
         {
-            setResultLineFull();
+            setResultLineFull(res);
             return false;
         }
 
@@ -196,7 +197,7 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
                 : sheepLineA.getAvailableBalance(header);
         if (availableBalance < getOfferSellingLiabilities())
         {
-            setResultUnderfunded();
+            setResultUnderfunded(res);
             return false;
         }
 
@@ -221,7 +222,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
     ZoneTextV(applyZone, pairStr.c_str(), pairStr.size());
 
     LedgerTxn ltx(ltxOuter);
-    if (!checkOfferValid(ltx))
+    if (!checkOfferValid(ltx, res))
     {
         return false;
     }
@@ -237,7 +238,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
         auto sellSheepOffer = stellar::loadOffer(ltx, getSourceID(), mOfferID);
         if (!sellSheepOffer)
         {
-            setResultNotFound();
+            setResultNotFound(res);
             return false;
         }
 
@@ -293,13 +294,13 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
             case SponsorshipResult::SUCCESS:
                 break;
             case SponsorshipResult::LOW_RESERVE:
-                setResultLowReserve();
+                setResultLowReserve(res);
                 return false;
             case SponsorshipResult::TOO_MANY_SUBENTRIES:
-                mResult.code(opTOO_MANY_SUBENTRIES);
+                res.code(opTOO_MANY_SUBENTRIES);
                 return false;
             case SponsorshipResult::TOO_MANY_SPONSORING:
-                mResult.code(opTOO_MANY_SPONSORING);
+                res.code(opTOO_MANY_SPONSORING);
                 return false;
             case SponsorshipResult::TOO_MANY_SPONSORED:
                 // This is impossible right now because there is a limit on sub
@@ -313,7 +314,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
         }
     }
 
-    setResultSuccess();
+    setResultSuccess(res);
 
     if (!isDeleteOffer())
     {
@@ -328,7 +329,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
         // Make sure that we can actually receive something.
         if (maxWheatReceive == 0)
         {
-            setResultLineFull();
+            setResultLineFull(res);
             return false;
         }
 
@@ -378,10 +379,10 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
             sheepStays = true;
             break;
         case ConvertResult::eFilterStopCrossSelf:
-            setResultCrossSelf();
+            setResultCrossSelf(res);
             return false;
         case ConvertResult::eCrossedTooMany:
-            mResult.code(opEXCEEDED_WORK_LIMIT);
+            res.code(opEXCEEDED_WORK_LIMIT);
             return false;
         default:
             abort();
@@ -390,7 +391,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
         // updates the result with the offers that got taken on the way
         for (auto const& oatom : offerTrail)
         {
-            getSuccessResult().offersClaimed.push_back(oatom);
+            getSuccessResult(res).offersClaimed.push_back(oatom);
         }
 
         auto header = ltx.loadHeader();
@@ -484,10 +485,10 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
                 case SponsorshipResult::SUCCESS:
                     break;
                 case SponsorshipResult::LOW_RESERVE:
-                    setResultLowReserve();
+                    setResultLowReserve(res);
                     return false;
                 case SponsorshipResult::TOO_MANY_SUBENTRIES:
-                    mResult.code(opTOO_MANY_SUBENTRIES);
+                    res.code(opTOO_MANY_SUBENTRIES);
                     return false;
                 default:
                     // Includes of SponsorshipResult::TOO_MANY_SPONSORING
@@ -504,15 +505,15 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
             // nothing to do here.
 
             newOffer.data.offer().offerID = generateNewOfferID(header);
-            getSuccessResult().offer.effect(MANAGE_OFFER_CREATED);
+            getSuccessResult(res).offer.effect(MANAGE_OFFER_CREATED);
         }
         else
         {
-            getSuccessResult().offer.effect(MANAGE_OFFER_UPDATED);
+            getSuccessResult(res).offer.effect(MANAGE_OFFER_UPDATED);
         }
 
         auto sellSheepOffer = ltx.create(newOffer);
-        getSuccessResult().offer.offer() =
+        getSuccessResult(res).offer.offer() =
             sellSheepOffer.current().data.offer();
 
         if (protocolVersionStartsFrom(header.current().ledgerVersion,
@@ -523,7 +524,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter,
     }
     else
     {
-        getSuccessResult().offer.effect(MANAGE_OFFER_DELETED);
+        getSuccessResult(res).offer.effect(MANAGE_OFFER_DELETED);
 
         if (!creatingNewOffer ||
             protocolVersionStartsFrom(header.current().ledgerVersion,
@@ -578,18 +579,18 @@ ManageOfferOpFrameBase::doCheckValid(uint32_t ledgerVersion,
     if (!isAssetValid(mSheep, ledgerVersion) ||
         !isAssetValid(mWheat, ledgerVersion))
     {
-        setResultMalformed();
+        setResultMalformed(res);
         return false;
     }
     if (compareAsset(mSheep, mWheat))
     {
-        setResultMalformed();
+        setResultMalformed(res);
         return false;
     }
 
     if (!isAmountValid() || mPrice.d <= 0 || mPrice.n <= 0)
     {
-        setResultMalformed();
+        setResultMalformed(res);
         return false;
     }
 
@@ -597,12 +598,12 @@ ManageOfferOpFrameBase::doCheckValid(uint32_t ledgerVersion,
     {
         if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_11))
         {
-            setResultMalformed();
+            setResultMalformed(res);
             return false;
         }
         else if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_3))
         {
-            setResultNotFound();
+            setResultNotFound(res);
             return false;
         }
         // Note: This was not invalid before version 3
@@ -611,7 +612,7 @@ ManageOfferOpFrameBase::doCheckValid(uint32_t ledgerVersion,
     if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_15) &&
         mOfferID < 0)
     {
-        setResultMalformed();
+        setResultMalformed(res);
         return false;
     }
 

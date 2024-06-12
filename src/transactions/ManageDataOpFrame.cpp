@@ -60,13 +60,13 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
             case SponsorshipResult::SUCCESS:
                 break;
             case SponsorshipResult::LOW_RESERVE:
-                innerResult().code(MANAGE_DATA_LOW_RESERVE);
+                innerResult(res).code(MANAGE_DATA_LOW_RESERVE);
                 return false;
             case SponsorshipResult::TOO_MANY_SUBENTRIES:
-                mResult.code(opTOO_MANY_SUBENTRIES);
+                res.code(opTOO_MANY_SUBENTRIES);
                 return false;
             case SponsorshipResult::TOO_MANY_SPONSORING:
-                mResult.code(opTOO_MANY_SPONSORING);
+                res.code(opTOO_MANY_SPONSORING);
                 return false;
             case SponsorshipResult::TOO_MANY_SPONSORED:
                 // This is impossible right now because there is a limit on sub
@@ -86,7 +86,7 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
     { // delete an existing piece of data
         if (!data)
         {
-            innerResult().code(MANAGE_DATA_NAME_NOT_FOUND);
+            innerResult(res).code(MANAGE_DATA_NAME_NOT_FOUND);
             return false;
         }
 
@@ -96,7 +96,7 @@ ManageDataOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
         data.erase();
     }
 
-    innerResult().code(MANAGE_DATA_SUCCESS);
+    innerResult(res).code(MANAGE_DATA_SUCCESS);
     return true;
 }
 
@@ -106,14 +106,14 @@ ManageDataOpFrame::doCheckValid(uint32_t ledgerVersion,
 {
     if (protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_2))
     {
-        innerResult().code(MANAGE_DATA_NOT_SUPPORTED_YET);
+        innerResult(res).code(MANAGE_DATA_NOT_SUPPORTED_YET);
         return false;
     }
 
     if ((mManageData.dataName.size() < 1) ||
         (!isStringValid(mManageData.dataName)))
     {
-        innerResult().code(MANAGE_DATA_INVALID_NAME);
+        innerResult(res).code(MANAGE_DATA_INVALID_NAME);
         return false;
     }
 

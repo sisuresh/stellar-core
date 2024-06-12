@@ -20,9 +20,9 @@ static constexpr ContractDataDurability CONTRACT_INSTANCE_ENTRY_DURABILITY =
 class InvokeHostFunctionOpFrame : public OperationFrame
 {
     InvokeHostFunctionResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().invokeHostFunctionResult();
+        return res.tr().invokeHostFunctionResult();
     }
 
     void

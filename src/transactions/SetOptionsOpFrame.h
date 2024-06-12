@@ -14,9 +14,9 @@ class SetOptionsOpFrame : public OperationFrame
 {
     ThresholdLevel getThresholdLevel() const override;
     SetOptionsResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().setOptionsResult();
+        return res.tr().setOptionsResult();
     }
     SetOptionsOp const& mSetOptions;
 

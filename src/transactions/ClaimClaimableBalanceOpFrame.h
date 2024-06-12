@@ -15,9 +15,9 @@ class ClaimClaimableBalanceOpFrame : public OperationFrame
 {
     ThresholdLevel getThresholdLevel() const override;
     ClaimClaimableBalanceResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().claimClaimableBalanceResult();
+        return res.tr().claimClaimableBalanceResult();
     }
 
     ClaimClaimableBalanceOp const& mClaimClaimableBalance;

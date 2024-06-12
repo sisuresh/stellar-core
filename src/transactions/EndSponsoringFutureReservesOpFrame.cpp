@@ -35,7 +35,7 @@ EndSponsoringFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx,
     auto sponsorship = loadSponsorship(ltx, getSourceID());
     if (!sponsorship)
     {
-        innerResult().code(END_SPONSORING_FUTURE_RESERVES_NOT_SPONSORED);
+        innerResult(res).code(END_SPONSORING_FUTURE_RESERVES_NOT_SPONSORED);
         return false;
     }
 
@@ -61,7 +61,7 @@ EndSponsoringFutureReservesOpFrame::doApply(AbstractLedgerTxn& ltx,
     }
 
     sponsorship.erase();
-    innerResult().code(END_SPONSORING_FUTURE_RESERVES_SUCCESS);
+    innerResult(res).code(END_SPONSORING_FUTURE_RESERVES_SUCCESS);
     return true;
 }
 

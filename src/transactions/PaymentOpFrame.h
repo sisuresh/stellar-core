@@ -13,9 +13,9 @@ class AbstractLedgerTxn;
 class PaymentOpFrame : public OperationFrame
 {
     PaymentResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().paymentResult();
+        return res.tr().paymentResult();
     }
     PaymentOp const& mPayment;
 

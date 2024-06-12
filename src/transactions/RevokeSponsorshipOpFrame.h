@@ -15,26 +15,31 @@ class RevokeSponsorshipOpFrame : public OperationFrame
     bool isOpSupported(LedgerHeader const& header) const override;
 
     RevokeSponsorshipResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().revokeSponsorshipResult();
+        return res.tr().revokeSponsorshipResult();
     }
     RevokeSponsorshipOp const& mRevokeSponsorshipOp;
 
-    bool processSponsorshipResult(SponsorshipResult sr) const;
+    bool processSponsorshipResult(SponsorshipResult sr,
+                                  OperationResult& res) const;
 
-    bool updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx) const;
-    bool updateSignerSponsorship(AbstractLedgerTxn& ltx) const;
+    bool updateLedgerEntrySponsorship(AbstractLedgerTxn& ltx,
+                                      OperationResult& res) const;
+    bool updateSignerSponsorship(AbstractLedgerTxn& ltx,
+                                 OperationResult& res) const;
 
     bool tryRemoveEntrySponsorship(AbstractLedgerTxn& ltx,
                                    LedgerTxnHeader const& header,
                                    LedgerEntry& le, LedgerEntry& sponsoringAcc,
-                                   LedgerEntry& sponsoredAcc) const;
+                                   LedgerEntry& sponsoredAcc,
+                                   OperationResult& res) const;
     bool tryEstablishEntrySponsorship(AbstractLedgerTxn& ltx,
                                       LedgerTxnHeader const& header,
                                       LedgerEntry& le,
                                       LedgerEntry& sponsoringAcc,
-                                      LedgerEntry& sponsoredAcc) const;
+                                      LedgerEntry& sponsoredAcc,
+                                      OperationResult& res) const;
 
   public:
     RevokeSponsorshipOpFrame(Operation const& op, OperationResult& res,

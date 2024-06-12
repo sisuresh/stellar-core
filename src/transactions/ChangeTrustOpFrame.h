@@ -11,17 +11,18 @@ namespace stellar
 class ChangeTrustOpFrame : public OperationFrame
 {
     ChangeTrustResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().changeTrustResult();
+        return res.tr().changeTrustResult();
     }
     ChangeTrustOp const& mChangeTrust;
 
-    bool tryIncrementPoolUseCount(AbstractLedgerTxn& ltx,
-                                  Asset const& asset) const;
+    bool tryIncrementPoolUseCount(AbstractLedgerTxn& ltx, Asset const& asset,
+                                  OperationResult& res) const;
 
     bool tryManagePoolOnNewTrustLine(AbstractLedgerTxn& ltx,
-                                     TrustLineAsset const& tlAsset) const;
+                                     TrustLineAsset const& tlAsset,
+                                     OperationResult& res) const;
 
     void managePoolOnDeletedTrustLine(AbstractLedgerTxn& ltx,
                                       TrustLineAsset const& tlAsset) const;
