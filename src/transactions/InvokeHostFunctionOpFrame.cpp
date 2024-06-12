@@ -351,7 +351,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
     ttlEntryCxxBufs.reserve(footprintLength);
 
     auto addReads = [&ledgerEntryCxxBufs, &ttlEntryCxxBufs, &ltx, &metrics,
-                     &resources, &sorobanConfig, &appConfig, &txResult,
+                     &resources, &sorobanConfig, &appConfig, &txResult, &res,
                      this](auto const& keys) -> bool {
         for (auto const& lk : keys)
         {
@@ -394,7 +394,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                      lk.contractData().key});
                             }
                             // Cannot access an archived entry
-                            this->innerResult().code(
+                            this->innerResult(res).code(
                                 INVOKE_HOST_FUNCTION_ENTRY_ARCHIVED);
                             return false;
                         }
@@ -438,7 +438,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                              appConfig, mParentTx, txResult))
             {
-                this->innerResult().code(
+                this->innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
                 return false;
             }
@@ -451,7 +451,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                     {makeU64SCVal(metrics.mLedgerReadByte),
                      makeU64SCVal(resources.readBytes)});
 
-                this->innerResult().code(
+                this->innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
                 return false;
             }
@@ -528,7 +528,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 "operation instructions exceeds amount specified",
                 {makeU64SCVal(out.cpu_insns),
                  makeU64SCVal(resources.instructions)});
-            innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
         }
         else if (sorobanConfig.txMemoryLimit() < out.mem_bytes)
         {
@@ -537,11 +537,11 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 "operation memory usage exceeds network config limit",
                 {makeU64SCVal(out.mem_bytes),
                  makeU64SCVal(sorobanConfig.txMemoryLimit())});
-            innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
         }
         else
         {
-            innerResult().code(INVOKE_HOST_FUNCTION_TRAPPED);
+            innerResult(res).code(INVOKE_HOST_FUNCTION_TRAPPED);
         }
         return false;
     }
@@ -557,7 +557,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                          sorobanConfig, appConfig, mParentTx,
                                          txResult))
         {
-            innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -579,7 +579,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                     "operation byte-write resources exceeds amount specified",
                     {makeU64SCVal(metrics.mLedgerWriteByte),
                      makeU64SCVal(resources.writeBytes)});
-                innerResult().code(
+                innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
                 return false;
             }
@@ -654,7 +654,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 "total events size exceeds network config maximum",
                 {makeU64SCVal(metrics.mEmitEventByte),
                  makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
-            innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
         ContractEvent evt;
@@ -672,7 +672,7 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             "return value pushes events size above network config maximum",
             {makeU64SCVal(metrics.mEmitEventByte),
              makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
-        innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+        innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
         return false;
     }
 
@@ -681,13 +681,13 @@ InvokeHostFunctionOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
             ltx.loadHeader().current().ledgerVersion, sorobanConfig, appConfig,
             mParentTx))
     {
-        innerResult().code(INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
+        innerResult(res).code(INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
         return false;
     }
 
     xdr::xdr_from_opaque(out.result_value.data, success.returnValue);
-    innerResult().code(INVOKE_HOST_FUNCTION_SUCCESS);
-    innerResult().success() = xdrSha256(success);
+    innerResult(res).code(INVOKE_HOST_FUNCTION_SUCCESS);
+    innerResult(res).success() = xdrSha256(success);
 
     txResult.pushContractEvents(success.events);
     txResult.setReturnValue(success.returnValue);

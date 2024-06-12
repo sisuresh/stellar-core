@@ -65,6 +65,12 @@ TransactionTestFrame::getOperations() const
     return mTransactionResultPayload->getOpFrames();
 }
 
+OperationResult&
+TransactionTestFrame::getOperationResultAt(size_t i) const
+{
+    return mTransactionResultPayload->getOpResultAt(i);
+}
+
 void
 TransactionTestFrame::addSignature(SecretKey const& secretKey)
 {

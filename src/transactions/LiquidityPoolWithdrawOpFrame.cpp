@@ -38,14 +38,14 @@ LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
         ltx, getSourceID(), mLiquidityPoolWithdraw.liquidityPoolID);
     if (!tlPool)
     {
-        innerResult().code(LIQUIDITY_POOL_WITHDRAW_NO_TRUST);
+        innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_NO_TRUST);
         return false;
     }
 
     auto header = ltx.loadHeader();
     if (getAvailableBalance(header, tlPool) < mLiquidityPoolWithdraw.amount)
     {
-        innerResult().code(LIQUIDITY_POOL_WITHDRAW_UNDERFUNDED);
+        innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_UNDERFUNDED);
         return false;
     }
 
@@ -99,7 +99,7 @@ LiquidityPoolWithdrawOpFrame::doApply(AbstractLedgerTxn& ltx,
         throw std::runtime_error("insufficient reserveB");
     }
 
-    innerResult().code(LIQUIDITY_POOL_WITHDRAW_SUCCESS);
+    innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_SUCCESS);
     return true;
 }
 
@@ -111,7 +111,7 @@ LiquidityPoolWithdrawOpFrame::doCheckValid(uint32_t ledgerVersion,
         mLiquidityPoolWithdraw.minAmountA < 0 ||
         mLiquidityPoolWithdraw.minAmountB < 0)
     {
-        innerResult().code(LIQUIDITY_POOL_WITHDRAW_MALFORMED);
+        innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_MALFORMED);
         return false;
     }
     return true;
@@ -133,7 +133,7 @@ LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
 {
     if (amount < minAmount)
     {
-        innerResult().code(LIQUIDITY_POOL_WITHDRAW_UNDER_MINIMUM);
+        innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_UNDER_MINIMUM);
         return false;
     }
 
@@ -142,7 +142,7 @@ LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
         auto sourceAccount = loadSourceAccount(ltx, header);
         if (!addBalance(header, sourceAccount, amount))
         {
-            innerResult().code(LIQUIDITY_POOL_WITHDRAW_LINE_FULL);
+            innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_LINE_FULL);
             return false;
         }
     }
@@ -155,7 +155,7 @@ LiquidityPoolWithdrawOpFrame::tryAddAssetBalance(
         // liquidity pool pulled
         if (!trustline.addBalance(header, amount))
         {
-            innerResult().code(LIQUIDITY_POOL_WITHDRAW_LINE_FULL);
+            innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_LINE_FULL);
             return false;
         }
     }

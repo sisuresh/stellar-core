@@ -33,24 +33,24 @@ ClawbackOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
         ltx.load(trustlineKey(toAccountID(mClawback.from), mClawback.asset));
     if (!trust)
     {
-        innerResult().code(CLAWBACK_NO_TRUST);
+        innerResult(res).code(CLAWBACK_NO_TRUST);
         return false;
     }
 
     if (!isClawbackEnabledOnTrustline(trust))
     {
-        innerResult().code(CLAWBACK_NOT_CLAWBACK_ENABLED);
+        innerResult(res).code(CLAWBACK_NOT_CLAWBACK_ENABLED);
         return false;
     }
 
     auto header = ltx.loadHeader();
     if (!addBalanceSkipAuthorization(header, trust, -mClawback.amount))
     {
-        innerResult().code(CLAWBACK_UNDERFUNDED);
+        innerResult(res).code(CLAWBACK_UNDERFUNDED);
         return false;
     }
 
-    innerResult().code(CLAWBACK_SUCCESS);
+    innerResult(res).code(CLAWBACK_SUCCESS);
     return true;
 }
 
@@ -60,31 +60,31 @@ ClawbackOpFrame::doCheckValid(uint32_t ledgerVersion,
 {
     if (mClawback.from == toMuxedAccount(getSourceID()))
     {
-        innerResult().code(CLAWBACK_MALFORMED);
+        innerResult(res).code(CLAWBACK_MALFORMED);
         return false;
     }
 
     if (mClawback.amount < 1)
     {
-        innerResult().code(CLAWBACK_MALFORMED);
+        innerResult(res).code(CLAWBACK_MALFORMED);
         return false;
     }
 
     if (mClawback.asset.type() == ASSET_TYPE_NATIVE)
     {
-        innerResult().code(CLAWBACK_MALFORMED);
+        innerResult(res).code(CLAWBACK_MALFORMED);
         return false;
     }
 
     if (!isAssetValid(mClawback.asset, ledgerVersion))
     {
-        innerResult().code(CLAWBACK_MALFORMED);
+        innerResult(res).code(CLAWBACK_MALFORMED);
         return false;
     }
 
     if (!(getSourceID() == getIssuer(mClawback.asset)))
     {
-        innerResult().code(CLAWBACK_MALFORMED);
+        innerResult(res).code(CLAWBACK_MALFORMED);
         return false;
     }
 

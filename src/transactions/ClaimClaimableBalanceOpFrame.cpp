@@ -79,7 +79,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         stellar::loadClaimableBalance(ltx, mClaimClaimableBalance.balanceID);
     if (!claimableBalanceLtxEntry)
     {
-        innerResult().code(CLAIM_CLAIMABLE_BALANCE_DOES_NOT_EXIST);
+        innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_DOES_NOT_EXIST);
         return false;
     }
 
@@ -97,7 +97,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         !validatePredicate(it->v0().predicate,
                            header.current().scpValue.closeTime))
     {
-        innerResult().code(CLAIM_CLAIMABLE_BALANCE_CANNOT_CLAIM);
+        innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_CANNOT_CLAIM);
         return false;
     }
 
@@ -108,7 +108,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         auto sourceAccount = loadSourceAccount(ltx, header);
         if (!addBalance(header, sourceAccount, amount))
         {
-            innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
+            innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
             return false;
         }
     }
@@ -117,17 +117,17 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         auto trustline = loadTrustLine(ltx, getSourceID(), asset);
         if (!trustline)
         {
-            innerResult().code(CLAIM_CLAIMABLE_BALANCE_NO_TRUST);
+            innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_NO_TRUST);
             return false;
         }
         if (!trustline.isAuthorized())
         {
-            innerResult().code(CLAIM_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
+            innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
             return false;
         }
         if (!trustline.addBalance(header, amount))
         {
-            innerResult().code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
+            innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_LINE_FULL);
             return false;
         }
     }
@@ -138,7 +138,7 @@ ClaimClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 
     claimableBalanceLtxEntry.erase();
 
-    innerResult().code(CLAIM_CLAIMABLE_BALANCE_SUCCESS);
+    innerResult(res).code(CLAIM_CLAIMABLE_BALANCE_SUCCESS);
     return true;
 }
 

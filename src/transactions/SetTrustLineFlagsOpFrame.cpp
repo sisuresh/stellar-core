@@ -31,27 +31,27 @@ SetTrustLineFlagsOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultSelfNotAllowed() const
+SetTrustLineFlagsOpFrame::setResultSelfNotAllowed(OperationResult& res) const
 {
     throw std::runtime_error("Not implemented.");
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultNoTrustLine() const
+SetTrustLineFlagsOpFrame::setResultNoTrustLine(OperationResult& res) const
 {
-    innerResult().code(SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
+    innerResult(res).code(SET_TRUST_LINE_FLAGS_NO_TRUST_LINE);
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultLowReserve() const
+SetTrustLineFlagsOpFrame::setResultLowReserve(OperationResult& res) const
 {
-    innerResult().code(SET_TRUST_LINE_FLAGS_LOW_RESERVE);
+    innerResult(res).code(SET_TRUST_LINE_FLAGS_LOW_RESERVE);
 }
 
 void
-SetTrustLineFlagsOpFrame::setResultSuccess() const
+SetTrustLineFlagsOpFrame::setResultSuccess(OperationResult& res) const
 {
-    innerResult().code(SET_TRUST_LINE_FLAGS_SUCCESS);
+    innerResult(res).code(SET_TRUST_LINE_FLAGS_SUCCESS);
 }
 
 AccountID const&
@@ -74,7 +74,8 @@ SetTrustLineFlagsOpFrame::getOpIndex() const
 
 bool
 SetTrustLineFlagsOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
-                                                uint32_t& expectedVal) const
+                                                uint32_t& expectedVal,
+                                                OperationResult& res) const
 {
     expectedVal = trust.current().data.trustLine().flags;
     expectedVal &= ~mSetTrustLineFlags.clearFlags;
@@ -82,7 +83,7 @@ SetTrustLineFlagsOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
 
     if (!trustLineFlagAuthIsValid(expectedVal))
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_INVALID_STATE);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_INVALID_STATE);
         return false;
     }
     return true;
@@ -103,31 +104,31 @@ SetTrustLineFlagsOpFrame::doCheckValid(uint32_t ledgerVersion,
 {
     if (mSetTrustLineFlags.asset.type() == ASSET_TYPE_NATIVE)
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
     if (!isAssetValid(mSetTrustLineFlags.asset, ledgerVersion))
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
     if (!(getSourceID() == getIssuer(mSetTrustLineFlags.asset)))
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
     if (mSetTrustLineFlags.trustor == getSourceID())
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
     if ((mSetTrustLineFlags.setFlags & mSetTrustLineFlags.clearFlags) != 0)
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
@@ -136,14 +137,14 @@ SetTrustLineFlagsOpFrame::doCheckValid(uint32_t ledgerVersion,
     if (!trustLineFlagIsValid(mSetTrustLineFlags.setFlags, ledgerVersion) ||
         (mSetTrustLineFlags.setFlags & TRUSTLINE_CLAWBACK_ENABLED_FLAG) != 0)
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
     if (!trustLineFlagMaskCheckIsValid(mSetTrustLineFlags.clearFlags,
                                        ledgerVersion))
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_MALFORMED);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_MALFORMED);
         return false;
     }
 
@@ -204,14 +205,15 @@ SetTrustLineFlagsOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
 
     if (!isValid)
     {
-        innerResult().code(SET_TRUST_LINE_FLAGS_CANT_REVOKE);
+        innerResult(res).code(SET_TRUST_LINE_FLAGS_CANT_REVOKE);
     }
     return isValid;
 }
 
 bool
 SetTrustLineFlagsOpFrame::isRevocationToMaintainLiabilitiesValid(
-    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags) const
+    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags,
+    OperationResult& res) const
 {
     // This has already been checked in isAuthRevocationValid,
     // always return true here.

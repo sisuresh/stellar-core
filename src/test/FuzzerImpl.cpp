@@ -1046,10 +1046,14 @@ applySetupOperations(LedgerTxn& ltx, PublicKey const& sourceAccount,
             throw std::runtime_error(msg);
         }
 
-        for (auto const& opFrame : txFramePtr->getOperations())
+        auto const& ops = txFramePtr->getOperations();
+        for (size_t i = 0; i < ops.size(); ++i)
         {
+            auto const& opFrame = ops.at(i);
+            auto& opResult = txFramePtr->getResult().result.results().at(i);
+
             auto const& op = opFrame->getOperation();
-            auto const& tr = opFrame->getResult().tr();
+            auto const& tr = opResult.tr();
             auto const opType = op.body.type();
 
             if ((opType == MANAGE_BUY_OFFER &&

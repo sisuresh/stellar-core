@@ -14,9 +14,9 @@ class LedgerTxnHeader;
 class MergeOpFrame : public OperationFrame
 {
     AccountMergeResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().accountMergeResult();
+        return res.tr().accountMergeResult();
     }
 
     bool doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res) const;

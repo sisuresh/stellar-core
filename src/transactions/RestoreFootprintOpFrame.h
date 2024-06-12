@@ -15,9 +15,9 @@ class MutableTransactionResultBase;
 class RestoreFootprintOpFrame : public OperationFrame
 {
     RestoreFootprintResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().restoreFootprintResult();
+        return res.tr().restoreFootprintResult();
     }
 
     RestoreFootprintOp const& mRestoreFootprintOp;

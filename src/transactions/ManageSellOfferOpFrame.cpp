@@ -100,88 +100,87 @@ ManageSellOfferOpFrame::getExchangeParametersBeforeV10(
 }
 
 ManageOfferSuccessResult&
-ManageSellOfferOpFrame::getSuccessResult() const
+ManageSellOfferOpFrame::getSuccessResult(OperationResult& res) const
 {
-    return mResult.tr().manageSellOfferResult().success();
+    return res.tr().manageSellOfferResult().success();
 }
 
 void
-ManageSellOfferOpFrame::setResultSuccess() const
+ManageSellOfferOpFrame::setResultSuccess(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SUCCESS);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SUCCESS);
 }
 
 void
-ManageSellOfferOpFrame::setResultMalformed() const
+ManageSellOfferOpFrame::setResultMalformed(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_MALFORMED);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_MALFORMED);
 }
 
 void
-ManageSellOfferOpFrame::setResultSellNoTrust() const
+ManageSellOfferOpFrame::setResultSellNoTrust(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SELL_NO_TRUST);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SELL_NO_TRUST);
 }
 
 void
-ManageSellOfferOpFrame::setResultBuyNoTrust() const
+ManageSellOfferOpFrame::setResultBuyNoTrust(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_BUY_NO_TRUST);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_BUY_NO_TRUST);
 }
 
 void
-ManageSellOfferOpFrame::setResultSellNotAuthorized() const
+ManageSellOfferOpFrame::setResultSellNotAuthorized(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(
+    res.tr().manageSellOfferResult().code(
         MANAGE_SELL_OFFER_SELL_NOT_AUTHORIZED);
 }
 
 void
-ManageSellOfferOpFrame::setResultBuyNotAuthorized() const
+ManageSellOfferOpFrame::setResultBuyNotAuthorized(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(
-        MANAGE_SELL_OFFER_BUY_NOT_AUTHORIZED);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_BUY_NOT_AUTHORIZED);
 }
 
 void
-ManageSellOfferOpFrame::setResultLineFull() const
+ManageSellOfferOpFrame::setResultLineFull(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_LINE_FULL);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_LINE_FULL);
 }
 
 void
-ManageSellOfferOpFrame::setResultUnderfunded() const
+ManageSellOfferOpFrame::setResultUnderfunded(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_UNDERFUNDED);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_UNDERFUNDED);
 }
 
 void
-ManageSellOfferOpFrame::setResultCrossSelf() const
+ManageSellOfferOpFrame::setResultCrossSelf(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_CROSS_SELF);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_CROSS_SELF);
 }
 
 void
-ManageSellOfferOpFrame::setResultSellNoIssuer() const
+ManageSellOfferOpFrame::setResultSellNoIssuer(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SELL_NO_ISSUER);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_SELL_NO_ISSUER);
 }
 
 void
-ManageSellOfferOpFrame::setResultBuyNoIssuer() const
+ManageSellOfferOpFrame::setResultBuyNoIssuer(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_BUY_NO_ISSUER);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_BUY_NO_ISSUER);
 }
 
 void
-ManageSellOfferOpFrame::setResultNotFound() const
+ManageSellOfferOpFrame::setResultNotFound(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_NOT_FOUND);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_NOT_FOUND);
 }
 
 void
-ManageSellOfferOpFrame::setResultLowReserve() const
+ManageSellOfferOpFrame::setResultLowReserve(OperationResult& res) const
 {
-    mResult.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_LOW_RESERVE);
+    res.tr().manageSellOfferResult().code(MANAGE_SELL_OFFER_LOW_RESERVE);
 }
 }

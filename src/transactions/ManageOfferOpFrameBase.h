@@ -20,7 +20,8 @@ class ManageOfferOpFrameBase : public OperationFrame
 
     bool const mSetPassiveOnCreate;
 
-    bool checkOfferValid(AbstractLedgerTxn& lsOuter) const;
+    bool checkOfferValid(AbstractLedgerTxn& ltxOuter,
+                         OperationResult& res) const;
 
     bool computeOfferExchangeParameters(AbstractLedgerTxn& ltxOuter,
                                         OperationResult& res,
@@ -64,20 +65,21 @@ class ManageOfferOpFrameBase : public OperationFrame
     getExchangeParametersBeforeV10(int64_t& maxSheepSend,
                                    int64_t& maxWheatReceive) const = 0;
 
-    virtual ManageOfferSuccessResult& getSuccessResult() const = 0;
+    virtual ManageOfferSuccessResult&
+    getSuccessResult(OperationResult& res) const = 0;
 
-    virtual void setResultSuccess() const = 0;
-    virtual void setResultMalformed() const = 0;
-    virtual void setResultSellNoTrust() const = 0;
-    virtual void setResultBuyNoTrust() const = 0;
-    virtual void setResultSellNotAuthorized() const = 0;
-    virtual void setResultBuyNotAuthorized() const = 0;
-    virtual void setResultLineFull() const = 0;
-    virtual void setResultUnderfunded() const = 0;
-    virtual void setResultCrossSelf() const = 0;
-    virtual void setResultSellNoIssuer() const = 0;
-    virtual void setResultBuyNoIssuer() const = 0;
-    virtual void setResultNotFound() const = 0;
-    virtual void setResultLowReserve() const = 0;
+    virtual void setResultSuccess(OperationResult& res) const = 0;
+    virtual void setResultMalformed(OperationResult& res) const = 0;
+    virtual void setResultSellNoTrust(OperationResult& res) const = 0;
+    virtual void setResultBuyNoTrust(OperationResult& res) const = 0;
+    virtual void setResultSellNotAuthorized(OperationResult& res) const = 0;
+    virtual void setResultBuyNotAuthorized(OperationResult& res) const = 0;
+    virtual void setResultLineFull(OperationResult& res) const = 0;
+    virtual void setResultUnderfunded(OperationResult& res) const = 0;
+    virtual void setResultCrossSelf(OperationResult& res) const = 0;
+    virtual void setResultSellNoIssuer(OperationResult& res) const = 0;
+    virtual void setResultBuyNoIssuer(OperationResult& res) const = 0;
+    virtual void setResultNotFound(OperationResult& res) const = 0;
+    virtual void setResultLowReserve(OperationResult& res) const = 0;
 };
 }

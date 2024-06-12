@@ -36,7 +36,7 @@ ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         stellar::loadClaimableBalance(ltx, mClawbackClaimableBalance.balanceID);
     if (!claimableBalanceLtxEntry)
     {
-        innerResult().code(CLAWBACK_CLAIMABLE_BALANCE_DOES_NOT_EXIST);
+        innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_DOES_NOT_EXIST);
         return false;
     }
 
@@ -47,20 +47,20 @@ ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 
     if (asset().type() == ASSET_TYPE_NATIVE)
     {
-        innerResult().code(CLAWBACK_CLAIMABLE_BALANCE_NOT_ISSUER);
+        innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_NOT_ISSUER);
         return false;
     }
 
     if (!(getSourceID() == getIssuer(asset())))
     {
-        innerResult().code(CLAWBACK_CLAIMABLE_BALANCE_NOT_ISSUER);
+        innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_NOT_ISSUER);
         return false;
     }
 
     if (!isClawbackEnabledOnClaimableBalance(
             claimableBalanceLtxEntry.current()))
     {
-        innerResult().code(CLAWBACK_CLAIMABLE_BALANCE_NOT_CLAWBACK_ENABLED);
+        innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_NOT_CLAWBACK_ENABLED);
         return false;
     }
 
@@ -71,7 +71,7 @@ ClawbackClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 
     claimableBalanceLtxEntry.erase();
 
-    innerResult().code(CLAWBACK_CLAIMABLE_BALANCE_SUCCESS);
+    innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_SUCCESS);
     return true;
 }
 

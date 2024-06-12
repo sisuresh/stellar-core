@@ -14,9 +14,9 @@ class ManageDataOpFrame : public OperationFrame
 {
 
     ManageDataResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().manageDataResult();
+        return res.tr().manageDataResult();
     }
 
     ManageDataOp const& mManageData;

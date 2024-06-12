@@ -13,9 +13,9 @@ class AbstractLedgerTxn;
 class InflationOpFrame : public OperationFrame
 {
     InflationResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().inflationResult();
+        return res.tr().inflationResult();
     }
 
     ThresholdLevel getThresholdLevel() const override;

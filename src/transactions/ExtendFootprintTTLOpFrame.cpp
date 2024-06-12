@@ -115,7 +115,7 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
         if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                          app.getConfig(), mParentTx, txResult))
         {
-            innerResult().code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -127,7 +127,7 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
 
-            innerResult().code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
             return false;
         }
 
@@ -154,10 +154,10 @@ ExtendFootprintTTLOpFrame::doApply(Application& app, AbstractLedgerTxn& ltx,
                                                     sorobanConfig,
                                                     app.getConfig(), mParentTx))
     {
-        innerResult().code(EXTEND_FOOTPRINT_TTL_INSUFFICIENT_REFUNDABLE_FEE);
+        innerResult(res).code(EXTEND_FOOTPRINT_TTL_INSUFFICIENT_REFUNDABLE_FEE);
         return false;
     }
-    innerResult().code(EXTEND_FOOTPRINT_TTL_SUCCESS);
+    innerResult(res).code(EXTEND_FOOTPRINT_TTL_SUCCESS);
     return true;
 }
 
@@ -170,7 +170,7 @@ ExtendFootprintTTLOpFrame::doCheckValid(
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readWrite.empty())
     {
-        innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
+        innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
         txResult.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-write footprint must be empty for ExtendFootprintTTL "
@@ -183,7 +183,7 @@ ExtendFootprintTTLOpFrame::doCheckValid(
     {
         if (!isSorobanEntry(lk))
         {
-            innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
+            innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
             txResult.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only entries with TTL (contract data or code entries) can "
@@ -196,7 +196,7 @@ ExtendFootprintTTLOpFrame::doCheckValid(
     if (mExtendFootprintTTLOp.extendTo >
         networkConfig.stateArchivalSettings().maxEntryTTL - 1)
     {
-        innerResult().code(EXTEND_FOOTPRINT_TTL_MALFORMED);
+        innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
         txResult.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "TTL extension is too large: {} > {}",

@@ -28,27 +28,27 @@ AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op, OperationResult& res,
 }
 
 void
-AllowTrustOpFrame::setResultSelfNotAllowed() const
+AllowTrustOpFrame::setResultSelfNotAllowed(OperationResult& res) const
 {
-    innerResult().code(ALLOW_TRUST_SELF_NOT_ALLOWED);
+    innerResult(res).code(ALLOW_TRUST_SELF_NOT_ALLOWED);
 }
 
 void
-AllowTrustOpFrame::setResultNoTrustLine() const
+AllowTrustOpFrame::setResultNoTrustLine(OperationResult& res) const
 {
-    innerResult().code(ALLOW_TRUST_NO_TRUST_LINE);
+    innerResult(res).code(ALLOW_TRUST_NO_TRUST_LINE);
 }
 
 void
-AllowTrustOpFrame::setResultLowReserve() const
+AllowTrustOpFrame::setResultLowReserve(OperationResult& res) const
 {
-    innerResult().code(ALLOW_TRUST_LOW_RESERVE);
+    innerResult(res).code(ALLOW_TRUST_LOW_RESERVE);
 }
 
 void
-AllowTrustOpFrame::setResultSuccess() const
+AllowTrustOpFrame::setResultSuccess(OperationResult& res) const
 {
-    innerResult().code(ALLOW_TRUST_SUCCESS);
+    innerResult(res).code(ALLOW_TRUST_SUCCESS);
 }
 
 AccountID const&
@@ -71,7 +71,8 @@ AllowTrustOpFrame::getOpIndex() const
 
 bool
 AllowTrustOpFrame::calcExpectedFlagValue(LedgerTxnEntry const& trust,
-                                         uint32_t& expectedVal) const
+                                         uint32_t& expectedVal,
+                                         OperationResult& res) const
 {
     expectedVal = trust.current().data.trustLine().flags;
     expectedVal &= ~TRUSTLINE_AUTH_FLAGS;
@@ -115,7 +116,7 @@ AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
                                 ProtocolVersion::V_16) &&
         !(sourceAccount.flags & AUTH_REQUIRED_FLAG))
     {
-        innerResult().code(ALLOW_TRUST_TRUST_NOT_REQUIRED);
+        innerResult(res).code(ALLOW_TRUST_TRUST_NOT_REQUIRED);
         return false;
     }
 
@@ -123,7 +124,7 @@ AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
     authRevocable = sourceAccount.flags & AUTH_REVOCABLE_FLAG;
     if (!authRevocable && mAllowTrust.authorize == 0)
     {
-        innerResult().code(ALLOW_TRUST_CANT_REVOKE);
+        innerResult(res).code(ALLOW_TRUST_CANT_REVOKE);
         return false;
     }
 
@@ -132,7 +133,8 @@ AllowTrustOpFrame::isAuthRevocationValid(AbstractLedgerTxn& ltx,
 
 bool
 AllowTrustOpFrame::isRevocationToMaintainLiabilitiesValid(
-    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags) const
+    bool authRevocable, LedgerTxnEntry const& trust, uint32_t flags,
+    OperationResult& res) const
 {
     // There are two cases where we set the result to
     // ALLOW_TRUST_CANT_REVOKE -
@@ -144,7 +146,7 @@ AllowTrustOpFrame::isRevocationToMaintainLiabilitiesValid(
     if (!authRevocable && (isAuthorized(trust) &&
                            (flags & AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG)))
     {
-        innerResult().code(ALLOW_TRUST_CANT_REVOKE);
+        innerResult(res).code(ALLOW_TRUST_CANT_REVOKE);
         return false;
     }
     return true;
@@ -156,32 +158,32 @@ AllowTrustOpFrame::doCheckValid(uint32_t ledgerVersion,
 {
     if (mAllowTrust.asset.type() == ASSET_TYPE_NATIVE)
     {
-        innerResult().code(ALLOW_TRUST_MALFORMED);
+        innerResult(res).code(ALLOW_TRUST_MALFORMED);
         return false;
     }
 
     if (mAllowTrust.authorize > AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG)
     {
-        innerResult().code(ALLOW_TRUST_MALFORMED);
+        innerResult(res).code(ALLOW_TRUST_MALFORMED);
         return false;
     }
 
     if (!trustLineFlagIsValid(mAllowTrust.authorize, ledgerVersion))
     {
-        innerResult().code(ALLOW_TRUST_MALFORMED);
+        innerResult(res).code(ALLOW_TRUST_MALFORMED);
         return false;
     }
 
     if (!isAssetValid(mAsset, ledgerVersion))
     {
-        innerResult().code(ALLOW_TRUST_MALFORMED);
+        innerResult(res).code(ALLOW_TRUST_MALFORMED);
         return false;
     }
 
     if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_16) &&
         mAllowTrust.trustor == getSourceID())
     {
-        innerResult().code(ALLOW_TRUST_MALFORMED);
+        innerResult(res).code(ALLOW_TRUST_MALFORMED);
         return false;
     }
 

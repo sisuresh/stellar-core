@@ -16,9 +16,9 @@ class CreateClaimableBalanceOpFrame : public OperationFrame
     virtual Hash getBalanceID() const;
 
     CreateClaimableBalanceResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().createClaimableBalanceResult();
+        return res.tr().createClaimableBalanceResult();
     }
     CreateClaimableBalanceOp const& mCreateClaimableBalance;
 

@@ -86,88 +86,86 @@ ManageBuyOfferOpFrame::getExchangeParametersBeforeV10(
 }
 
 ManageOfferSuccessResult&
-ManageBuyOfferOpFrame::getSuccessResult() const
+ManageBuyOfferOpFrame::getSuccessResult(OperationResult& res) const
 {
-    return mResult.tr().manageBuyOfferResult().success();
+    return res.tr().manageBuyOfferResult().success();
 }
 
 void
-ManageBuyOfferOpFrame::setResultSuccess() const
+ManageBuyOfferOpFrame::setResultSuccess(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SUCCESS);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SUCCESS);
 }
 
 void
-ManageBuyOfferOpFrame::setResultMalformed() const
+ManageBuyOfferOpFrame::setResultMalformed(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_MALFORMED);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_MALFORMED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNoTrust() const
+ManageBuyOfferOpFrame::setResultSellNoTrust(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_TRUST);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_TRUST);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNoTrust() const
+ManageBuyOfferOpFrame::setResultBuyNoTrust(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_TRUST);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_TRUST);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNotAuthorized() const
+ManageBuyOfferOpFrame::setResultSellNotAuthorized(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(
-        MANAGE_BUY_OFFER_SELL_NOT_AUTHORIZED);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NOT_AUTHORIZED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNotAuthorized() const
+ManageBuyOfferOpFrame::setResultBuyNotAuthorized(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(
-        MANAGE_BUY_OFFER_BUY_NOT_AUTHORIZED);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NOT_AUTHORIZED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultLineFull() const
+ManageBuyOfferOpFrame::setResultLineFull(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LINE_FULL);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LINE_FULL);
 }
 
 void
-ManageBuyOfferOpFrame::setResultUnderfunded() const
+ManageBuyOfferOpFrame::setResultUnderfunded(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_UNDERFUNDED);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_UNDERFUNDED);
 }
 
 void
-ManageBuyOfferOpFrame::setResultCrossSelf() const
+ManageBuyOfferOpFrame::setResultCrossSelf(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_CROSS_SELF);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_CROSS_SELF);
 }
 
 void
-ManageBuyOfferOpFrame::setResultSellNoIssuer() const
+ManageBuyOfferOpFrame::setResultSellNoIssuer(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_ISSUER);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_SELL_NO_ISSUER);
 }
 
 void
-ManageBuyOfferOpFrame::setResultBuyNoIssuer() const
+ManageBuyOfferOpFrame::setResultBuyNoIssuer(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_ISSUER);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_BUY_NO_ISSUER);
 }
 
 void
-ManageBuyOfferOpFrame::setResultNotFound() const
+ManageBuyOfferOpFrame::setResultNotFound(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_NOT_FOUND);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_NOT_FOUND);
 }
 
 void
-ManageBuyOfferOpFrame::setResultLowReserve() const
+ManageBuyOfferOpFrame::setResultLowReserve(OperationResult& res) const
 {
-    mResult.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LOW_RESERVE);
+    res.tr().manageBuyOfferResult().code(MANAGE_BUY_OFFER_LOW_RESERVE);
 }
 }

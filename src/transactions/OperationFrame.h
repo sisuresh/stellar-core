@@ -41,9 +41,6 @@ class OperationFrame
     Operation const& mOperation;
     TransactionFrame const& mParentTx;
 
-    // TODO: Remove
-    OperationResult& mResult;
-
     // TODO: replace MutableTransactionResultBase with Soroban diagnostic state
     virtual bool doCheckValid(SorobanNetworkConfig const& networkConfig,
                               Config const& appConfig, uint32_t ledgerVersion,
@@ -87,13 +84,6 @@ class OperationFrame
                         bool forApply) const;
 
     AccountID getSourceID() const;
-
-    OperationResult&
-    getResult() const
-    {
-        return mResult;
-    }
-    OperationResultCode getResultCode() const;
 
     bool checkValid(Application& app, SignatureChecker& signatureChecker,
                     AbstractLedgerTxn& ltxOuter, bool forApply,

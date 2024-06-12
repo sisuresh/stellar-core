@@ -165,7 +165,7 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     {
         if (getAvailableBalance(header, sourceAccount) < amount)
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
             return false;
         }
 
@@ -177,18 +177,18 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
         auto trustline = loadTrustLine(ltx, getSourceID(), asset);
         if (!trustline)
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
             return false;
         }
         if (!trustline.isAuthorized())
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
             return false;
         }
 
         if (!trustline.addBalance(header, -amount))
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
             return false;
         }
 
@@ -230,10 +230,10 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
     case SponsorshipResult::SUCCESS:
         break;
     case SponsorshipResult::LOW_RESERVE:
-        innerResult().code(CREATE_CLAIMABLE_BALANCE_LOW_RESERVE);
+        innerResult(res).code(CREATE_CLAIMABLE_BALANCE_LOW_RESERVE);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORING:
-        mResult.code(opTOO_MANY_SPONSORING);
+        res.code(opTOO_MANY_SPONSORING);
         return false;
     case SponsorshipResult::TOO_MANY_SPONSORED:
         // This is impossible because there's no sponsored account. Fall through
@@ -248,8 +248,8 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx,
 
     ltx.create(newClaimableBalance);
 
-    innerResult().code(CREATE_CLAIMABLE_BALANCE_SUCCESS);
-    innerResult().balanceID() = claimableBalanceEntry.balanceID;
+    innerResult(res).code(CREATE_CLAIMABLE_BALANCE_SUCCESS);
+    innerResult(res).balanceID() = claimableBalanceEntry.balanceID;
     return true;
 }
 
@@ -262,7 +262,7 @@ CreateClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
     if (!isAssetValid(mCreateClaimableBalance.asset, ledgerVersion) ||
         mCreateClaimableBalance.amount <= 0 || claimants.empty())
     {
-        innerResult().code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
+        innerResult(res).code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
         return false;
     }
 
@@ -273,7 +273,7 @@ CreateClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
         auto const& dest = claimant.v0().destination;
         if (!dests.emplace(dest).second)
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
             return false;
         }
     }
@@ -282,7 +282,7 @@ CreateClaimableBalanceOpFrame::doCheckValid(uint32_t ledgerVersion,
     {
         if (!validatePredicate(claimant.v0().predicate, 1))
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
+            innerResult(res).code(CREATE_CLAIMABLE_BALANCE_MALFORMED);
             return false;
         }
     }

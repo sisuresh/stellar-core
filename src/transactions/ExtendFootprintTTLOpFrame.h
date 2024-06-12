@@ -15,9 +15,9 @@ class MutableTransactionResultBase;
 class ExtendFootprintTTLOpFrame : public OperationFrame
 {
     ExtendFootprintTTLResult&
-    innerResult() const
+    innerResult(OperationResult& res) const
     {
-        return mResult.tr().extendFootprintTTLResult();
+        return res.tr().extendFootprintTTLResult();
     }
 
     ExtendFootprintTTLOp const& mExtendFootprintTTLOp;
