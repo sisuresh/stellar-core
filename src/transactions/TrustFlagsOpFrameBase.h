@@ -36,7 +36,7 @@ class TrustFlagsOpFrameBase : public OperationFrame
     ThresholdLevel getThresholdLevel() const override;
 
   public:
-    TrustFlagsOpFrameBase(Operation const& op, OperationResult& res,
+    TrustFlagsOpFrameBase(Operation const& op,
                           TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;

@@ -21,8 +21,7 @@ class InflationOpFrame : public OperationFrame
     ThresholdLevel getThresholdLevel() const override;
 
   public:
-    InflationOpFrame(Operation const& op, OperationResult& res,
-                     TransactionFrame const& parentTx);
+    InflationOpFrame(Operation const& op, TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doCheckValid(uint32_t ledgerVersion,

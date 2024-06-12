@@ -18,9 +18,9 @@ namespace stellar
 
 using namespace std;
 
-PaymentOpFrame::PaymentOpFrame(Operation const& op, OperationResult& res,
+PaymentOpFrame::PaymentOpFrame(Operation const& op,
                                TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx), mPayment(mOperation.body.paymentOp())
+    : OperationFrame(op, parentTx), mPayment(mOperation.body.paymentOp())
 {
 }
 
@@ -63,7 +63,7 @@ PaymentOpFrame::doApply(AbstractLedgerTxn& ltx, OperationResult& res) const
     OperationResult ppRes;
     ppRes.code(opINNER);
     ppRes.tr().type(PATH_PAYMENT_STRICT_RECEIVE);
-    PathPaymentStrictReceiveOpFrame ppayment(op, ppRes, mParentTx);
+    PathPaymentStrictReceiveOpFrame ppayment(op, mParentTx);
 
     if (!ppayment.doCheckValid(ledgerVersion, ppRes) ||
         !ppayment.doApply(ltx, ppRes))

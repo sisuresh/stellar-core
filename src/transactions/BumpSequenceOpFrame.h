@@ -24,8 +24,7 @@ class BumpSequenceOpFrame : public OperationFrame
     BumpSequenceOp const& mBumpSequenceOp;
 
   public:
-    BumpSequenceOpFrame(Operation const& op, OperationResult& res,
-                        TransactionFrame const& parentTx);
+    BumpSequenceOpFrame(Operation const& op, TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doCheckValid(uint32_t ledgerVersion,

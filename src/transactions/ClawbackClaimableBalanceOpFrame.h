@@ -22,7 +22,7 @@ class ClawbackClaimableBalanceOpFrame : public OperationFrame
     ClawbackClaimableBalanceOp const& mClawbackClaimableBalance;
 
   public:
-    ClawbackClaimableBalanceOpFrame(Operation const& op, OperationResult& res,
+    ClawbackClaimableBalanceOpFrame(Operation const& op,
                                     TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

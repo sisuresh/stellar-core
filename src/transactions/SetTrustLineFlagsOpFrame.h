@@ -45,7 +45,7 @@ class SetTrustLineFlagsOpFrame : public TrustFlagsOpFrameBase
                       uint32_t flagVal) const override;
 
   public:
-    SetTrustLineFlagsOpFrame(Operation const& op, OperationResult& res,
+    SetTrustLineFlagsOpFrame(Operation const& op,
                              TransactionFrame const& parentTx, uint32_t index);
 
     bool isOpSupported(LedgerHeader const& header) const override;

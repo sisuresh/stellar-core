@@ -34,7 +34,7 @@ class InvokeHostFunctionOpFrame : public OperationFrame
     InvokeHostFunctionOp const& mInvokeHostFunction;
 
   public:
-    InvokeHostFunctionOpFrame(Operation const& op, OperationResult& res,
+    InvokeHostFunctionOpFrame(Operation const& op,
                               TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

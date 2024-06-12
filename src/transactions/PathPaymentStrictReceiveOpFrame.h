@@ -20,7 +20,7 @@ class PathPaymentStrictReceiveOpFrame : public PathPaymentOpFrameBase
     }
 
   public:
-    PathPaymentStrictReceiveOpFrame(Operation const& op, OperationResult& res,
+    PathPaymentStrictReceiveOpFrame(Operation const& op,
                                     TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;

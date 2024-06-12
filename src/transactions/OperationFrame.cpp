@@ -62,68 +62,65 @@ getNeededThreshold(LedgerTxnEntry const& account, ThresholdLevel const level)
 }
 
 shared_ptr<OperationFrame>
-OperationFrame::makeHelper(Operation const& op, OperationResult& res,
-                           TransactionFrame const& tx, uint32_t index)
+OperationFrame::makeHelper(Operation const& op, TransactionFrame const& tx,
+                           uint32_t index)
 {
     switch (op.body.type())
     {
     case CREATE_ACCOUNT:
-        return std::make_shared<CreateAccountOpFrame>(op, res, tx);
+        return std::make_shared<CreateAccountOpFrame>(op, tx);
     case PAYMENT:
-        return std::make_shared<PaymentOpFrame>(op, res, tx);
+        return std::make_shared<PaymentOpFrame>(op, tx);
     case PATH_PAYMENT_STRICT_RECEIVE:
-        return std::make_shared<PathPaymentStrictReceiveOpFrame>(op, res, tx);
+        return std::make_shared<PathPaymentStrictReceiveOpFrame>(op, tx);
     case MANAGE_SELL_OFFER:
-        return std::make_shared<ManageSellOfferOpFrame>(op, res, tx);
+        return std::make_shared<ManageSellOfferOpFrame>(op, tx);
     case CREATE_PASSIVE_SELL_OFFER:
-        return std::make_shared<CreatePassiveSellOfferOpFrame>(op, res, tx);
+        return std::make_shared<CreatePassiveSellOfferOpFrame>(op, tx);
     case SET_OPTIONS:
-        return std::make_shared<SetOptionsOpFrame>(op, res, tx);
+        return std::make_shared<SetOptionsOpFrame>(op, tx);
     case CHANGE_TRUST:
-        return std::make_shared<ChangeTrustOpFrame>(op, res, tx);
+        return std::make_shared<ChangeTrustOpFrame>(op, tx);
     case ALLOW_TRUST:
-        return std::make_shared<AllowTrustOpFrame>(op, res, tx, index);
+        return std::make_shared<AllowTrustOpFrame>(op, tx, index);
     case ACCOUNT_MERGE:
-        return std::make_shared<MergeOpFrame>(op, res, tx);
+        return std::make_shared<MergeOpFrame>(op, tx);
     case INFLATION:
-        return std::make_shared<InflationOpFrame>(op, res, tx);
+        return std::make_shared<InflationOpFrame>(op, tx);
     case MANAGE_DATA:
-        return std::make_shared<ManageDataOpFrame>(op, res, tx);
+        return std::make_shared<ManageDataOpFrame>(op, tx);
     case BUMP_SEQUENCE:
-        return std::make_shared<BumpSequenceOpFrame>(op, res, tx);
+        return std::make_shared<BumpSequenceOpFrame>(op, tx);
     case MANAGE_BUY_OFFER:
-        return std::make_shared<ManageBuyOfferOpFrame>(op, res, tx);
+        return std::make_shared<ManageBuyOfferOpFrame>(op, tx);
     case PATH_PAYMENT_STRICT_SEND:
-        return std::make_shared<PathPaymentStrictSendOpFrame>(op, res, tx);
+        return std::make_shared<PathPaymentStrictSendOpFrame>(op, tx);
     case CREATE_CLAIMABLE_BALANCE:
-        return std::make_shared<CreateClaimableBalanceOpFrame>(op, res, tx,
-                                                               index);
+        return std::make_shared<CreateClaimableBalanceOpFrame>(op, tx, index);
     case CLAIM_CLAIMABLE_BALANCE:
-        return std::make_shared<ClaimClaimableBalanceOpFrame>(op, res, tx);
+        return std::make_shared<ClaimClaimableBalanceOpFrame>(op, tx);
     case BEGIN_SPONSORING_FUTURE_RESERVES:
-        return std::make_shared<BeginSponsoringFutureReservesOpFrame>(op, res,
-                                                                      tx);
+        return std::make_shared<BeginSponsoringFutureReservesOpFrame>(op, tx);
     case END_SPONSORING_FUTURE_RESERVES:
-        return std::make_shared<EndSponsoringFutureReservesOpFrame>(op, res,
-                                                                    tx);
+        return std::make_shared<EndSponsoringFutureReservesOpFrame>(op, tx);
     case REVOKE_SPONSORSHIP:
-        return std::make_shared<RevokeSponsorshipOpFrame>(op, res, tx);
+        return std::make_shared<RevokeSponsorshipOpFrame>(op, tx);
     case CLAWBACK:
-        return std::make_shared<ClawbackOpFrame>(op, res, tx);
+        return std::make_shared<ClawbackOpFrame>(op, tx);
     case CLAWBACK_CLAIMABLE_BALANCE:
-        return std::make_shared<ClawbackClaimableBalanceOpFrame>(op, res, tx);
+        return std::make_shared<ClawbackClaimableBalanceOpFrame>(op, tx);
     case SET_TRUST_LINE_FLAGS:
-        return std::make_shared<SetTrustLineFlagsOpFrame>(op, res, tx, index);
+        return std::make_shared<SetTrustLineFlagsOpFrame>(op, tx, index);
     case LIQUIDITY_POOL_DEPOSIT:
-        return std::make_shared<LiquidityPoolDepositOpFrame>(op, res, tx);
+        return std::make_shared<LiquidityPoolDepositOpFrame>(op, tx);
     case LIQUIDITY_POOL_WITHDRAW:
-        return std::make_shared<LiquidityPoolWithdrawOpFrame>(op, res, tx);
+        return std::make_shared<LiquidityPoolWithdrawOpFrame>(op, tx);
     case INVOKE_HOST_FUNCTION:
-        return std::make_shared<InvokeHostFunctionOpFrame>(op, res, tx);
+        return std::make_shared<InvokeHostFunctionOpFrame>(op, tx);
     case EXTEND_FOOTPRINT_TTL:
-        return std::make_shared<ExtendFootprintTTLOpFrame>(op, res, tx);
+        return std::make_shared<ExtendFootprintTTLOpFrame>(op, tx);
     case RESTORE_FOOTPRINT:
-        return std::make_shared<RestoreFootprintOpFrame>(op, res, tx);
+        return std::make_shared<RestoreFootprintOpFrame>(op, tx);
     default:
         ostringstream err;
         err << "Unknown Tx type: " << op.body.type();
@@ -131,11 +128,10 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
     }
 }
 
-OperationFrame::OperationFrame(Operation const& op, OperationResult& res,
+OperationFrame::OperationFrame(Operation const& op,
                                TransactionFrame const& parentTx)
     : mOperation(op), mParentTx(parentTx)
 {
-    resetResultSuccess(res);
 }
 
 bool

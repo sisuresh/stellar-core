@@ -8,6 +8,7 @@
 #include "ledger/LedgerManager.h"
 #include "ledger/NetworkConfig.h"
 #include "overlay/StellarXDR.h"
+#include "transactions/MutableTransactionResult.h"
 #include "util/types.h"
 #include <medida/metrics_registry.h>
 #include <memory>
@@ -66,18 +67,17 @@ class OperationFrame
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header) const;
 
-    // given an operation result, gives a default value representing "success"
-    void resetResultSuccess(OperationResult& res) const;
-
   public:
     static std::shared_ptr<OperationFrame>
-    makeHelper(Operation const& op, OperationResult& res,
-               TransactionFrame const& parentTx, uint32_t index);
+    makeHelper(Operation const& op, TransactionFrame const& parentTx,
+               uint32_t index);
 
-    OperationFrame(Operation const& op, OperationResult& res,
-                   TransactionFrame const& parentTx);
+    OperationFrame(Operation const& op, TransactionFrame const& parentTx);
     OperationFrame(OperationFrame const&) = delete;
     virtual ~OperationFrame() = default;
+
+    // given an operation result, gives a default value representing "success"
+    void resetResultSuccess(OperationResult& res) const;
 
     bool checkSignature(SignatureChecker& signatureChecker,
                         AbstractLedgerTxn& ltx, OperationResult& res,

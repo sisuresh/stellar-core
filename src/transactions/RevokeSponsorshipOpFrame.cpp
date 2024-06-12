@@ -16,8 +16,8 @@ namespace stellar
 {
 
 RevokeSponsorshipOpFrame::RevokeSponsorshipOpFrame(
-    Operation const& op, OperationResult& res, TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    Operation const& op, TransactionFrame const& parentTx)
+    : OperationFrame(op, parentTx)
     , mRevokeSponsorshipOp(mOperation.body.revokeSponsorshipOp())
 {
 }

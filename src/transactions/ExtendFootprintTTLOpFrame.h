@@ -23,7 +23,7 @@ class ExtendFootprintTTLOpFrame : public OperationFrame
     ExtendFootprintTTLOp const& mExtendFootprintTTLOp;
 
   public:
-    ExtendFootprintTTLOpFrame(Operation const& op, OperationResult& res,
+    ExtendFootprintTTLOpFrame(Operation const& op,
                               TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

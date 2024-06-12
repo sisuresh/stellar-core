@@ -25,8 +25,7 @@ class CreateAccountOpFrame : public OperationFrame
                         OperationResult& res) const;
 
   public:
-    CreateAccountOpFrame(Operation const& op, OperationResult& res,
-                         TransactionFrame const& parentTx);
+    CreateAccountOpFrame(Operation const& op, TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doCheckValid(uint32_t ledgerVersion,

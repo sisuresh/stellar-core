@@ -20,8 +20,7 @@ class PaymentOpFrame : public OperationFrame
     PaymentOp const& mPayment;
 
   public:
-    PaymentOpFrame(Operation const& op, OperationResult& res,
-                   TransactionFrame const& parentTx);
+    PaymentOpFrame(Operation const& op, TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;
     bool doCheckValid(uint32_t ledgerVersion,

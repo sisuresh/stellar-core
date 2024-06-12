@@ -23,7 +23,7 @@ class RestoreFootprintOpFrame : public OperationFrame
     RestoreFootprintOp const& mRestoreFootprintOp;
 
   public:
-    RestoreFootprintOpFrame(Operation const& op, OperationResult& res,
+    RestoreFootprintOpFrame(Operation const& op,
                             TransactionFrame const& parentTx);
 
     bool isOpSupported(LedgerHeader const& header) const override;

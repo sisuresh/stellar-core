@@ -908,8 +908,7 @@ class FuzzTransactionFrame : public TransactionFrame
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
     {
         // No soroban ops allowed
-        if (std::any_of(mResultPayload->getOpFrames().begin(),
-                        mResultPayload->getOpFrames().end(),
+        if (std::any_of(getOperations().begin(), getOperations().end(),
                         [](auto const& x) { return x->isSoroban(); }))
         {
             mResultPayload->setResultCode(txFAILED);
@@ -931,7 +930,7 @@ class FuzzTransactionFrame : public TransactionFrame
                                    *mResultPayload);
         };
 
-        auto const& ops = mResultPayload->getOpFrames();
+        auto const& ops = getOperations();
         for (size_t i = 0; i < ops.size(); ++i)
         {
             auto const& op = ops[i];
@@ -955,14 +954,6 @@ class FuzzTransactionFrame : public TransactionFrame
         {
             throw std::runtime_error("Internal error while fuzzing");
         }
-    }
-
-    std::vector<std::shared_ptr<OperationFrame>> const&
-    getOperations() const
-    {
-        // this can only be used on an initialized TransactionFrame
-        releaseAssert(!mResultPayload->getOpFrames().empty());
-        return mResultPayload->getOpFrames();
     }
 
     TransactionResult&

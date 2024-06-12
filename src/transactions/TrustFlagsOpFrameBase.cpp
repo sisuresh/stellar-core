@@ -12,9 +12,8 @@ namespace stellar
 {
 
 TrustFlagsOpFrameBase::TrustFlagsOpFrameBase(Operation const& op,
-                                             OperationResult& res,
                                              TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    : OperationFrame(op, parentTx)
 {
 }
 

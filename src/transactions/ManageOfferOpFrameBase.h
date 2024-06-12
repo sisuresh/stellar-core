@@ -35,7 +35,7 @@ class ManageOfferOpFrameBase : public OperationFrame
     virtual int64_t generateNewOfferID(LedgerTxnHeader& header) const;
 
   public:
-    ManageOfferOpFrameBase(Operation const& op, OperationResult& res,
+    ManageOfferOpFrameBase(Operation const& op,
                            TransactionFrame const& parentTx, Asset const& sheep,
                            Asset const& wheat, int64_t offerID,
                            Price const& price, bool setPassiveOnCreate);

@@ -15,9 +15,8 @@
 namespace stellar
 {
 BumpSequenceOpFrame::BumpSequenceOpFrame(Operation const& op,
-                                         OperationResult& res,
                                          TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    : OperationFrame(op, parentTx)
     , mBumpSequenceOp(mOperation.body.bumpSequenceOp())
 {
 }

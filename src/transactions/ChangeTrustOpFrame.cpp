@@ -134,9 +134,8 @@ ChangeTrustOpFrame::tryManagePoolOnNewTrustLine(AbstractLedgerTxn& ltx,
 }
 
 ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
-                                       OperationResult& res,
                                        TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx)
+    : OperationFrame(op, parentTx)
     , mChangeTrust(mOperation.body.changeTrustOp())
 {
 }

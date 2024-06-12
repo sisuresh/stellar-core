@@ -11,9 +11,9 @@
 namespace stellar
 {
 
-ClawbackOpFrame::ClawbackOpFrame(Operation const& op, OperationResult& res,
+ClawbackOpFrame::ClawbackOpFrame(Operation const& op,
                                  TransactionFrame const& parentTx)
-    : OperationFrame(op, res, parentTx), mClawback(mOperation.body.clawbackOp())
+    : OperationFrame(op, parentTx), mClawback(mOperation.body.clawbackOp())
 {
 }
 

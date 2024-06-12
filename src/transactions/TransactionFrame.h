@@ -67,9 +67,7 @@ class TransactionFrame : public TransactionFrameBase
     mutable Hash mContentsHash; // the hash of the contents
     mutable Hash mFullHash;     // the hash of the contents and the sig.
 
-    bool mHasDexOperations;
-    bool mIsSoroban;
-    bool mHasValidSorobanOpsConsistency;
+    std::vector<std::shared_ptr<OperationFrame const>> mOperations;
 
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header) const;
@@ -112,8 +110,7 @@ class TransactionFrame : public TransactionFrameBase
                                std::optional<FeePair> sorobanResourceFee,
                                TransactionResultPayloadPtr txResult) const;
 
-    void removeOneTimeSignerFromAllSourceAccounts(
-        AbstractLedgerTxn& ltx, MutableTransactionResultBase& txResult) const;
+    void removeOneTimeSignerFromAllSourceAccounts(AbstractLedgerTxn& ltx) const;
 
     void removeAccountSigner(AbstractLedgerTxn& ltxOuter,
                              AccountID const& accountID,
@@ -164,6 +161,12 @@ class TransactionFrame : public TransactionFrameBase
     Hash const& getFullHash() const override;
     Hash const& getContentsHash() const override;
     TransactionEnvelope const& getEnvelope() const override;
+
+    std::vector<std::shared_ptr<OperationFrame const>> const&
+    getOperations() const
+    {
+        return mOperations;
+    }
 
 #ifdef BUILD_TESTS
     TransactionEnvelope& getMutableEnvelope() const override;

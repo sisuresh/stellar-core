@@ -42,7 +42,7 @@ class RevokeSponsorshipOpFrame : public OperationFrame
                                       OperationResult& res) const;
 
   public:
-    RevokeSponsorshipOpFrame(Operation const& op, OperationResult& res,
+    RevokeSponsorshipOpFrame(Operation const& op,
                              TransactionFrame const& parentTx);
 
     bool doApply(AbstractLedgerTxn& ltx, OperationResult& res) const override;

@@ -25,7 +25,7 @@ class CreateClaimableBalanceOpFrame : public OperationFrame
     uint32_t mOpIndex;
 
   public:
-    CreateClaimableBalanceOpFrame(Operation const& op, OperationResult& res,
+    CreateClaimableBalanceOpFrame(Operation const& op,
                                   TransactionFrame const& parentTx,
                                   uint32_t index);
 
