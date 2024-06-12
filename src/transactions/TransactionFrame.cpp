@@ -1132,6 +1132,12 @@ TransactionFrame::processSignatures(
     }
 
     bool allOpsValid = true;
+
+    // From protocol 10-13, there's a dangling reference bug where we check op
+    // signatures even if no OperationResult object exists. This check ensures
+    // opResult actually exists.
+    if (txResult.getResultCode() == txSUCCESS ||
+        txResult.getResultCode() == txFAILED)
     {
         // scope here to avoid potential side effects of loading source accounts
         LedgerTxn ltx(ltxOuter);
