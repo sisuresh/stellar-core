@@ -19,7 +19,7 @@ class TransactionTestFrame : public TransactionFrameBase
 {
   private:
     TransactionFrameBasePtr const mTransactionFrame;
-    mutable TransactionResultPayloadPtr mTransactionResultPayload;
+    mutable MutableTxResultPtr mTransactionTxResult;
 
     TransactionTestFrame(TransactionFrameBasePtr tx);
 
@@ -58,23 +58,23 @@ class TransactionTestFrame : public TransactionFrameBase
 
     // Redefinitions of TransactionFrameBase functions
     bool apply(Application& app, AbstractLedgerTxn& ltx,
-               TransactionMetaFrame& meta, TransactionResultPayloadPtr txResult,
+               TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                Hash const& sorobanBasePrngSeed = Hash{}) const override;
 
-    std::pair<bool, TransactionResultPayloadPtr>
+    std::pair<bool, MutableTxResultPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
                uint64_t upperBoundCloseTimeOffset) const override;
-    bool checkSorobanResourceAndSetError(
-        Application& app, uint32_t ledgerVersion,
-        TransactionResultPayloadPtr txResult) const override;
+    bool
+    checkSorobanResourceAndSetError(Application& app, uint32_t ledgerVersion,
+                                    MutableTxResultPtr txResult) const override;
 
-    TransactionResultPayloadPtr createResultPayload() const override;
+    MutableTxResultPtr createTxResult() const override;
 
-    TransactionResultPayloadPtr
-    createResultPayloadWithFeeCharged(LedgerHeader const& header,
-                                      std::optional<int64_t> baseFee,
-                                      bool applying) const override;
+    MutableTxResultPtr
+    createTxResultWithFeeCharged(LedgerHeader const& header,
+                                 std::optional<int64_t> baseFee,
+                                 bool applying) const override;
 
     TransactionEnvelope const& getEnvelope() const override;
     TransactionEnvelope& getMutableEnvelope() const override;
@@ -113,13 +113,13 @@ class TransactionTestFrame : public TransactionFrameBase
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const override;
 
-    TransactionResultPayloadPtr
+    MutableTxResultPtr
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
 
     void processPostApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
-                          TransactionResultPayloadPtr txResult) const override;
+                          MutableTxResultPtr txResult) const override;
 
     std::shared_ptr<StellarMessage const> toStellarMessage() const override;
 

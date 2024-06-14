@@ -99,11 +99,9 @@ class MutableTransactionResult : public MutableTransactionResultBase
 
     MutableTransactionResult(TransactionFrame const& tx, int64_t feeCharged);
 
-    friend TransactionResultPayloadPtr
-    TransactionFrame::createResultPayload() const;
+    friend MutableTxResultPtr TransactionFrame::createTxResult() const;
 
-    friend TransactionResultPayloadPtr
-    TransactionFrame::createResultPayloadWithFeeCharged(
+    friend MutableTxResultPtr TransactionFrame::createTxResultWithFeeCharged(
         LedgerHeader const& header, std::optional<int64_t> baseFee,
         bool applying) const;
 
@@ -125,28 +123,24 @@ class MutableTransactionResult : public MutableTransactionResultBase
 class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
 {
     // mTxResult is outer result
-    TransactionResultPayloadPtr const mInnerResultPayload;
+    MutableTxResultPtr const mInnerTxResult;
 
-    FeeBumpMutableTransactionResult(
-        TransactionResultPayloadPtr innerResultPayload);
+    FeeBumpMutableTransactionResult(MutableTxResultPtr innerTxResult);
 
-    FeeBumpMutableTransactionResult(
-        TransactionResultPayloadPtr&& outerResultPayload,
-        TransactionResultPayloadPtr&& innerResultPayload,
-        TransactionFrameBasePtr innerTx);
+    FeeBumpMutableTransactionResult(MutableTxResultPtr&& outerTxResult,
+                                    MutableTxResultPtr&& innerTxResult,
+                                    TransactionFrameBasePtr innerTx);
 
-    friend TransactionResultPayloadPtr
-    FeeBumpTransactionFrame::createResultPayload() const;
+    friend MutableTxResultPtr FeeBumpTransactionFrame::createTxResult() const;
 
-    friend TransactionResultPayloadPtr
-    FeeBumpTransactionFrame::createResultPayloadWithFeeCharged(
+    friend MutableTxResultPtr
+    FeeBumpTransactionFrame::createTxResultWithFeeCharged(
         LedgerHeader const& header, std::optional<int64_t> baseFee,
         bool applying) const;
 
-    friend TransactionResultPayloadPtr
-    FeeBumpTransactionFrame::createResultPayloadWithNewInnerTx(
-        TransactionResultPayloadPtr&& outerResult,
-        TransactionResultPayloadPtr&& innerResult,
+    friend MutableTxResultPtr
+    FeeBumpTransactionFrame::createTxResultWithNewInnerTx(
+        MutableTxResultPtr&& outerResult, MutableTxResultPtr&& innerResult,
         TransactionFrameBasePtr innerTx) const;
 
   public:

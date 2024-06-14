@@ -298,22 +298,21 @@ MutableTransactionResult::getDiagnosticEvents() const
 }
 
 FeeBumpMutableTransactionResult::FeeBumpMutableTransactionResult(
-    TransactionResultPayloadPtr innerResultPayload)
-    : MutableTransactionResultBase(), mInnerResultPayload(innerResultPayload)
+    MutableTxResultPtr innerTxResult)
+    : MutableTransactionResultBase(), mInnerTxResult(innerTxResult)
 {
-    releaseAssertOrThrow(mInnerResultPayload);
+    releaseAssertOrThrow(mInnerTxResult);
 }
 
 FeeBumpMutableTransactionResult::FeeBumpMutableTransactionResult(
-    TransactionResultPayloadPtr&& outerResultPayload,
-    TransactionResultPayloadPtr&& innerResultPayload,
+    MutableTxResultPtr&& outerTxResult, MutableTxResultPtr&& innerTxResult,
     TransactionFrameBasePtr innerTx)
-    : MutableTransactionResultBase(std::move(*outerResultPayload))
-    , mInnerResultPayload(std::move(innerResultPayload))
+    : MutableTransactionResultBase(std::move(*outerTxResult))
+    , mInnerTxResult(std::move(innerTxResult))
 {
-    releaseAssertOrThrow(mInnerResultPayload);
-    innerResultPayload.reset();
-    outerResultPayload.reset();
+    releaseAssertOrThrow(mInnerTxResult);
+    innerTxResult.reset();
+    outerTxResult.reset();
 
     updateResult(innerTx, *this);
 }
@@ -352,14 +351,14 @@ FeeBumpMutableTransactionResult::updateResult(
 TransactionResult&
 FeeBumpMutableTransactionResult::getInnermostResult()
 {
-    return mInnerResultPayload->getResult();
+    return mInnerTxResult->getResult();
 }
 
 void
 FeeBumpMutableTransactionResult::setInnermostResultCode(
     TransactionResultCode code)
 {
-    mInnerResultPayload->setResultCode(code);
+    mInnerTxResult->setResultCode(code);
 }
 
 TransactionResult&
@@ -389,18 +388,18 @@ FeeBumpMutableTransactionResult::setResultCode(TransactionResultCode code)
 OperationResult&
 FeeBumpMutableTransactionResult::getOpResultAt(size_t index)
 {
-    return mInnerResultPayload->getOpResultAt(index);
+    return mInnerTxResult->getOpResultAt(index);
 }
 
 std::shared_ptr<SorobanTxData>
 FeeBumpMutableTransactionResult::getSorobanData()
 {
-    return mInnerResultPayload->getSorobanData();
+    return mInnerTxResult->getSorobanData();
 }
 
 xdr::xvector<DiagnosticEvent> const&
 FeeBumpMutableTransactionResult::getDiagnosticEvents() const
 {
-    return mInnerResultPayload->getDiagnosticEvents();
+    return mInnerTxResult->getDiagnosticEvents();
 }
 }

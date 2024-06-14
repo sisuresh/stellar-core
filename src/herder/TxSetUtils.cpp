@@ -193,7 +193,7 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
 
             // Only call checkValid if we passed the seqNum check
             bool checkValid = false;
-            TransactionResultPayloadPtr txResult{};
+            MutableTxResultPtr txResult{};
             if (!minSeqCheckIsInvalid)
             {
                 std::tie(checkValid, txResult) =

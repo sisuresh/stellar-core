@@ -400,22 +400,21 @@ TransactionFrame::sorobanResources() const
     return mEnvelope.v1().tx.ext.sorobanData().resources;
 }
 
-TransactionResultPayloadPtr
-TransactionFrame::createResultPayloadWithFeeCharged(
-    LedgerHeader const& header, std::optional<int64_t> baseFee,
-    bool applying) const
+MutableTxResultPtr
+TransactionFrame::createTxResultWithFeeCharged(LedgerHeader const& header,
+                                               std::optional<int64_t> baseFee,
+                                               bool applying) const
 {
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
     auto feeCharged = getFee(header, baseFee, applying);
-    return TransactionResultPayloadPtr(
-        new MutableTransactionResult(*this, feeCharged));
+    return MutableTxResultPtr(new MutableTransactionResult(*this, feeCharged));
 }
 
-TransactionResultPayloadPtr
-TransactionFrame::createResultPayload() const
+MutableTxResultPtr
+TransactionFrame::createTxResult() const
 {
-    return TransactionResultPayloadPtr(new MutableTransactionResult(*this, 0));
+    return MutableTxResultPtr(new MutableTransactionResult(*this, 0));
 }
 
 std::optional<TimeBounds const> const
@@ -877,7 +876,7 @@ TransactionFrame::commonValidPreSeqNum(
     Application& app, AbstractLedgerTxn& ltx, bool chargeFee,
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
     std::optional<FeePair> sorobanResourceFee,
-    TransactionResultPayloadPtr txResult) const
+    MutableTxResultPtr txResult) const
 {
     ZoneScoped;
     releaseAssertOrThrow(txResult);
@@ -1188,7 +1187,7 @@ TransactionFrame::commonValid(Application& app,
                               uint64_t lowerBoundCloseTimeOffset,
                               uint64_t upperBoundCloseTimeOffset,
                               std::optional<FeePair> sorobanResourceFee,
-                              TransactionResultPayloadPtr txResult) const
+                              MutableTxResultPtr txResult) const
 {
     ZoneScoped;
     releaseAssertOrThrow(txResult);
@@ -1274,7 +1273,7 @@ TransactionFrame::commonValid(Application& app,
     return ValidationType::kMaybeValid;
 }
 
-TransactionResultPayloadPtr
+MutableTxResultPtr
 TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                    std::optional<int64_t> baseFee) const
 {
@@ -1283,7 +1282,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 
     auto header = ltx.loadHeader();
     auto txResult =
-        createResultPayloadWithFeeCharged(header.current(), baseFee, true);
+        createTxResultWithFeeCharged(header.current(), baseFee, true);
     releaseAssert(txResult);
 
     auto sourceAccount = loadSourceAccount(ltx, header);
@@ -1387,7 +1386,7 @@ TransactionFrame::removeAccountSigner(AbstractLedgerTxn& ltxOuter,
     }
 }
 
-std::pair<bool, TransactionResultPayloadPtr>
+std::pair<bool, MutableTxResultPtr>
 TransactionFrame::checkValidWithOptionallyChargedFee(
     Application& app, AbstractLedgerTxn& ltxOuter, SequenceNumber current,
     bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
@@ -1398,7 +1397,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
 
     if (!XDRProvidesValidFee())
     {
-        auto txResult = createResultPayload();
+        auto txResult = createTxResult();
         txResult->setInnermostResultCode(txMALFORMED);
         return {false, txResult};
     }
@@ -1410,8 +1409,8 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         minBaseFee = 0;
     }
 
-    auto txResult = createResultPayloadWithFeeCharged(
-        ltx.loadHeader().current(), minBaseFee, false);
+    auto txResult = createTxResultWithFeeCharged(ltx.loadHeader().current(),
+                                                 minBaseFee, false);
     releaseAssert(txResult);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
@@ -1457,7 +1456,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     return {res, txResult};
 }
 
-std::pair<bool, TransactionResultPayloadPtr>
+std::pair<bool, MutableTxResultPtr>
 TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                              SequenceNumber current,
                              uint64_t lowerBoundCloseTimeOffset,
@@ -1470,8 +1469,7 @@ TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
 
 bool
 TransactionFrame::checkSorobanResourceAndSetError(
-    Application& app, uint32_t ledgerVersion,
-    TransactionResultPayloadPtr txResult) const
+    Application& app, uint32_t ledgerVersion, MutableTxResultPtr txResult) const
 {
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
@@ -1506,7 +1504,7 @@ TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionResultPayloadPtr txResult,
+                        MutableTxResultPtr txResult,
                         Hash const& sorobanBasePrngSeed) const
 {
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
@@ -1728,9 +1726,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionMetaFrame& meta,
-                        TransactionResultPayloadPtr txResult, bool chargeFee,
-                        Hash const& sorobanBasePrngSeed) const
+                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
+                        bool chargeFee, Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     try
@@ -1816,8 +1813,7 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 
 bool
 TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
-                        TransactionMetaFrame& meta,
-                        TransactionResultPayloadPtr txResult,
+                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                         Hash const& sorobanBasePrngSeed) const
 {
     return apply(app, ltx, meta, txResult, true, sorobanBasePrngSeed);
@@ -1827,7 +1823,7 @@ void
 TransactionFrame::processPostApply(Application& app,
                                    AbstractLedgerTxn& ltxOuter,
                                    TransactionMetaFrame& meta,
-                                   TransactionResultPayloadPtr txResult) const
+                                   MutableTxResultPtr txResult) const
 {
     releaseAssertOrThrow(txResult);
     processRefund(app, ltxOuter, meta, getSourceID(), *txResult);

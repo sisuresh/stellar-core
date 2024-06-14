@@ -53,24 +53,24 @@ std::array<const char*,
                                   "TRY_AGAIN_LATER", "FILTERED"};
 
 TransactionQueue::AddResult::AddResult(AddResultCode addCode)
-    : code(addCode), resultPayload()
+    : code(addCode), txResult()
 {
 }
 
 TransactionQueue::AddResult::AddResult(AddResultCode addCode,
-                                       TransactionResultPayloadPtr payload)
-    : code(addCode), resultPayload(payload)
+                                       MutableTxResultPtr payload)
+    : code(addCode), txResult(payload)
 {
-    releaseAssert(resultPayload);
+    releaseAssert(txResult);
 }
 
 TransactionQueue::AddResult::AddResult(AddResultCode addCode,
                                        TransactionFrameBasePtr tx,
                                        TransactionResultCode txErrorCode)
-    : code(addCode), resultPayload(tx->createResultPayload())
+    : code(addCode), txResult(tx->createTxResult())
 {
     releaseAssert(txErrorCode != txSUCCESS);
-    resultPayload.value()->setResultCode(txErrorCode);
+    txResult.value()->setResultCode(txErrorCode);
 }
 
 TransactionQueue::TransactionQueue(Application& app, uint32 pendingDepth,
@@ -324,7 +324,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             // appropriate error message
             if (tx->isSoroban())
             {
-                auto txResult = tx->createResultPayload();
+                auto txResult = tx->createTxResult();
                 if (!tx->checkSorobanResourceAndSetError(
                         mApp,
                         mApp.getLedgerManager()
@@ -358,8 +358,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                     AddResult result(
                         TransactionQueue::AddResultCode::ADD_STATUS_ERROR, tx,
                         txINSUFFICIENT_FEE);
-                    result.resultPayload.value()->getResult().feeCharged =
-                        minFee;
+                    result.txResult.value()->getResult().feeCharged = minFee;
                     return result;
                 }
 
@@ -387,8 +386,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         {
             AddResult result(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
                              tx, txINSUFFICIENT_FEE);
-            result.resultPayload.value()->getResult().feeCharged =
-                canAddRes.second;
+            result.txResult.value()->getResult().feeCharged = canAddRes.second;
             return result;
         }
         return {TransactionQueue::AddResultCode::ADD_STATUS_TRY_AGAIN_LATER,
