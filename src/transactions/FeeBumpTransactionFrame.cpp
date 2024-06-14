@@ -75,7 +75,7 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 bool
 FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                                TransactionMetaFrame& meta,
-                               TransactionResultPayloadPtr txResult,
+                               MutableTxResultPtr txResult,
                                Hash const& sorobanBasePrngSeed) const
 {
     try
@@ -122,9 +122,10 @@ FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 void
-FeeBumpTransactionFrame::processPostApply(
-    Application& app, AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
-    TransactionResultPayloadPtr txResult) const
+FeeBumpTransactionFrame::processPostApply(Application& app,
+                                          AbstractLedgerTxn& ltx,
+                                          TransactionMetaFrame& meta,
+                                          MutableTxResultPtr txResult) const
 {
     // We must forward the Fee-bump source so the refund is applied to the
     // correct account
@@ -171,7 +172,7 @@ FeeBumpTransactionFrame::checkSignature(SignatureChecker& signatureChecker,
     return signatureChecker.checkSignature(signers, neededWeight);
 }
 
-std::pair<bool, TransactionResultPayloadPtr>
+std::pair<bool, MutableTxResultPtr>
 FeeBumpTransactionFrame::checkValid(Application& app,
                                     AbstractLedgerTxn& ltxOuter,
                                     SequenceNumber current,
@@ -180,15 +181,15 @@ FeeBumpTransactionFrame::checkValid(Application& app,
 {
     if (!XDRProvidesValidFee())
     {
-        auto txResult = createResultPayload();
+        auto txResult = createTxResult();
         txResult->setResultCode(txMALFORMED);
         return {false, txResult};
     }
 
     LedgerTxn ltx(ltxOuter);
     int64_t minBaseFee = ltx.loadHeader().current().baseFee;
-    auto txResult = createResultPayloadWithFeeCharged(
-        ltx.loadHeader().current(), minBaseFee, false);
+    auto txResult = createTxResultWithFeeCharged(ltx.loadHeader().current(),
+                                                 minBaseFee, false);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
                                       getContentsHash(),
@@ -208,7 +209,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
     auto [res, innerTxResult] = mInnerTx->checkValidWithOptionallyChargedFee(
         app, ltx, current, false, lowerBoundCloseTimeOffset,
         upperBoundCloseTimeOffset);
-    auto finalTxResult = createResultPayloadWithNewInnerTx(
+    auto finalTxResult = createTxResultWithNewInnerTx(
         std::move(txResult), std::move(innerTxResult), mInnerTx);
 
     return {res, finalTxResult};
@@ -216,8 +217,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
 
 bool
 FeeBumpTransactionFrame::checkSorobanResourceAndSetError(
-    Application& app, uint32_t ledgerVersion,
-    TransactionResultPayloadPtr txResult) const
+    Application& app, uint32_t ledgerVersion, MutableTxResultPtr txResult) const
 {
     return mInnerTx->checkSorobanResourceAndSetError(app, ledgerVersion,
                                                      txResult);
@@ -501,12 +501,12 @@ FeeBumpTransactionFrame::insertKeysForTxApply(
     mInnerTx->insertKeysForTxApply(keys);
 }
 
-TransactionResultPayloadPtr
+MutableTxResultPtr
 FeeBumpTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                           std::optional<int64_t> baseFee) const
 {
-    auto txResult = createResultPayloadWithFeeCharged(
-        ltx.loadHeader().current(), baseFee, true);
+    auto txResult =
+        createTxResultWithFeeCharged(ltx.loadHeader().current(), baseFee, true);
     releaseAssert(txResult);
 
     auto feeSource = stellar::loadAccount(ltx, getFeeSourceID());
@@ -553,13 +553,13 @@ FeeBumpTransactionFrame::removeOneTimeSignerKeyFromFeeSource(
     }
 }
 
-TransactionResultPayloadPtr
-FeeBumpTransactionFrame::createResultPayloadWithFeeCharged(
+MutableTxResultPtr
+FeeBumpTransactionFrame::createTxResultWithFeeCharged(
     LedgerHeader const& header, std::optional<int64_t> baseFee,
     bool applying) const
 {
     auto innerTxResult =
-        mInnerTx->createResultPayloadWithFeeCharged(header, baseFee, applying);
+        mInnerTx->createTxResultWithFeeCharged(header, baseFee, applying);
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
@@ -572,20 +572,19 @@ FeeBumpTransactionFrame::createResultPayloadWithFeeCharged(
     return txResult;
 }
 
-TransactionResultPayloadPtr
-FeeBumpTransactionFrame::createResultPayload() const
+MutableTxResultPtr
+FeeBumpTransactionFrame::createTxResult() const
 {
-    return TransactionResultPayloadPtr(
-        new FeeBumpMutableTransactionResult(mInnerTx->createResultPayload()));
+    return MutableTxResultPtr(
+        new FeeBumpMutableTransactionResult(mInnerTx->createTxResult()));
 }
 
-TransactionResultPayloadPtr
-FeeBumpTransactionFrame::createResultPayloadWithNewInnerTx(
-    TransactionResultPayloadPtr&& outerResult,
-    TransactionResultPayloadPtr&& innerResult,
+MutableTxResultPtr
+FeeBumpTransactionFrame::createTxResultWithNewInnerTx(
+    MutableTxResultPtr&& outerResult, MutableTxResultPtr&& innerResult,
     TransactionFrameBasePtr innerTx) const
 {
-    return TransactionResultPayloadPtr(new FeeBumpMutableTransactionResult(
+    return MutableTxResultPtr(new FeeBumpMutableTransactionResult(
         std::move(outerResult), std::move(innerResult), innerTx));
 }
 

@@ -896,13 +896,12 @@ resetTxInternalState(Application& app)
 class FuzzTransactionFrame : public TransactionFrame
 {
   private:
-    TransactionResultPayloadPtr mResultPayload;
+    MutableTxResultPtr mTxResult;
 
   public:
     FuzzTransactionFrame(Hash const& networkID,
                          TransactionEnvelope const& envelope)
-        : TransactionFrame(networkID, envelope)
-        , mResultPayload(createResultPayload()){};
+        : TransactionFrame(networkID, envelope), mTxResult(createTxResult()){};
 
     void
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
@@ -911,13 +910,12 @@ class FuzzTransactionFrame : public TransactionFrame
         if (std::any_of(getOperations().begin(), getOperations().end(),
                         [](auto const& x) { return x->isSoroban(); }))
         {
-            mResultPayload->setResultCode(txFAILED);
+            mTxResult->setResultCode(txFAILED);
             return;
         }
 
         // reset results of operations
-        mResultPayload =
-            createResultPayloadWithFeeCharged(ltx.getHeader(), 0, true);
+        mTxResult = createTxResultWithFeeCharged(ltx.getHeader(), 0, true);
 
         // attempt application of transaction without processing the fee or
         // committing the LedgerTxn
@@ -927,17 +925,17 @@ class FuzzTransactionFrame : public TransactionFrame
         // if any ill-formed Operations, do not attempt transaction application
         auto isInvalidOperation = [&](auto const& op, auto& opResult) {
             return !op->checkValid(app, signatureChecker, ltx, false, opResult,
-                                   mResultPayload->getSorobanData());
+                                   mTxResult->getSorobanData());
         };
 
         auto const& ops = getOperations();
         for (size_t i = 0; i < ops.size(); ++i)
         {
             auto const& op = ops[i];
-            auto& opResult = mResultPayload->getOpResultAt(i);
+            auto& opResult = mTxResult->getOpResultAt(i);
             if (isInvalidOperation(op, opResult))
             {
-                mResultPayload->setResultCode(txFAILED);
+                mTxResult->setResultCode(txFAILED);
                 return;
             }
         }
@@ -948,9 +946,8 @@ class FuzzTransactionFrame : public TransactionFrame
         loadSourceAccount(ltx, ltx.loadHeader());
         processSeqNum(ltx);
         TransactionMetaFrame tm(2);
-        applyOperations(signatureChecker, app, ltx, tm, *mResultPayload,
-                        Hash{});
-        if (mResultPayload->getResultCode() == txINTERNAL_ERROR)
+        applyOperations(signatureChecker, app, ltx, tm, *mTxResult, Hash{});
+        if (mTxResult->getResultCode() == txINTERNAL_ERROR)
         {
             throw std::runtime_error("Internal error while fuzzing");
         }
@@ -959,13 +956,13 @@ class FuzzTransactionFrame : public TransactionFrame
     TransactionResult&
     getResult()
     {
-        return mResultPayload->getResult();
+        return mTxResult->getResult();
     }
 
     TransactionResultCode
     getResultCode() const
     {
-        return mResultPayload->getResultCode();
+        return mTxResult->getResultCode();
     }
 };
 

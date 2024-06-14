@@ -1340,14 +1340,14 @@ mergeOpInTx(std::vector<Operation> const& ops)
     return false;
 }
 
-std::vector<TransactionResultPayloadPtr>
+std::vector<MutableTxResultPtr>
 LedgerManagerImpl::processFeesSeqNums(
     std::vector<TransactionFrameBasePtr> const& txs,
     AbstractLedgerTxn& ltxOuter, ApplicableTxSetFrame const& txSet,
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta)
 {
     ZoneScoped;
-    std::vector<TransactionResultPayloadPtr> txResults;
+    std::vector<MutableTxResultPtr> txResults;
     txResults.reserve(txs.size());
     CLOG_DEBUG(Ledger, "processing fees and sequence numbers");
     int index = 0;
@@ -1483,8 +1483,8 @@ void
 LedgerManagerImpl::applyTransactions(
     ApplicableTxSetFrame const& txSet,
     std::vector<TransactionFrameBasePtr> const& txs,
-    std::vector<TransactionResultPayloadPtr> const& txResults,
-    AbstractLedgerTxn& ltx, TransactionResultSet& txResultSet,
+    std::vector<MutableTxResultPtr> const& txResults, AbstractLedgerTxn& ltx,
+    TransactionResultSet& txResultSet,
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta)
 {
     ZoneNamedN(txsZone, "applyTransactions", true);
