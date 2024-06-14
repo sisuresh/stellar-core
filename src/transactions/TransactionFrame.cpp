@@ -536,16 +536,17 @@ TransactionFrame::validateSorobanOpsConsistency() const
 }
 
 bool
-TransactionFrame::validateSorobanResources(
-    SorobanNetworkConfig const& config, Config const& appConfig,
-    uint32_t protocolVersion, MutableTransactionResultBase& txResult) const
+TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
+                                           Config const& appConfig,
+                                           uint32_t protocolVersion,
+                                           SorobanTxData& sorobanData) const
 {
     auto const& resources = sorobanResources();
     auto const& readEntries = resources.footprint.readOnly;
     auto const& writeEntries = resources.footprint.readWrite;
     if (resources.instructions > config.txMaxInstructions())
     {
-        txResult.pushValidationTimeDiagnosticError(
+        sorobanData.pushValidationTimeDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "transaction instructions resources exceed network config limit",
             {makeU64SCVal(resources.instructions),
@@ -554,7 +555,7 @@ TransactionFrame::validateSorobanResources(
     }
     if (resources.readBytes > config.txMaxReadBytes())
     {
-        txResult.pushValidationTimeDiagnosticError(
+        sorobanData.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-read resources exceed network config limit",
             {makeU64SCVal(resources.readBytes),
@@ -563,7 +564,7 @@ TransactionFrame::validateSorobanResources(
     }
     if (resources.writeBytes > config.txMaxWriteBytes())
     {
-        txResult.pushValidationTimeDiagnosticError(
+        sorobanData.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-write resources exceed network config limit",
             {makeU64SCVal(resources.writeBytes),
@@ -573,7 +574,7 @@ TransactionFrame::validateSorobanResources(
     if (readEntries.size() + writeEntries.size() >
         config.txMaxReadLedgerEntries())
     {
-        txResult.pushValidationTimeDiagnosticError(
+        sorobanData.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-read resources exceed network config limit",
             {makeU64SCVal(readEntries.size() + writeEntries.size()),
@@ -582,7 +583,7 @@ TransactionFrame::validateSorobanResources(
     }
     if (writeEntries.size() > config.txMaxWriteLedgerEntries())
     {
-        txResult.pushValidationTimeDiagnosticError(
+        sorobanData.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-write resources exceed network config limit",
             {makeU64SCVal(writeEntries.size()),
@@ -603,7 +604,7 @@ TransactionFrame::validateSorobanResources(
                 (tl.asset.type() == ASSET_TYPE_NATIVE) ||
                 isIssuer(tl.accountID, tl.asset))
             {
-                txResult.pushValidationTimeDiagnosticError(
+                sorobanData.pushValidationTimeDiagnosticError(
                     appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                     "transaction footprint contains invalid trustline asset");
                 return false;
@@ -616,7 +617,7 @@ TransactionFrame::validateSorobanResources(
         case LIQUIDITY_POOL:
         case CONFIG_SETTING:
         case TTL:
-            txResult.pushValidationTimeDiagnosticError(
+            sorobanData.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_UNEXPECTED_TYPE,
                 "transaction footprint contains unsupported ledger key type",
                 {makeU64SCVal(key.type())});
@@ -627,7 +628,7 @@ TransactionFrame::validateSorobanResources(
 
         if (xdr::xdr_size(key) > config.maxContractDataKeySizeBytes())
         {
-            txResult.pushValidationTimeDiagnosticError(
+            sorobanData.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction footprint key exceeds network config limit",
                 {makeU64SCVal(xdr::xdr_size(key)),
@@ -654,7 +655,7 @@ TransactionFrame::validateSorobanResources(
     auto txSize = this->getSize();
     if (txSize > config.txMaxSizeBytes())
     {
-        txResult.pushSimpleDiagnosticError(
+        sorobanData.pushSimpleDiagnosticError(
             appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "total transaction size exceeds network config limit",
             {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())});
@@ -669,7 +670,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
                                    MutableTransactionResultBase& txResult) const
 {
     ZoneScoped;
-    auto const feeRefund = txResult.getSorobanFeeRefund();
+    auto const feeRefund = txResult.getSorobanData()->getSorobanFeeRefund();
     if (feeRefund == 0)
     {
         return 0;
@@ -949,9 +950,10 @@ TransactionFrame::commonValidPreSeqNum(
         }
 
         auto const& sorobanData = mEnvelope.v1().tx.ext.sorobanData();
+        auto& sorobanTxData = *txResult->getSorobanData();
         if (sorobanData.resourceFee > getFullFee())
         {
-            txResult->pushValidationTimeDiagnosticError(
+            sorobanTxData.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is higher than the "
                 "full transaction fee",
@@ -965,7 +967,7 @@ TransactionFrame::commonValidPreSeqNum(
         if (sorobanResourceFee->refundable_fee >
             INT64_MAX - sorobanResourceFee->non_refundable_fee)
         {
-            txResult->pushValidationTimeDiagnosticError(
+            sorobanTxData.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
                 "transaction resource fees cannot be added",
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
@@ -978,7 +980,7 @@ TransactionFrame::commonValidPreSeqNum(
                                   sorobanResourceFee->non_refundable_fee;
         if (sorobanData.resourceFee < resourceFees)
         {
-            txResult->pushValidationTimeDiagnosticError(
+            sorobanTxData.pushValidationTimeDiagnosticError(
                 app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is lower than the "
                 "actual Soroban resource fee",
@@ -997,7 +999,7 @@ TransactionFrame::commonValidPreSeqNum(
             {
                 if (!set.emplace(lk).second)
                 {
-                    txResult->pushValidationTimeDiagnosticError(
+                    sorobanTxData.pushValidationTimeDiagnosticError(
                         app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
                         "Found duplicate key in the Soroban footprint; every "
                         "key across read-only and read-write footprints has to "
@@ -1436,7 +1438,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
             auto& opResult = txResult->getOpResultAt(i);
 
             if (!op->checkValid(app, signatureChecker, ltx, false, opResult,
-                                *txResult))
+                                txResult->getSorobanData()))
             {
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
@@ -1471,11 +1473,10 @@ TransactionFrame::checkSorobanResourceAndSetError(
     Application& app, uint32_t ledgerVersion,
     TransactionResultPayloadPtr txResult) const
 {
-    releaseAssertOrThrow(txResult);
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
     if (!validateSorobanResources(sorobanConfig, app.getConfig(), ledgerVersion,
-                                  *txResult))
+                                  *txResult->getSorobanData()))
     {
         txResult->setResultCode(txSOROBAN_INVALID);
         return false;
@@ -1563,7 +1564,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             ++opNum;
 
             bool txRes = op->apply(app, signatureChecker, ltxOp, subSeed,
-                                   opResult, txResult);
+                                   opResult, txResult.getSorobanData());
 
             if (!txRes)
             {
@@ -1626,8 +1627,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                           SOROBAN_PROTOCOL_VERSION) &&
                 isSoroban())
             {
-                txResult.publishSuccessDiagnosticsToMeta(outerMeta,
-                                                         app.getConfig());
+                txResult.getSorobanData()->publishSuccessDiagnosticsToMeta(
+                    outerMeta, app.getConfig());
             }
         }
         else
@@ -1648,11 +1649,12 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                     app.getLedgerManager().getSorobanNetworkConfig(),
                     app.getConfig());
 
-                txResult.setSorobanFeeRefund(declaredSorobanResourceFee() -
-                                             preApplyFee.non_refundable_fee);
+                txResult.getSorobanData()->setSorobanFeeRefund(
+                    declaredSorobanResourceFee() -
+                    preApplyFee.non_refundable_fee);
 
-                txResult.publishFailureDiagnosticsToMeta(outerMeta,
-                                                         app.getConfig());
+                txResult.getSorobanData()->publishFailureDiagnosticsToMeta(
+                    outerMeta, app.getConfig());
             }
         }
         return success;
@@ -1750,9 +1752,10 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
                 ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
                 app.getConfig());
 
-            txResult->setSorobanConsumedNonRefundableFee(
+            auto& sorobanData = *txResult->getSorobanData();
+            sorobanData.setSorobanConsumedNonRefundableFee(
                 sorobanResourceFee->non_refundable_fee);
-            txResult->setSorobanFeeRefund(
+            sorobanData.setSorobanFeeRefund(
                 declaredSorobanResourceFee() -
                 sorobanResourceFee->non_refundable_fee);
         }
