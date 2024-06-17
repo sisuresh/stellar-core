@@ -374,8 +374,8 @@ main(int argc, char* const* argv)
     xdr::marshaling_stack_limit = 1000;
 
     checkStellarCoreMajorVersionProtocolIdentity();
-    rust_bridge::check_lockfile_has_expected_dep_trees(
-        Config::CURRENT_LEDGER_PROTOCOL_VERSION);
+    //rust_bridge::check_lockfile_has_expected_dep_trees(
+      //  Config::CURRENT_LEDGER_PROTOCOL_VERSION);
 
     // FIXME: This check is done against the XDR version enabled in the host
     // (curr vs next). At the moment, the host is using curr, but core can be

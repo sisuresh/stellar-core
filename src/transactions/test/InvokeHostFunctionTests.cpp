@@ -385,6 +385,149 @@ TEST_CASE("Native stellar asset contract",
     }
 }
 
+TEST_CASE("s list", "[tx][soroban]")
+{
+    SorobanTest test;
+    TestContract& addContract =
+        test.deployWasmContract(rust_bridge::get_storage_list_wasm());
+
+    SCVal dataKey(SCV_VEC);
+    dataKey.vec().activate();
+    dataKey.vec()->emplace_back(makeSymbolSCVal("List"));
+
+    auto lkd = addContract.getDataKey(dataKey, ContractDataDurability::PERSISTENT);
+
+    auto invoke = [&](TestContract& contract, std::string const& functionName,
+                      std::vector<SCVal> const& args,
+                      SorobanInvocationSpec const& spec,
+                      std::optional<uint32_t> expectedRefund = std::nullopt,
+                      bool addContractKeys = true) {
+        int64_t initBalance = test.getRoot().getBalance();
+        auto invocation = contract.prepareInvocation(functionName, args, spec,
+                                                     addContractKeys);
+        auto tx =
+            std::dynamic_pointer_cast<TransactionFrame>(invocation.createTx());
+
+        REQUIRE(test.isTxValid(tx));
+
+        // Initially we store in result the charge for resources plus
+        // minimum inclusion  fee bid (currently equivalent to the
+        // network `baseFee` of 100).
+        int64_t baseCharged = tx->declaredSorobanResourceFee() + 100;
+        // Imitate surge pricing by charging at a higher rate than
+        // base fee.
+        uint32_t const surgePricedFee = 300;
+        {
+            LedgerTxn ltx(test.getApp().getLedgerTxnRoot());
+            tx->processFeeSeqNum(ltx, surgePricedFee);
+            ltx.commit();
+        }
+        // The resource and the base fee are charged, with additional
+        // surge pricing fee.
+        int64_t balanceAfterFeeCharged = test.getRoot().getBalance();
+        REQUIRE(initBalance - balanceAfterFeeCharged ==
+                tx->declaredSorobanResourceFee() + surgePricedFee);
+
+        TransactionMetaFrame txm(test.getLedgerVersion());
+        bool success = test.invokeTx(tx, &txm);
+        {
+            LedgerTxn ltx(test.getApp().getLedgerTxnRoot());
+            tx->processPostApply(test.getApp(), ltx, txm);
+            ltx.commit();
+        }
+
+        auto changesAfter = txm.getChangesAfter();
+
+   /*      // In case of failure we simply refund the whole refundable fee portion.
+        if (!expectedRefund)
+        {
+            REQUIRE(!success);
+            // Compute the exact refundable fee (so we don't need spec
+            // to have the exact refundable fee set).
+            auto nonRefundableFee =
+                sorobanResourceFee(test.getApp(), tx->sorobanResources(),
+                                   xdr::xdr_size(tx->getEnvelope()), 0);
+            expectedRefund = spec.getResourceFee() - nonRefundableFee;
+        }
+
+        // Verify refund meta
+        REQUIRE(changesAfter.size() == 2);
+        REQUIRE(changesAfter[1].updated().data.account().balance -
+                    changesAfter[0].state().data.account().balance ==
+                *expectedRefund);
+
+        // Make sure account receives expected refund
+        REQUIRE(test.getRoot().getBalance() - balanceAfterFeeCharged ==
+                *expectedRefund); */
+
+        return std::make_pair(tx, txm);
+    };
+
+    SCVal val1(SCV_U32);
+    val1.u32() = 4;
+    
+    SCVal val2(SCV_U32);
+    val2.u32() = 8;
+
+    SCVal u64(SCV_U64);
+    u64.u64() = 9'999'999'999;
+
+    SCVal val(SCV_VEC);
+    val.vec().activate();
+    val.vec()->emplace_back(val1);
+    val.vec()->emplace_back(u64);
+
+    auto fnName = "set_list";
+
+    auto invocationSpec = SorobanInvocationSpec()
+                              .setInstructions(2'000'000)
+                              .setReadBytes(2000)
+                              .setWriteBytes(2000)
+                              .setInclusionFee(102345);
+    
+    invocationSpec = invocationSpec.extendReadWriteFootprint({lkd});
+
+    uint32_t const expectedResourceFee = 32'702;
+    SECTION("correct invocation")
+    {
+        // NB: We use a hard-coded fees to smoke-test the fee
+        // computation logic stability.
+        uint32_t const expectedRefund = 100'000;
+        auto spec = invocationSpec
+                        // Since in tx we don't really distinguish between
+                        // refundable and non-refundable fee, set the fee that
+                        // we expect to be charged as 'non-refundable'.
+                        .setNonRefundableResourceFee(expectedResourceFee)
+                        .setRefundableResourceFee(expectedRefund);
+
+        auto [tx, txm] =
+            invoke(addContract, fnName, {val}, spec, expectedRefund);
+
+        REQUIRE(tx->getResult().result.code() == txSUCCESS);
+
+        auto const& ores = tx->getResult().result.results().at(0);
+        REQUIRE(ores.tr().type() == INVOKE_HOST_FUNCTION);
+        REQUIRE(ores.tr().invokeHostFunctionResult().code() ==
+                INVOKE_HOST_FUNCTION_SUCCESS);
+
+        {
+            LedgerTxn ltx(test.getApp().getLedgerTxnRoot());
+            auto cd = loadContractData(ltx, addContract.getAddress(), dataKey, ContractDataDurability::PERSISTENT);
+            std::cout << xdrToCerealString(cd.current(), "f") << std::endl;
+        }
+
+        /* SCVal resultVal = txm.getXDR().v3().sorobanMeta->returnValue;
+        REQUIRE(resultVal.i32() == 7 + 16);
+
+        InvokeHostFunctionSuccessPreImage successPreImage;
+        successPreImage.returnValue = resultVal;
+        successPreImage.events = txm.getXDR().v3().sorobanMeta->events;
+
+        REQUIRE(ores.tr().invokeHostFunctionResult().success() ==
+                xdrSha256(successPreImage)); */
+    }
+}
+
 TEST_CASE("basic contract invocation", "[tx][soroban]")
 {
     SorobanTest test;
