@@ -217,12 +217,12 @@ class TransactionFrame : public TransactionFrameBase
     checkSorobanResourceAndSetError(Application& app, uint32_t ledgerVersion,
                                     MutableTxResultPtr txResult) const override;
 
-    MutableTxResultPtr createTxResult() const override;
+    MutableTxResultPtr createSuccessResult() const override;
 
     MutableTxResultPtr
-    createTxResultWithFeeCharged(LedgerHeader const& header,
-                                 std::optional<int64_t> baseFee,
-                                 bool applying) const override;
+    createSuccessResultWithFeeCharged(LedgerHeader const& header,
+                                      std::optional<int64_t> baseFee,
+                                      bool applying) const override;
 
     void
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;

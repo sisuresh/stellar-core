@@ -134,25 +134,6 @@ FeeBumpTransactionFrame::processPostApply(Application& app,
     // should also be reflected here.
     int64_t refund =
         mInnerTx->processRefund(app, ltx, meta, getFeeSourceID(), *txResult);
-
-    // The result codes and a feeCharged without the refund are set in
-    // updateResult in FeeBumpTransactionFrame::apply. At this point, feeCharged
-    // is set correctly on the inner transaction, so update the feeBump result.
-    if (protocolVersionStartsFrom(ltx.loadHeader().current().ledgerVersion,
-                                  ProtocolVersion::V_21) &&
-        isSoroban())
-    {
-        // First update feeCharged of the inner result on the feeBump using
-        // mInnerTx
-        {
-            auto& irp = txResult->getResult().result.innerResultPair();
-            auto& innerRes = irp.result;
-            innerRes.feeCharged = txResult->getInnermostResult().feeCharged;
-
-            // Now set the updated feeCharged on the fee bump.
-            txResult->getResult().feeCharged -= refund;
-        }
-    }
 }
 
 bool
@@ -181,15 +162,15 @@ FeeBumpTransactionFrame::checkValid(Application& app,
 {
     if (!XDRProvidesValidFee())
     {
-        auto txResult = createTxResult();
+        auto txResult = createSuccessResult();
         txResult->setResultCode(txMALFORMED);
         return {false, txResult};
     }
 
     LedgerTxn ltx(ltxOuter);
     int64_t minBaseFee = ltx.loadHeader().current().baseFee;
-    auto txResult = createTxResultWithFeeCharged(ltx.loadHeader().current(),
-                                                 minBaseFee, false);
+    auto txResult = createSuccessResultWithFeeCharged(
+        ltx.loadHeader().current(), minBaseFee, false);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
                                       getContentsHash(),
@@ -209,7 +190,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
     auto [res, innerTxResult] = mInnerTx->checkValidWithOptionallyChargedFee(
         app, ltx, current, false, lowerBoundCloseTimeOffset,
         upperBoundCloseTimeOffset);
-    auto finalTxResult = createTxResultWithNewInnerTx(
+    auto finalTxResult = createSuccessResultWithNewInnerTx(
         std::move(txResult), std::move(innerTxResult), mInnerTx);
 
     return {res, finalTxResult};
@@ -505,8 +486,8 @@ MutableTxResultPtr
 FeeBumpTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
                                           std::optional<int64_t> baseFee) const
 {
-    auto txResult =
-        createTxResultWithFeeCharged(ltx.loadHeader().current(), baseFee, true);
+    auto txResult = createSuccessResultWithFeeCharged(
+        ltx.loadHeader().current(), baseFee, true);
     releaseAssert(txResult);
 
     auto feeSource = stellar::loadAccount(ltx, getFeeSourceID());
@@ -554,12 +535,12 @@ FeeBumpTransactionFrame::removeOneTimeSignerKeyFromFeeSource(
 }
 
 MutableTxResultPtr
-FeeBumpTransactionFrame::createTxResultWithFeeCharged(
+FeeBumpTransactionFrame::createSuccessResultWithFeeCharged(
     LedgerHeader const& header, std::optional<int64_t> baseFee,
     bool applying) const
 {
     auto innerTxResult =
-        mInnerTx->createTxResultWithFeeCharged(header, baseFee, applying);
+        mInnerTx->createSuccessResultWithFeeCharged(header, baseFee, applying);
 
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
@@ -573,14 +554,14 @@ FeeBumpTransactionFrame::createTxResultWithFeeCharged(
 }
 
 MutableTxResultPtr
-FeeBumpTransactionFrame::createTxResult() const
+FeeBumpTransactionFrame::createSuccessResult() const
 {
     return MutableTxResultPtr(
-        new FeeBumpMutableTransactionResult(mInnerTx->createTxResult()));
+        new FeeBumpMutableTransactionResult(mInnerTx->createSuccessResult()));
 }
 
 MutableTxResultPtr
-FeeBumpTransactionFrame::createTxResultWithNewInnerTx(
+FeeBumpTransactionFrame::createSuccessResultWithNewInnerTx(
     MutableTxResultPtr&& outerResult, MutableTxResultPtr&& innerResult,
     TransactionFrameBasePtr innerTx) const
 {

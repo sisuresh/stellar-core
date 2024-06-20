@@ -141,9 +141,9 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
                       std::shared_ptr<SorobanTxData> sorobanData) const
 {
     ZoneScoped;
-    bool applyRes;
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
-    applyRes = checkValid(app, signatureChecker, ltx, true, res, sorobanData);
+    bool applyRes =
+        checkValid(app, signatureChecker, ltx, true, res, sorobanData);
     if (applyRes)
     {
         if (isSoroban())

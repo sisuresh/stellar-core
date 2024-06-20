@@ -11,7 +11,7 @@
 namespace stellar
 {
 TransactionTestFrame::TransactionTestFrame(TransactionFrameBasePtr tx)
-    : mTransactionFrame(tx), mTransactionTxResult(tx->createTxResult())
+    : mTransactionFrame(tx), mTransactionTxResult(tx->createSuccessResult())
 {
     releaseAssert(mTransactionFrame);
     releaseAssert(!mTransactionFrame->isTestTx());
@@ -27,18 +27,18 @@ TransactionTestFrame::fromTxFrame(TransactionFrameBasePtr txFrame)
 }
 
 MutableTxResultPtr
-TransactionTestFrame::createTxResultWithFeeCharged(
+TransactionTestFrame::createSuccessResultWithFeeCharged(
     LedgerHeader const& header, std::optional<int64_t> baseFee,
     bool applying) const
 {
-    return mTransactionFrame->createTxResultWithFeeCharged(header, baseFee,
-                                                           applying);
+    return mTransactionFrame->createSuccessResultWithFeeCharged(header, baseFee,
+                                                                applying);
 }
 
 MutableTxResultPtr
-TransactionTestFrame::createTxResult() const
+TransactionTestFrame::createSuccessResult() const
 {
-    return mTransactionFrame->createTxResult();
+    return mTransactionFrame->createSuccessResult();
 }
 
 bool

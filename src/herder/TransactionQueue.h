@@ -78,16 +78,16 @@ class TransactionQueue
         std::optional<MutableTxResultPtr> txResult;
 
         // AddResult with no txResult
-        AddResult(TransactionQueue::AddResultCode addCode);
+        explicit AddResult(TransactionQueue::AddResultCode addCode);
 
         // AddResult from existing transaction result
-        AddResult(TransactionQueue::AddResultCode addCode,
-                  MutableTxResultPtr payload);
+        explicit AddResult(TransactionQueue::AddResultCode addCode,
+                           MutableTxResultPtr payload);
 
         // AddResult with error txResult with the specified txErrorCode
-        AddResult(TransactionQueue::AddResultCode addCode,
-                  TransactionFrameBasePtr tx,
-                  TransactionResultCode txErrorCode);
+        explicit AddResult(TransactionQueue::AddResultCode addCode,
+                           TransactionFrameBasePtr tx,
+                           TransactionResultCode txErrorCode);
     };
 
     /**
