@@ -401,9 +401,9 @@ TransactionFrame::sorobanResources() const
 }
 
 MutableTxResultPtr
-TransactionFrame::createTxResultWithFeeCharged(LedgerHeader const& header,
-                                               std::optional<int64_t> baseFee,
-                                               bool applying) const
+TransactionFrame::createSuccessResultWithFeeCharged(
+    LedgerHeader const& header, std::optional<int64_t> baseFee,
+    bool applying) const
 {
     // feeCharged is updated accordingly to represent the cost of the
     // transaction regardless of the failure modes.
@@ -412,7 +412,7 @@ TransactionFrame::createTxResultWithFeeCharged(LedgerHeader const& header,
 }
 
 MutableTxResultPtr
-TransactionFrame::createTxResult() const
+TransactionFrame::createSuccessResult() const
 {
     return MutableTxResultPtr(new MutableTransactionResult(*this, 0));
 }
@@ -692,7 +692,7 @@ TransactionFrame::refundSorobanFee(AbstractLedgerTxn& ltxOuter,
         return 0;
     }
 
-    txResult.getInnermostResult().feeCharged -= feeRefund;
+    txResult.refundSorobanFee(feeRefund, header.current().ledgerVersion);
     header.current().feePool -= feeRefund;
     ltx.commit();
 
@@ -1135,10 +1135,6 @@ TransactionFrame::processSignatures(
 
     if (!allOpsValid)
     {
-        // Changing "code" normally causes the XDR structure to be destructed,
-        // then a different XDR structure is constructed. However, txFAILED and
-        // txSUCCESS have the same underlying field number so this does not
-        // occur.
         txResult.setInnermostResultCode(txFAILED);
         return false;
     }
@@ -1282,7 +1278,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
 
     auto header = ltx.loadHeader();
     auto txResult =
-        createTxResultWithFeeCharged(header.current(), baseFee, true);
+        createSuccessResultWithFeeCharged(header.current(), baseFee, true);
     releaseAssert(txResult);
 
     auto sourceAccount = loadSourceAccount(ltx, header);
@@ -1397,7 +1393,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
 
     if (!XDRProvidesValidFee())
     {
-        auto txResult = createTxResult();
+        auto txResult = createSuccessResult();
         txResult->setInnermostResultCode(txMALFORMED);
         return {false, txResult};
     }
@@ -1409,8 +1405,8 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
         minBaseFee = 0;
     }
 
-    auto txResult = createTxResultWithFeeCharged(ltx.loadHeader().current(),
-                                                 minBaseFee, false);
+    auto txResult = createSuccessResultWithFeeCharged(
+        ltx.loadHeader().current(), minBaseFee, false);
     releaseAssert(txResult);
 
     SignatureChecker signatureChecker{ltx.loadHeader().current().ledgerVersion,
@@ -1631,10 +1627,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
         }
         else
         {
-            // Changing "code" normally causes the XDR structure to be
-            // destructed, then a different XDR structure is constructed.
-            // However, txFAILED and txSUCCESS have the same underlying field
-            // number so this does not occur.
             txResult.setInnermostResultCode(txFAILED);
             if (protocolVersionStartsFrom(ledgerVersion,
                                           SOROBAN_PROTOCOL_VERSION) &&

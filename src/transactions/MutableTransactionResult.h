@@ -84,12 +84,19 @@ class MutableTransactionResultBase : public NonMovableOrCopyable
     virtual TransactionResult& getResult() = 0;
     virtual TransactionResult const& getResult() const = 0;
     virtual TransactionResultCode getResultCode() const = 0;
+
+    // Note: changing "code" normally causes the XDR structure to be destructed,
+    // then a different XDR structure is constructed. However, txFAILED and
+    // txSUCCESS have the same underlying field number so this does not
+    // occur when changing between these two codes.
     virtual void setResultCode(TransactionResultCode code) = 0;
     virtual OperationResult& getOpResultAt(size_t index) = 0;
     virtual std::shared_ptr<SorobanTxData> getSorobanData() = 0;
-
     virtual xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const = 0;
+
+    virtual void refundSorobanFee(int64_t feeRefund,
+                                  uint32_t ledgerVersion) = 0;
 };
 
 class MutableTransactionResult : public MutableTransactionResultBase
@@ -99,9 +106,10 @@ class MutableTransactionResult : public MutableTransactionResultBase
 
     MutableTransactionResult(TransactionFrame const& tx, int64_t feeCharged);
 
-    friend MutableTxResultPtr TransactionFrame::createTxResult() const;
+    friend MutableTxResultPtr TransactionFrame::createSuccessResult() const;
 
-    friend MutableTxResultPtr TransactionFrame::createTxResultWithFeeCharged(
+    friend MutableTxResultPtr
+    TransactionFrame::createSuccessResultWithFeeCharged(
         LedgerHeader const& header, std::optional<int64_t> baseFee,
         bool applying) const;
 
@@ -118,6 +126,8 @@ class MutableTransactionResult : public MutableTransactionResultBase
     OperationResult& getOpResultAt(size_t index) override;
     std::shared_ptr<SorobanTxData> getSorobanData() override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
+
+    void refundSorobanFee(int64_t feeRefund, uint32_t ledgerVersion) override;
 };
 
 class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
@@ -131,15 +141,16 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
                                     MutableTxResultPtr&& innerTxResult,
                                     TransactionFrameBasePtr innerTx);
 
-    friend MutableTxResultPtr FeeBumpTransactionFrame::createTxResult() const;
+    friend MutableTxResultPtr
+    FeeBumpTransactionFrame::createSuccessResult() const;
 
     friend MutableTxResultPtr
-    FeeBumpTransactionFrame::createTxResultWithFeeCharged(
+    FeeBumpTransactionFrame::createSuccessResultWithFeeCharged(
         LedgerHeader const& header, std::optional<int64_t> baseFee,
         bool applying) const;
 
     friend MutableTxResultPtr
-    FeeBumpTransactionFrame::createTxResultWithNewInnerTx(
+    FeeBumpTransactionFrame::createSuccessResultWithNewInnerTx(
         MutableTxResultPtr&& outerResult, MutableTxResultPtr&& innerResult,
         TransactionFrameBasePtr innerTx) const;
 
@@ -160,5 +171,7 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
     OperationResult& getOpResultAt(size_t index) override;
     std::shared_ptr<SorobanTxData> getSorobanData() override;
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
+
+    void refundSorobanFee(int64_t feeRefund, uint32_t ledgerVersion) override;
 };
 }

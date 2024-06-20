@@ -67,7 +67,7 @@ TransactionQueue::AddResult::AddResult(AddResultCode addCode,
 TransactionQueue::AddResult::AddResult(AddResultCode addCode,
                                        TransactionFrameBasePtr tx,
                                        TransactionResultCode txErrorCode)
-    : code(addCode), txResult(tx->createTxResult())
+    : code(addCode), txResult(tx->createSuccessResult())
 {
     releaseAssert(txErrorCode != txSUCCESS);
     txResult.value()->setResultCode(txErrorCode);
@@ -324,7 +324,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             // appropriate error message
             if (tx->isSoroban())
             {
-                auto txResult = tx->createTxResult();
+                auto txResult = tx->createSuccessResult();
                 if (!tx->checkSorobanResourceAndSetError(
                         mApp,
                         mApp.getLedgerManager()
@@ -389,8 +389,9 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             result.txResult.value()->getResult().feeCharged = canAddRes.second;
             return result;
         }
-        return {TransactionQueue::AddResultCode::ADD_STATUS_TRY_AGAIN_LATER,
-                nullptr};
+        return AddResult(
+            TransactionQueue::AddResultCode::ADD_STATUS_TRY_AGAIN_LATER,
+            nullptr);
     }
 
     auto closeTime = mApp.getLedgerManager()
@@ -582,8 +583,8 @@ TransactionQueue::tryAdd(TransactionFrameBasePtr tx, bool submittedFromSelf)
     // fast fail when Soroban tx is malformed
     if ((tx->isSoroban() != (c1 || c2)) || !tx->XDRProvidesValidFee())
     {
-        return {TransactionQueue::AddResultCode::ADD_STATUS_ERROR, tx,
-                txMALFORMED};
+        return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR, tx,
+                         txMALFORMED);
     }
 
     AccountStates::iterator stateIter;

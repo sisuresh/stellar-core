@@ -52,12 +52,12 @@ class TransactionFrameBase
     checkSorobanResourceAndSetError(Application& app, uint32_t ledgerVersion,
                                     MutableTxResultPtr txResult) const = 0;
 
-    virtual MutableTxResultPtr createTxResult() const = 0;
+    virtual MutableTxResultPtr createSuccessResult() const = 0;
 
     virtual MutableTxResultPtr
-    createTxResultWithFeeCharged(LedgerHeader const& header,
-                                 std::optional<int64_t> baseFee,
-                                 bool applying) const = 0;
+    createSuccessResultWithFeeCharged(LedgerHeader const& header,
+                                      std::optional<int64_t> baseFee,
+                                      bool applying) const = 0;
 
     virtual TransactionEnvelope const& getEnvelope() const = 0;
 

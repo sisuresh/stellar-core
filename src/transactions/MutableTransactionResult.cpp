@@ -297,6 +297,14 @@ MutableTransactionResult::getDiagnosticEvents() const
     }
 }
 
+void
+MutableTransactionResult::refundSorobanFee(int64_t feeRefund,
+                                           uint32_t ledgerVersion)
+{
+    releaseAssertOrThrow(mSorobanExtension);
+    mTxResult->feeCharged -= feeRefund;
+}
+
 FeeBumpMutableTransactionResult::FeeBumpMutableTransactionResult(
     MutableTxResultPtr innerTxResult)
     : MutableTransactionResultBase(), mInnerTxResult(innerTxResult)
@@ -401,5 +409,27 @@ xdr::xvector<DiagnosticEvent> const&
 FeeBumpMutableTransactionResult::getDiagnosticEvents() const
 {
     return mInnerTxResult->getDiagnosticEvents();
+}
+
+void
+FeeBumpMutableTransactionResult::refundSorobanFee(int64_t feeRefund,
+                                                  uint32_t ledgerVersion)
+{
+    // First update feeCharged of the inner result
+    mInnerTxResult->refundSorobanFee(feeRefund, ledgerVersion);
+
+    // The result codes and a feeCharged without the refund should have been set
+    // already in updateResult in FeeBumpTransactionFrame::apply. At this point,
+    // feeCharged is set correctly on the inner transaction, so update the
+    // feeBump result.
+    if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_21))
+    {
+        auto& irp = mTxResult->result.innerResultPair();
+        auto& innerRes = irp.result;
+        innerRes.feeCharged = mInnerTxResult->getResult().feeCharged;
+
+        // Now set the updated feeCharged on the fee bump.
+        mTxResult->feeCharged -= feeRefund;
+    }
 }
 }
