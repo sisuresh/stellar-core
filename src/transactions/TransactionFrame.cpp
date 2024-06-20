@@ -1544,8 +1544,6 @@ TransactionFrame::parallelApply(
         {"ledger", "transaction", "internal-error"}); */
 
     // Contains applyOperations logic
-    // std::cout << xdrToCerealString(getEnvelope(), "p - envelope") <<
-    // std::endl;
 
     // TODO: Throw or abort here?
     releaseAssertOrThrow(resPayload.getOpFrames().size() == 1);
@@ -1575,6 +1573,7 @@ TransactionFrame::parallelApply(
 
         if (res.first)
         {
+            // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.second)
             {
@@ -1952,6 +1951,7 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
             processSignatures(cv, signatureChecker, ltxTx, *resPayload);
 
         meta.pushTxChangesBefore(ltxTx.getChanges());
+
         ltxTx.commit();
 
         bool ok = signaturesValid && cv == ValidationType::kMaybeValid;

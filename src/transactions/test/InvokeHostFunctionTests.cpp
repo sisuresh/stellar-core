@@ -4296,6 +4296,122 @@ TEST_CASE("Vm instantiation tightening", "[tx][soroban]")
     }
 }
 
+TEST_CASE("parallel ttl", "[tx][soroban]")
+{
+    auto modifyCfg = [](SorobanNetworkConfig& cfg) {
+        // Increase write fee so the fee will be greater than 1
+        cfg.mWriteFee1KBBucketListLow = 20'000;
+        cfg.mWriteFee1KBBucketListHigh = 1'000'000;
+    };
+
+    auto cfg = getTestConfig();
+    // cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
+    SorobanTest test(cfg, true, modifyCfg);
+
+    ContractStorageTestClient client(test);
+
+    auto issuerKey = getAccount("issuer");
+    Asset idr = makeAsset(issuerKey, "IDR");
+    AssetContractTestClient assetClient(test, idr);
+
+    auto& app = test.getApp();
+    auto& lm = app.getLedgerManager();
+
+    auto const& stateArchivalSettings =
+        test.getNetworkCfg().stateArchivalSettings();
+
+    const int64_t startingBalance = lm.getLastMinBalance(50);
+
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", startingBalance);
+    auto a2 = root.create("a2", startingBalance);
+    auto a3 = root.create("a3", startingBalance);
+    auto a4 = root.create("a4", startingBalance);
+
+    REQUIRE(client.put("key1", ContractDataDurability::PERSISTENT, 0) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+
+    auto expectedPersistentLiveUntilLedger =
+        stateArchivalSettings.minPersistentTTL + test.getLedgerSeq() - 1;
+
+    REQUIRE(client.getTTL("key1", ContractDataDurability::PERSISTENT) ==
+            expectedPersistentLiveUntilLedger);
+
+    auto i1 = client.getContract().prepareInvocation(
+        "extend_persistent",
+        {makeSymbolSCVal("key1"), makeU32SCVal(100'000), makeU32SCVal(100'000)},
+        client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
+    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+
+    auto i2 = client.getContract().prepareInvocation(
+        "extend_persistent",
+        {makeSymbolSCVal("key1"), makeU32SCVal(2000), makeU32SCVal(2000)},
+        client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
+    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+
+    auto i3 = client.getContract().prepareInvocation(
+        "extend_persistent",
+        {makeSymbolSCVal("key1"), makeU32SCVal(3000), makeU32SCVal(3000)},
+        client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
+    auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+
+    auto i4 = client.getContract().prepareInvocation(
+        "extend_persistent",
+        {makeSymbolSCVal("key1"), makeU32SCVal(3000), makeU32SCVal(3000)},
+        client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
+    auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
+
+    LedgerTxn ltx(app.getLedgerTxnRoot());
+
+    TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+
+    std::vector<Stage> stages;
+    auto& stage = stages.emplace_back();
+
+    // Put first two clusters into same thread, and third cluster into a
+    // different thread
+    stage.resize(2);
+
+    // First thread
+    auto& cluster1 = stage[0].emplace_back();
+    cluster1.emplace_back(tx1, tx1->getResultPayload(), tm);
+
+    auto& cluster2 = stage[0].emplace_back();
+    cluster2.emplace_back(tx2, tx2->getResultPayload(), tm);
+
+    auto& cluster4 = stage[0].emplace_back();
+    cluster4.emplace_back(tx4, tx4->getResultPayload(), tm);
+
+    // Second thread
+    auto& cluster3 = stage[1].emplace_back();
+    cluster3.emplace_back(tx3, tx3->getResultPayload(), tm);
+
+    {
+        auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
+        lmImpl->applySorobanStages(app, ltx, stages, Hash{});
+        ltx.commit();
+    }
+
+    REQUIRE(tx1->getResultCode() == txSUCCESS);
+    REQUIRE(tx2->getResultCode() == txSUCCESS);
+    REQUIRE(tx3->getResultCode() == txSUCCESS);
+    REQUIRE(tx4->getResultCode() == txSUCCESS);
+
+    // FeeCharged is initialized to 0 in this test which is incorrect. That's
+    // why these values are negative after the refund. They also shouldn't all
+    // be the same.
+    REQUIRE(tx1->getResult().feeCharged == -39999);
+    REQUIRE(tx2->getResult().feeCharged == -39999);
+    REQUIRE(tx3->getResult().feeCharged == -39999);
+    REQUIRE(tx4->getResult().feeCharged == -39999);
+
+    REQUIRE(client.getTTL("key1", ContractDataDurability::PERSISTENT) ==
+            test.getLedgerSeq() + 100'000);
+
+    std::cout << xdrToCerealString(cluster1.front().meta.getXDR(), "meta1")
+              << std::endl;
+}
+
 TEST_CASE("parallel", "[tx][soroban]")
 {
     auto cfg = getTestConfig();

@@ -1741,8 +1741,20 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         thread.join();
     }
 
-    // reconcile TTL entries
     LedgerTxn ltxInner(ltx);
+
+    for (auto const& thread : stage)
+    {
+        for (auto const& cluster : thread)
+        {
+            for (auto const& txBundle : cluster)
+            {
+                txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
+                                              txBundle.resPayload);
+            }
+        }
+    }
+
     for (auto const& entryMapsByCluster : entryMapsByThread)
     {
         for (auto const& clusterEntryMap : entryMapsByCluster)
@@ -1790,8 +1802,6 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
             }
         }
     }
-    // auto r = ltxInner.getChanges();
-    // std::cout << xdrToCerealString(r, "r") << std::endl;
     ltxInner.commit();
 }
 

@@ -363,7 +363,6 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             // For testing
             auto threadID =
                 std::hash<std::thread::id>{}(std::this_thread::get_id());
-            std::cout << "threadID " << threadID << std::endl;
 
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
             uint32_t entrySize = 0u;
@@ -688,7 +687,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
         innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
         return {false, {}};
     }
-
+    std::cout << out.rent_fee << "\n\n\n\n\n" << std::endl;
     if (!resPayload.consumeRefundableSorobanResources(
             metrics.mEmitEventByte, out.rent_fee, ledgerVersion, sorobanConfig,
             appConfig, mParentTx))

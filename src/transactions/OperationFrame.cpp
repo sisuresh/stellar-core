@@ -156,7 +156,6 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
     return res;
 }
 
-// TODO: Change the entry type to use something
 std::pair<bool, ModifiedEntryMap>
 OperationFrame::applyParallel(
     ClusterEntryMap const& entryMap, Config const& config,
