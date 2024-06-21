@@ -4481,7 +4481,10 @@ TEST_CASE("parallel", "[tx][soroban]")
     LedgerTxn ltx(app.getLedgerTxnRoot());
 
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
-    Stage stage;
+
+    std::vector<Stage> stages;
+    auto& stage = stages.emplace_back();
+
     stage.resize(3);
     auto& cluster1 = stage[0].emplace_back();
     cluster1.emplace_back(tx1, tx1->getResultPayload(), tm);
@@ -4498,7 +4501,7 @@ TEST_CASE("parallel", "[tx][soroban]")
 
     {
         auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
-        lmImpl->applySorobanStages(app, ltx, {stage}, Hash{});
+        lmImpl->applySorobanStages(app, ltx, stages, Hash{});
         ltx.commit();
     }
 

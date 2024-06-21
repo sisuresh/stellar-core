@@ -1578,13 +1578,12 @@ LedgerManagerImpl::applyCluster(ClusterEntryMap& entryMap, Config const& config,
         releaseAssertOrThrow(txBundle.resPayload);
         auto res = txBundle.tx->parallelApply(
             entryMap, config, sorobanConfig, ledgerInfo, *txBundle.resPayload,
-            mSorobanMetrics /*FIX*/, sorobanBasePrngSeed, txBundle.meta,
-            ledgerSeq, ledgerVersion);
+            sorobanBasePrngSeed, txBundle.meta, ledgerSeq, ledgerVersion);
 
-        if (res.first)
+        if (res.mSuccess)
         {
             // now apply the entry changes to entryMap
-            for (auto const& entry : res.second)
+            for (auto const& entry : res.mModifiedEntryMap)
             {
                 auto const& lk = entry.first;
                 auto const& updatedLe = entry.second;
@@ -1610,6 +1609,7 @@ LedgerManagerImpl::applyCluster(ClusterEntryMap& entryMap, Config const& config,
             releaseAssertOrThrow(txBundle.resPayload->getResultCode() ==
                                  txFAILED);
         }
+        txBundle.opMetrics = res.opMetrics;
     }
 }
 
@@ -1751,6 +1751,21 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
             {
                 txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
                                               txBundle.resPayload);
+
+                releaseAssertOrThrow(txBundle.opMetrics);
+                txBundle.opMetrics->updateSorobanMetrics(mSorobanMetrics);
+
+                // We only increase the internal-error metric count if the
+                // ledger is a newer version.
+                if (txBundle.resPayload->getResultCode() == txINTERNAL_ERROR &&
+                    ledgerVersion >=
+                        config
+                            .LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
+                {
+                    auto& internalErrorCounter = app.getMetrics().NewCounter(
+                        {"ledger", "transaction", "internal-error"});
+                    internalErrorCounter.inc();
+                }
             }
         }
     }

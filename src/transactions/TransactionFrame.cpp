@@ -1530,18 +1530,16 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 // TODO: Add INTERNAL_ERROR handling and all post-success tx validation!!!
-std::pair<bool, ModifiedEntryMap>
+ParallelOpReturnVal
 TransactionFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
-    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-    TransactionMetaFrame& meta, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+    uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
-    /* ZoneScoped;
-    auto& internalErrorCounter = app.getMetrics().NewCounter(
-        {"ledger", "transaction", "internal-error"}); */
+    ZoneScoped;
+    ZoneScoped;
 
     // Contains applyOperations logic
 
@@ -1566,16 +1564,15 @@ TransactionFrame::parallelApply(
             ledgerVersion >=
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
 
-        auto const& res = op->applyParallel(
+        auto res = op->applyParallel(
             entryMap, config, sorobanConfig, ledgerInfo, resPayload,
-            sorobanMetrics, sorobanBasePrngSeed /*fix*/, ledgerSeq,
-            ledgerVersion);
+            sorobanBasePrngSeed /*fix*/, ledgerSeq, ledgerVersion);
 
-        if (res.first)
+        if (res.mSuccess)
         {
             // Build OperationMeta
             LedgerEntryChanges changes;
-            for (auto const& newUpdates : res.second)
+            for (auto const& newUpdates : res.mModifiedEntryMap)
             {
                 auto const& lk = newUpdates.first;
                 auto const& le = newUpdates.second;
@@ -1648,11 +1645,11 @@ TransactionFrame::parallelApply(
     {
         printErrorAndAbort("Invariant failure while applying operations: ",
                            e.what());
-    }
+    } */
     catch (std::bad_alloc& e)
     {
         printErrorAndAbort("Exception while applying operations: ", e.what());
-    } */
+    }
     catch (std::exception& e)
     {
         if (reportInternalErrOnException)
@@ -1672,21 +1669,14 @@ TransactionFrame::parallelApply(
                       e.what());
         }
     }
-    /* if (app.getConfig().HALT_ON_INTERNAL_TRANSACTION_ERROR)
+    if (config.HALT_ON_INTERNAL_TRANSACTION_ERROR)
     {
         printErrorAndAbort("Encountered an exception while applying "
                            "operations, see logs for details.");
-    } */
+    }
 
     // This is only reachable if an exception is thrown
     resPayload.setResultCode(txINTERNAL_ERROR);
-
-    // We only increase the internal-error metric count if the ledger is a
-    // newer version.
-    /* if (reportInternalErrOnException)
-    {
-        internalErrorCounter.inc();
-    } */
 
     // operations and txChangesAfter should already be empty at this point
     meta.clearOperationMetas();
@@ -2179,17 +2169,16 @@ TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                                chargeFee);
 }
 
-std::pair<bool, ModifiedEntryMap>
+ParallelOpReturnVal
 TransactionTestFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
-    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-    TransactionMetaFrame& meta, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+    uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
     return mTransactionFrame->parallelApply(
-        entryMap, config, sorobanConfig, ledgerInfo, resPayload, sorobanMetrics,
+        entryMap, config, sorobanConfig, ledgerInfo, resPayload,
         sorobanBasePrngSeed, meta, ledgerSeq, ledgerVersion);
 }
 

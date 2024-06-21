@@ -41,6 +41,21 @@ using ClusterEntryMap =
     UnorderedMap<LedgerKey,
                  std::pair<std::optional<LedgerEntry>, bool /*dirty*/>>;
 
+class SorobanOpMetrics
+{
+  public:
+    virtual ~SorobanOpMetrics() = default;
+    // This is not thread safe
+    virtual void updateSorobanMetrics(SorobanMetrics& metrics) = 0;
+};
+
+struct ParallelOpReturnVal
+{
+    bool mSuccess{false};
+    ModifiedEntryMap mModifiedEntryMap;
+    std::shared_ptr<SorobanOpMetrics> opMetrics;
+};
+
 // temporary. Remove this
 class TxBundle
 {
@@ -52,7 +67,10 @@ class TxBundle
     }
     TransactionFrameBasePtr tx;
     TransactionResultPayloadPtr resPayload;
+
+    // TODO: Stop using mutable
     mutable TransactionMetaFrame meta;
+    mutable std::shared_ptr<SorobanOpMetrics> opMetrics;
 };
 
 typedef std::vector<TxBundle> Cluster;
@@ -77,14 +95,13 @@ class TransactionFrameBase
                                   TransactionResultPayloadPtr resPayload,
                                   bool chargeFee) const = 0;
 
-    virtual std::pair<bool, ModifiedEntryMap> parallelApply(
+    virtual ParallelOpReturnVal parallelApply(
         ClusterEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         CxxLedgerInfo const& ledgerInfo,
         TransactionResultPayloadBase& resPayload,
-        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-        TransactionMetaFrame& meta, uint32_t ledgerSeq,
-        uint32_t ledgerVersion) const = 0;
+        Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+        uint32_t ledgerSeq, uint32_t ledgerVersion) const = 0;
 
     virtual std::pair<bool, TransactionResultPayloadPtr>
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,

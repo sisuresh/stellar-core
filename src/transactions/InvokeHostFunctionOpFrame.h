@@ -25,11 +25,12 @@ class InvokeHostFunctionOpFrame : public OperationFrame
         return mResult.tr().invokeHostFunctionResult();
     }
 
-    void
-    maybePopulateDiagnosticEvents(Config const& cfg,
-                                  InvokeHostFunctionOutput const& output,
-                                  HostFunctionMetrics const& metrics,
-                                  TransactionResultPayloadBase& resPayload);
+    // TODO: Temporarily templated while we have both HostFunctionMetrics and
+    // ParallelHostFunctionMetrics
+    template <typename MetricsT>
+    void maybePopulateDiagnosticEvents(
+        Config const& cfg, InvokeHostFunctionOutput const& output,
+        MetricsT const& metrics, TransactionResultPayloadBase& resPayload);
 
     InvokeHostFunctionOp const& mInvokeHostFunction;
 
@@ -45,12 +46,11 @@ class InvokeHostFunctionOpFrame : public OperationFrame
                  Hash const& sorobanBasePrngSeed,
                  TransactionResultPayloadBase& resPayload) override;
 
-    std::pair<bool, ModifiedEntryMap> doApplyParallel(
+    ParallelOpReturnVal doApplyParallel(
         ClusterEntryMap const& entryMap, // Must not be shared between threads!
         Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
         Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
-        TransactionResultPayloadBase& resPayload,
-        SorobanMetrics& sorobanMetrics /*temporary*/, uint32_t ledgerSeq,
+        TransactionResultPayloadBase& resPayload, uint32_t ledgerSeq,
         uint32_t ledgerVersion) override;
 
     bool doCheckValid(SorobanNetworkConfig const& config,

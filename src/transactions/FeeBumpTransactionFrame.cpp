@@ -81,14 +81,13 @@ FeeBumpTransactionFrame::preParallelApply(
     return false;
 }
 
-std::pair<bool, ModifiedEntryMap>
+ParallelOpReturnVal
 FeeBumpTransactionFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
-    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-    TransactionMetaFrame& meta, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
+    uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
     return {false, {}};
 }

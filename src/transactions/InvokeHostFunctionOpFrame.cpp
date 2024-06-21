@@ -106,6 +106,154 @@ metricsEvent(bool success, std::string&& topic, uint64_t value)
 
 } // namespace
 
+// TODO: Deduplicate. Maybe just include both for v23, and then remove the
+// destructor after we're on v23.
+// The ledger level metrics should not be observable.
+class ParallelHostFunctionMetrics : public SorobanOpMetrics
+{
+  public:
+    uint32_t mReadEntry{0};
+    uint32_t mWriteEntry{0};
+
+    uint32_t mLedgerReadByte{0};
+    uint32_t mLedgerWriteByte{0};
+
+    uint32_t mReadKeyByte{0};
+    uint32_t mWriteKeyByte{0};
+
+    uint32_t mReadDataByte{0};
+    uint32_t mWriteDataByte{0};
+
+    uint32_t mReadCodeByte{0};
+    uint32_t mWriteCodeByte{0};
+
+    uint32_t mEmitEvent{0};
+    uint32_t mEmitEventByte{0};
+
+    // host runtime metrics
+    uint64_t mCpuInsn{0};
+    uint64_t mMemByte{0};
+    uint64_t mInvokeTimeNsecs{0};
+    uint64_t mCpuInsnExclVm{0};
+    uint64_t mInvokeTimeNsecsExclVm{0};
+
+    // max single entity size metrics
+    uint32_t mMaxReadWriteKeyByte{0};
+    uint32_t mMaxReadWriteDataByte{0};
+    uint32_t mMaxReadWriteCodeByte{0};
+    uint32_t mMaxEmitEventByte{0};
+
+    std::chrono::nanoseconds mHostFuncOpExecNsecs{0};
+
+    bool mSuccess{false};
+
+    void
+    noteReadEntry(bool isCodeEntry, uint32_t keySize, uint32_t entrySize)
+    {
+        mReadEntry++;
+        mReadKeyByte += keySize;
+        mMaxReadWriteKeyByte = std::max(mMaxReadWriteKeyByte, keySize);
+        mLedgerReadByte += entrySize;
+        if (isCodeEntry)
+        {
+            mReadCodeByte += entrySize;
+            mMaxReadWriteCodeByte = std::max(mMaxReadWriteCodeByte, entrySize);
+        }
+        else
+        {
+            mReadDataByte += entrySize;
+            mMaxReadWriteDataByte = std::max(mMaxReadWriteDataByte, entrySize);
+        }
+    }
+
+    void
+    noteWriteEntry(bool isCodeEntry, uint32_t keySize, uint32_t entrySize)
+    {
+        mWriteEntry++;
+        mMaxReadWriteKeyByte = std::max(mMaxReadWriteKeyByte, keySize);
+        mLedgerWriteByte += entrySize;
+        if (isCodeEntry)
+        {
+            mWriteCodeByte += entrySize;
+            mMaxReadWriteCodeByte = std::max(mMaxReadWriteCodeByte, entrySize);
+        }
+        else
+        {
+            mWriteDataByte += entrySize;
+            mMaxReadWriteDataByte = std::max(mMaxReadWriteDataByte, entrySize);
+        }
+    }
+
+    void
+    updateSorobanMetrics(SorobanMetrics& metrics)
+    {
+        metrics.mHostFnOpReadEntry.Mark(mReadEntry);
+        metrics.mHostFnOpWriteEntry.Mark(mWriteEntry);
+
+        metrics.mHostFnOpReadKeyByte.Mark(mReadKeyByte);
+        metrics.mHostFnOpWriteKeyByte.Mark(mWriteKeyByte);
+
+        metrics.mHostFnOpReadLedgerByte.Mark(mLedgerReadByte);
+        metrics.mHostFnOpReadDataByte.Mark(mReadDataByte);
+        metrics.mHostFnOpReadCodeByte.Mark(mReadCodeByte);
+
+        metrics.mHostFnOpWriteLedgerByte.Mark(mLedgerWriteByte);
+        metrics.mHostFnOpWriteDataByte.Mark(mWriteDataByte);
+        metrics.mHostFnOpWriteCodeByte.Mark(mWriteCodeByte);
+
+        metrics.mHostFnOpEmitEvent.Mark(mEmitEvent);
+        metrics.mHostFnOpEmitEventByte.Mark(mEmitEventByte);
+
+        metrics.mHostFnOpCpuInsn.Mark(mCpuInsn);
+        metrics.mHostFnOpMemByte.Mark(mMemByte);
+        metrics.mHostFnOpInvokeTimeNsecs.Update(
+            std::chrono::nanoseconds(mInvokeTimeNsecs));
+        metrics.mHostFnOpCpuInsnExclVm.Mark(mCpuInsnExclVm);
+        metrics.mHostFnOpInvokeTimeNsecsExclVm.Update(
+            std::chrono::nanoseconds(mInvokeTimeNsecsExclVm));
+        metrics.mHostFnOpInvokeTimeFsecsCpuInsnRatio.Update(
+            mInvokeTimeNsecs * 1000000 / std::max(mCpuInsn, uint64_t(1)));
+        metrics.mHostFnOpInvokeTimeFsecsCpuInsnRatioExclVm.Update(
+            mInvokeTimeNsecsExclVm * 1000000 /
+            std::max(mCpuInsnExclVm, uint64_t(1)));
+
+        metrics.mHostFnOpExec.Update(mHostFuncOpExecNsecs);
+
+        metrics.mHostFnOpMaxRwKeyByte.Mark(mMaxReadWriteKeyByte);
+        metrics.mHostFnOpMaxRwDataByte.Mark(mMaxReadWriteDataByte);
+        metrics.mHostFnOpMaxRwCodeByte.Mark(mMaxReadWriteCodeByte);
+        metrics.mHostFnOpMaxEmitEventByte.Mark(mMaxEmitEventByte);
+
+        if (mSuccess)
+        {
+            metrics.mHostFnOpSuccess.Mark();
+        }
+        else
+        {
+            metrics.mHostFnOpFailure.Mark();
+        }
+    }
+};
+
+struct CallTimer
+{
+  private:
+    ParallelHostFunctionMetrics& mMetrics;
+    std::chrono::steady_clock::time_point mStartTime;
+
+  public:
+    CallTimer(ParallelHostFunctionMetrics& metrics)
+        : mMetrics(metrics), mStartTime(std::chrono::steady_clock::now())
+    {
+    }
+
+    ~CallTimer()
+    {
+        mMetrics.mHostFuncOpExecNsecs =
+            std::chrono::steady_clock::now() - mStartTime;
+    }
+};
+
 struct HostFunctionMetrics
 {
     SorobanMetrics& mMetrics;
@@ -258,11 +406,11 @@ InvokeHostFunctionOpFrame::doApply(AbstractLedgerTxn& ltx,
         "InvokeHostFunctionOpFrame::doApply needs Config and base PRNG seed");
 }
 
+template <typename MetricsT>
 void
 InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     Config const& cfg, InvokeHostFunctionOutput const& output,
-    HostFunctionMetrics const& metrics,
-    TransactionResultPayloadBase& resPayload)
+    MetricsT const& metrics, TransactionResultPayloadBase& resPayload)
 {
     if (cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
     {
@@ -326,22 +474,24 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     }
 }
 
-std::pair<bool, ModifiedEntryMap>
+ParallelOpReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
     ClusterEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
     Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
-    TransactionResultPayloadBase& resPayload,
-    SorobanMetrics& sorobanMetrics /*temporary*/, uint32_t ledgerSeq,
+    TransactionResultPayloadBase& resPayload, uint32_t ledgerSeq,
     uint32_t ledgerVersion)
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame apply", true);
 
     std::vector<LedgerEntryChange> changes;
 
-    // TODO: Figure out metrics. They update shared state.
-    HostFunctionMetrics metrics(sorobanMetrics);
-    // auto timeScope = metrics.getExecTimer();
+    auto metricsPtr = std::shared_ptr<ParallelHostFunctionMetrics>(
+        new ParallelHostFunctionMetrics());
+    releaseAssert(metricsPtr);
+    auto& metrics = *metricsPtr;
+
+    CallTimer callTimer(metrics);
 
     // Get the entries for the footprint
     rust::Vec<CxxBuf> ledgerEntryCxxBufs;
@@ -361,8 +511,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
         for (auto const& lk : keys)
         {
             // For testing
-            auto threadID =
-                std::hash<std::thread::id>{}(std::this_thread::get_id());
+            /* auto threadID =
+                std::hash<std::thread::id>{}(std::this_thread::get_id()); */
 
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
             uint32_t entrySize = 0u;
@@ -472,13 +622,13 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     if (!addReads(footprint.readOnly))
     {
         // Error code set in addReads
-        return {false, {}};
+        return {false, {}, metricsPtr};
     }
 
     if (!addReads(footprint.readWrite))
     {
         // Error code set in addReads
-        return {false, {}};
+        return {false, {}, metricsPtr};
     }
 
     rust::Vec<CxxBuf> authEntryCxxBufs;
@@ -553,7 +703,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
         {
             innerResult().code(INVOKE_HOST_FUNCTION_TRAPPED);
         }
-        return {false, {}};
+        return {false, {}, metricsPtr};
     }
 
     // Keep track of updates we need to make
@@ -571,7 +721,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                                          resPayload))
         {
             innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-            return {false, {}};
+            return {false, {}, metricsPtr};
         }
 
         auto lk = LedgerEntryKey(le);
@@ -594,7 +744,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                      makeU64SCVal(resources.writeBytes)});
                 innerResult().code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-                return {false, {}};
+                return {false, {}, metricsPtr};
             }
         }
 
@@ -667,13 +817,12 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                 {makeU64SCVal(metrics.mEmitEventByte),
                  makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
             innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-            return {false, {}};
+            return {false, {}, metricsPtr};
         }
         ContractEvent evt;
         xdr::xdr_from_opaque(buf.data, evt);
         success.events.emplace_back(evt);
     }
-
     maybePopulateDiagnosticEvents(appConfig, out, metrics, resPayload);
 
     metrics.mEmitEventByte += static_cast<uint32>(out.result_value.data.size());
@@ -685,15 +834,15 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             {makeU64SCVal(metrics.mEmitEventByte),
              makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
         innerResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-        return {false, {}};
+        return {false, {}, metricsPtr};
     }
-    std::cout << out.rent_fee << "\n\n\n\n\n" << std::endl;
+
     if (!resPayload.consumeRefundableSorobanResources(
             metrics.mEmitEventByte, out.rent_fee, ledgerVersion, sorobanConfig,
             appConfig, mParentTx))
     {
         innerResult().code(INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
-        return {false, {}};
+        return {false, {}, metricsPtr};
     }
 
     xdr::xdr_from_opaque(out.result_value.data, success.returnValue);
@@ -703,7 +852,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     resPayload.pushContractEvents(success.events);
     resPayload.setReturnValue(success.returnValue);
     metrics.mSuccess = true;
-    return {true, opEntryMap};
+
+    return {true, opEntryMap, metricsPtr};
 }
 
 bool
