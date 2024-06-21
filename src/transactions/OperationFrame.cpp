@@ -169,7 +169,6 @@ OperationFrame::applyParallel(ClusterEntryMap const& entryMap,
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
     // checkValid is called earlier in preParallelApply
 
-    // TODO: Can't use SorobanMetrics like this
     return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
                            ledgerInfo, resPayload, ledgerSeq, ledgerVersion);
 }

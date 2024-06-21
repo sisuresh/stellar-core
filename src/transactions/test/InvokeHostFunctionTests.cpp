@@ -4444,6 +4444,16 @@ TEST_CASE("parallel", "[tx][soroban]")
 
     auto a7 = root.create("a7", startingBalance);
 
+    auto& hostFnExecTimer =
+        app.getMetrics().NewTimer({"soroban", "host-fn-op", "exec"});
+    auto& hostFnSuccessMeter =
+        app.getMetrics().NewMeter({"soroban", "host-fn-op", "success"}, "call");
+    auto& hostFnFailureMeter =
+        app.getMetrics().NewMeter({"soroban", "host-fn-op", "failure"}, "call");
+
+    auto successesBefore = hostFnSuccessMeter.count();
+    auto failuresBefore = hostFnFailureMeter.count();
+
     auto i1 = client.getContract().prepareInvocation(
         "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
         client.writeKeySpec("key1", ContractDataDurability::TEMPORARY));
@@ -4499,11 +4509,16 @@ TEST_CASE("parallel", "[tx][soroban]")
     cluster3.emplace_back(transferTx1, transferTx1->getResultPayload(), tm);
     cluster3.emplace_back(transferTx2, transferTx2->getResultPayload(), tm);
 
+    auto timerBefore = hostFnExecTimer.count();
     {
         auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
         lmImpl->applySorobanStages(app, ltx, stages, Hash{});
         ltx.commit();
     }
+    REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
+
+    REQUIRE(hostFnSuccessMeter.count() - successesBefore == 6);
+    REQUIRE(hostFnFailureMeter.count() == 1);
 
     REQUIRE(client.has("key1", ContractDataDurability::TEMPORARY, true) ==
             INVOKE_HOST_FUNCTION_SUCCESS);

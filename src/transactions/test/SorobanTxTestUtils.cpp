@@ -635,7 +635,7 @@ bool
 TestContract::Invocation::invoke(TestAccount* source)
 {
     auto tx = createTx(source);
-    CLOG_INFO(Tx, "invoke tx {}", xdr::xdr_to_string(tx->getEnvelope()));
+    CLOG_DEBUG(Tx, "invoke tx {}", xdr::xdr_to_string(tx->getEnvelope()));
     mTxMeta.emplace(mTest.getLedgerVersion());
     bool success = mTest.invokeTx(tx, &*mTxMeta);
     if (tx->getResult().result.code() == txFAILED ||

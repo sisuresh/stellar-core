@@ -185,7 +185,7 @@ class ParallelHostFunctionMetrics : public SorobanOpMetrics
     }
 
     void
-    updateSorobanMetrics(SorobanMetrics& metrics)
+    updateSorobanMetrics(SorobanMetrics& metrics) override
     {
         metrics.mHostFnOpReadEntry.Mark(mReadEntry);
         metrics.mHostFnOpWriteEntry.Mark(mWriteEntry);

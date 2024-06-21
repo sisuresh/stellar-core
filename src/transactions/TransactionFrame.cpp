@@ -1529,7 +1529,6 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
     return apply(app, ltx, tm, resPayload, sorobanBasePrngSeed);
 }
 
-// TODO: Add INTERNAL_ERROR handling and all post-success tx validation!!!
 ParallelOpReturnVal
 TransactionFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
@@ -1915,9 +1914,7 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
         //  we'll skip trying to apply operations but we'll still
         //  process the sequence number if needed
         std::optional<FeePair> sorobanResourceFee;
-        if (protocolVersionStartsFrom(ledgerVersion,
-                                      SOROBAN_PROTOCOL_VERSION) &&
-            isSoroban())
+        if (protocolVersionStartsFrom(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
         {
             sorobanResourceFee = computePreApplySorobanResourceFee(
                 ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
@@ -1949,12 +1946,9 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
         {
             updateSorobanMetrics(app);
 
-            if (ok)
-            {
-                auto op = resPayload->getOpFrames().front();
-                return op->checkValid(app, signatureChecker, ltx, true,
-                                      *resPayload);
-            }
+            auto op = resPayload->getOpFrames().front();
+            return op->checkValid(app, signatureChecker, ltx, true,
+                                  *resPayload);
         }
         return ok;
     }

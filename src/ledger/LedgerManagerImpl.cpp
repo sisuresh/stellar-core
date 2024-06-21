@@ -1770,6 +1770,8 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         }
     }
 
+    // TODO: Look into adding invariants checking for conflicting writes between
+    // clusters
     for (auto const& entryMapsByCluster : entryMapsByThread)
     {
         for (auto const& clusterEntryMap : entryMapsByCluster)
