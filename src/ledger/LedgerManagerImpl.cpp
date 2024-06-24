@@ -1577,7 +1577,7 @@ LedgerManagerImpl::applyCluster(ClusterEntryMap& entryMap, Config const& config,
     {
         releaseAssertOrThrow(txBundle.resPayload);
         auto res = txBundle.tx->parallelApply(
-            entryMap, config, sorobanConfig, ledgerInfo, *txBundle.resPayload,
+            entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
             sorobanBasePrngSeed, txBundle.meta, ledgerSeq, ledgerVersion);
 
         if (res.mSuccess)

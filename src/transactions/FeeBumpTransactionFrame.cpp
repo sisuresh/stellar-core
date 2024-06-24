@@ -72,24 +72,72 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 }
 #endif
 
-// TODO: Implement
 bool
 FeeBumpTransactionFrame::preParallelApply(
     Application& app, AbstractLedgerTxn& ltx, TransactionMetaFrame& meta,
     TransactionResultPayloadPtr resPayload, bool chargeFee) const
 {
-    return false;
+    try
+    {
+        LedgerTxn ltxTx(ltx);
+        removeOneTimeSignerKeyFromFeeSource(ltxTx);
+        meta.pushTxChangesBefore(ltxTx.getChanges());
+
+        auto feeBumpPayload =
+            std::dynamic_pointer_cast<FeeBumpTransactionResultPayload>(
+                resPayload);
+        auto res = mInnerTx->preParallelApply(
+            app, ltxTx, meta, feeBumpPayload->getInnerResultPayload(),
+            chargeFee);
+        ltxTx.commit();
+        return res;
+    }
+    catch (std::exception& e)
+    {
+        printErrorAndAbort("Exception in preParallelApply ", e.what());
+    }
+    catch (...)
+    {
+        printErrorAndAbort("Unknown exception in preParallelApply");
+    }
 }
 
 ParallelOpReturnVal
 FeeBumpTransactionFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
+    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadPtr resPayload,
     Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
     uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
-    return {false, {}};
+    try
+    {
+        // If this throws, then we may not have the correct TransactionResult so
+        // we must crash.
+        // Note that even after updateResult is called here, feeCharged will not
+        // be accurate for Soroban transactions until
+        // FeeBumpTransactionFrame::processPostApply is called.
+        auto feeBumpPayload =
+            std::dynamic_pointer_cast<FeeBumpTransactionResultPayload>(
+                resPayload);
+        releaseAssertOrThrow(feeBumpPayload);
+        auto res = mInnerTx->parallelApply(
+            entryMap, config, sorobanConfig, ledgerInfo,
+            feeBumpPayload->getInnerResultPayload(), sorobanBasePrngSeed, meta,
+            ledgerSeq, ledgerVersion);
+        feeBumpPayload->updateResult(mInnerTx);
+        return res;
+    }
+    catch (std::exception& e)
+    {
+        printErrorAndAbort("Exception while applying inner transaction: ",
+                           e.what());
+    }
+    catch (...)
+    {
+        printErrorAndAbort(
+            "Unknown exception while applying inner transaction");
+    }
 }
 
 bool

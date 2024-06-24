@@ -236,8 +236,7 @@ class TransactionFrame : public TransactionFrameBase
     ParallelOpReturnVal parallelApply(
         ClusterEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
-        CxxLedgerInfo const& ledgerInfo,
-        TransactionResultPayloadBase& resPayload,
+        CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadPtr resPayload,
         Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
         uint32_t ledgerSeq, uint32_t ledgerVersion) const override;
 
@@ -365,8 +364,7 @@ class TransactionTestFrame : public TransactionFrameBase
     ParallelOpReturnVal parallelApply(
         ClusterEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
-        CxxLedgerInfo const& ledgerInfo,
-        TransactionResultPayloadBase& resPayload,
+        CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadPtr resPayload,
         Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
         uint32_t ledgerSeq, uint32_t ledgerVersion) const override;
 

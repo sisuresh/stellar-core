@@ -1533,25 +1533,23 @@ ParallelOpReturnVal
 TransactionFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
+    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadPtr resPayload,
     Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
     uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
     ZoneScoped;
-    ZoneScoped;
 
-    // Contains applyOperations logic
+    releaseAssertOrThrow(resPayload);
+    releaseAssertOrThrow(resPayload->getOpFrames().size() == 1);
 
-    // TODO: Throw or abort here?
-    releaseAssertOrThrow(resPayload.getOpFrames().size() == 1);
-
+    // TODO: Make sure this is safe
     // This tx failed validation earlier, do not apply it
-    if (resPayload.getResultCode() != txSUCCESS)
+    if (resPayload->getResultCode() != txSUCCESS)
     {
         return {false, {}};
     }
 
-    auto op = resPayload.getOpFrames().front();
+    auto op = resPayload->getOpFrames().front();
 
     bool reportInternalErrOnException = true;
     try
@@ -1564,7 +1562,7 @@ TransactionFrame::parallelApply(
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
 
         auto res = op->applyParallel(
-            entryMap, config, sorobanConfig, ledgerInfo, resPayload,
+            entryMap, config, sorobanConfig, ledgerInfo, *resPayload,
             sorobanBasePrngSeed /*fix*/, ledgerSeq, ledgerVersion);
 
         if (res.mSuccess)
@@ -1617,7 +1615,7 @@ TransactionFrame::parallelApply(
             operationMetas.emplace_back(changes);
             meta.pushOperationMetas(std::move(operationMetas));
 
-            resPayload.publishSuccessDiagnosticsToMeta(meta, config);
+            resPayload->publishSuccessDiagnosticsToMeta(meta, config);
         }
         else
         {
@@ -1625,17 +1623,17 @@ TransactionFrame::parallelApply(
             // destructed, then a different XDR structure is constructed.
             // However, txFAILED and txSUCCESS have the same underlying field
             // number so this does not occur.
-            resPayload.setResultCode(txFAILED);
+            resPayload->setResultCode(txFAILED);
 
             // If transaction fails, we don't charge for any
             // refundable resources.
             auto preApplyFee = computePreApplySorobanResourceFee(
                 ledgerVersion, sorobanConfig, config);
 
-            resPayload.setSorobanFeeRefund(declaredSorobanResourceFee() -
-                                           preApplyFee.non_refundable_fee);
+            resPayload->setSorobanFeeRefund(declaredSorobanResourceFee() -
+                                            preApplyFee.non_refundable_fee);
 
-            resPayload.publishFailureDiagnosticsToMeta(meta, config);
+            resPayload->publishFailureDiagnosticsToMeta(meta, config);
         }
 
         return res;
@@ -1675,7 +1673,7 @@ TransactionFrame::parallelApply(
     }
 
     // This is only reachable if an exception is thrown
-    resPayload.setResultCode(txINTERNAL_ERROR);
+    resPayload->setResultCode(txINTERNAL_ERROR);
 
     // operations and txChangesAfter should already be empty at this point
     meta.clearOperationMetas();
@@ -1950,6 +1948,14 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
             return op->checkValid(app, signatureChecker, ltx, true,
                                   *resPayload);
         }
+
+        // If validation fails, we check the result code in the parallel step to
+        // make sure we don't apply the transaction.
+        // TODO: The point above is somewhat of a footgun if the result code
+        // somehow changes after this but before we apply the transaction. A
+        // soroban transaction should not be able to fail in this method, but we
+        // can still be more defensive.
+        releaseAssertOrThrow(ok == (resPayload->getResultCode() == txSUCCESS));
         return ok;
     }
     catch (std::exception& e)
@@ -2167,7 +2173,7 @@ ParallelOpReturnVal
 TransactionTestFrame::parallelApply(
     ClusterEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadBase& resPayload,
+    CxxLedgerInfo const& ledgerInfo, TransactionResultPayloadPtr resPayload,
     Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
     uint32_t ledgerSeq, uint32_t ledgerVersion) const
 {
