@@ -405,9 +405,9 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
             mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
     }
 
-    auto [isValid, txResult] = tx->checkValid(
+    auto txResult = tx->checkValid(
         mApp, ltx, 0, 0, getUpperBoundCloseTimeOffset(mApp, closeTime));
-    if (!isValid)
+    if (!txResult->isSuccess())
     {
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
                          txResult);

@@ -305,6 +305,12 @@ MutableTransactionResult::refundSorobanFee(int64_t feeRefund,
     mTxResult->feeCharged -= feeRefund;
 }
 
+bool
+MutableTransactionResult::isSuccess() const
+{
+    return getResult().result.code() == txSUCCESS;
+}
+
 FeeBumpMutableTransactionResult::FeeBumpMutableTransactionResult(
     MutableTxResultPtr innerTxResult)
     : MutableTransactionResultBase(), mInnerTxResult(innerTxResult)
@@ -431,5 +437,11 @@ FeeBumpMutableTransactionResult::refundSorobanFee(int64_t feeRefund,
         // Now set the updated feeCharged on the fee bump.
         mTxResult->feeCharged -= feeRefund;
     }
+}
+
+bool
+FeeBumpMutableTransactionResult::isSuccess() const
+{
+    return mTxResult->result.code() == txFEE_BUMP_INNER_SUCCESS;
 }
 }

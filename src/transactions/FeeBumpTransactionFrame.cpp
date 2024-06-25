@@ -153,7 +153,7 @@ FeeBumpTransactionFrame::checkSignature(SignatureChecker& signatureChecker,
     return signatureChecker.checkSignature(signers, neededWeight);
 }
 
-std::pair<bool, MutableTxResultPtr>
+MutableTxResultPtr
 FeeBumpTransactionFrame::checkValid(Application& app,
                                     AbstractLedgerTxn& ltxOuter,
                                     SequenceNumber current,
@@ -164,7 +164,7 @@ FeeBumpTransactionFrame::checkValid(Application& app,
     {
         auto txResult = createSuccessResult();
         txResult->setResultCode(txMALFORMED);
-        return {false, txResult};
+        return txResult;
     }
 
     LedgerTxn ltx(ltxOuter);
@@ -178,22 +178,22 @@ FeeBumpTransactionFrame::checkValid(Application& app,
     if (commonValid(signatureChecker, ltx, false, *txResult) !=
         ValidationType::kFullyValid)
     {
-        return {false, txResult};
+        return txResult;
     }
 
     if (!signatureChecker.checkAllSignaturesUsed())
     {
         txResult->setResultCode(txBAD_AUTH_EXTRA);
-        return {false, txResult};
+        return txResult;
     }
 
-    auto [res, innerTxResult] = mInnerTx->checkValidWithOptionallyChargedFee(
+    auto innerTxResult = mInnerTx->checkValidWithOptionallyChargedFee(
         app, ltx, current, false, lowerBoundCloseTimeOffset,
         upperBoundCloseTimeOffset);
     auto finalTxResult = createSuccessResultWithNewInnerTx(
         std::move(txResult), std::move(innerTxResult), mInnerTx);
 
-    return {res, finalTxResult};
+    return finalTxResult;
 }
 
 bool

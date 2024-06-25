@@ -1382,7 +1382,7 @@ TransactionFrame::removeAccountSigner(AbstractLedgerTxn& ltxOuter,
     }
 }
 
-std::pair<bool, MutableTxResultPtr>
+MutableTxResultPtr
 TransactionFrame::checkValidWithOptionallyChargedFee(
     Application& app, AbstractLedgerTxn& ltxOuter, SequenceNumber current,
     bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
@@ -1395,7 +1395,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     {
         auto txResult = createSuccessResult();
         txResult->setInnermostResultCode(txMALFORMED);
-        return {false, txResult};
+        return txResult;
     }
 
     LedgerTxn ltx(ltxOuter);
@@ -1439,7 +1439,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
                 // checkValid on all operations as the resulting object
                 // is only used by applications
                 txResult->setInnermostResultCode(txFAILED);
-                return {false, txResult};
+                return txResult;
             }
         }
 
@@ -1449,10 +1449,11 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
             txResult->setInnermostResultCode(txBAD_AUTH_EXTRA);
         }
     }
-    return {res, txResult};
+
+    return txResult;
 }
 
-std::pair<bool, MutableTxResultPtr>
+MutableTxResultPtr
 TransactionFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                              SequenceNumber current,
                              uint64_t lowerBoundCloseTimeOffset,
