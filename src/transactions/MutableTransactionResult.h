@@ -97,6 +97,8 @@ class MutableTransactionResultBase : public NonMovableOrCopyable
 
     virtual void refundSorobanFee(int64_t feeRefund,
                                   uint32_t ledgerVersion) = 0;
+
+    virtual bool isSuccess() const = 0;
 };
 
 class MutableTransactionResult : public MutableTransactionResultBase
@@ -128,6 +130,7 @@ class MutableTransactionResult : public MutableTransactionResultBase
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
 
     void refundSorobanFee(int64_t feeRefund, uint32_t ledgerVersion) override;
+    bool isSuccess() const override;
 };
 
 class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
@@ -173,5 +176,6 @@ class FeeBumpMutableTransactionResult : public MutableTransactionResultBase
     xdr::xvector<DiagnosticEvent> const& getDiagnosticEvents() const override;
 
     void refundSorobanFee(int64_t feeRefund, uint32_t ledgerVersion) override;
+    bool isSuccess() const override;
 };
 }

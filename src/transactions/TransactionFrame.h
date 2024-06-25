@@ -205,11 +205,11 @@ class TransactionFrame : public TransactionFrameBase
                                  AccountID const& accountID) const;
     bool checkExtraSigners(SignatureChecker& signatureChecker) const;
 
-    std::pair<bool, MutableTxResultPtr> checkValidWithOptionallyChargedFee(
+    MutableTxResultPtr checkValidWithOptionallyChargedFee(
         Application& app, AbstractLedgerTxn& ltxOuter, SequenceNumber current,
         bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
         uint64_t upperBoundCloseTimeOffset) const;
-    std::pair<bool, MutableTxResultPtr>
+    MutableTxResultPtr
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
                uint64_t upperBoundCloseTimeOffset) const override;

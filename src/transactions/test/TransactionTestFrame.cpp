@@ -88,17 +88,16 @@ TransactionTestFrame::apply(Application& app, AbstractLedgerTxn& ltx,
     return ret;
 }
 
-std::pair<bool, MutableTxResultPtr>
+MutableTxResultPtr
 TransactionTestFrame::checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                                  SequenceNumber current,
                                  uint64_t lowerBoundCloseTimeOffset,
                                  uint64_t upperBoundCloseTimeOffset) const
 {
-    auto result = mTransactionFrame->checkValid(app, ltxOuter, current,
-                                                lowerBoundCloseTimeOffset,
-                                                upperBoundCloseTimeOffset);
-    mTransactionTxResult = result.second;
-    return result;
+    mTransactionTxResult = mTransactionFrame->checkValid(
+        app, ltxOuter, current, lowerBoundCloseTimeOffset,
+        upperBoundCloseTimeOffset);
+    return mTransactionTxResult;
 }
 
 void
@@ -122,11 +121,10 @@ TransactionTestFrame::checkValidForTesting(Application& app,
                                            uint64_t lowerBoundCloseTimeOffset,
                                            uint64_t upperBoundCloseTimeOffset)
 {
-    bool res;
-    std::tie(res, mTransactionTxResult) =
+    mTransactionTxResult =
         checkValid(app, ltxOuter, current, lowerBoundCloseTimeOffset,
                    upperBoundCloseTimeOffset);
-    return res;
+    return mTransactionTxResult->isSuccess();
 }
 
 bool

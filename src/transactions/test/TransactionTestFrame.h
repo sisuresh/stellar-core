@@ -61,7 +61,7 @@ class TransactionTestFrame : public TransactionFrameBase
                TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                Hash const& sorobanBasePrngSeed = Hash{}) const override;
 
-    std::pair<bool, MutableTxResultPtr>
+    MutableTxResultPtr
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
                uint64_t upperBoundCloseTimeOffset) const override;

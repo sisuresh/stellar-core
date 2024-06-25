@@ -192,17 +192,16 @@ TxSetUtils::getInvalidTxList(TxSetTransactions const& txs, Application& app,
                 (tx->getMinSeqAge() != 0 || tx->getMinSeqLedgerGap() != 0);
 
             // Only call checkValid if we passed the seqNum check
-            bool checkValid = false;
             MutableTxResultPtr txResult{};
             if (!minSeqCheckIsInvalid)
             {
-                std::tie(checkValid, txResult) =
+                txResult =
                     tx->checkValid(app, ltx, lastSeq, lowerBoundCloseTimeOffset,
                                    upperBoundCloseTimeOffset);
                 releaseAssertOrThrow(txResult);
             }
 
-            if (minSeqCheckIsInvalid || !checkValid)
+            if (minSeqCheckIsInvalid || !txResult->isSuccess())
             {
                 invalidTxs.emplace_back(tx);
                 iter = accountQueue->mTxs.erase(iter);
