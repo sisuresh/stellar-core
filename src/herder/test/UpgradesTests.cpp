@@ -864,22 +864,23 @@ TEST_CASE("config upgrade validation for protocol 22", "[upgrades]")
         header.scpValue.closeTime = headerTime;
 
         ConfigUpgradeSetFrameConstPtr configUpgradeSet;
-
+        LedgerTxn ltx(app->getLedgerTxnRoot());
         {
             Upgrades::UpgradeParameters scheduledUpgrades;
-            LedgerTxn ltx(app->getLedgerTxnRoot());
-            configUpgradeSet = makeParallelComputeUpdgrade(ltx, 10);
+            LedgerTxn upgradeLtx(ltx);
+            configUpgradeSet = makeParallelComputeUpdgrade(upgradeLtx, 10);
 
             scheduledUpgrades.mUpgradeTime = genesis(0, 1);
             scheduledUpgrades.mConfigUpgradeSetKey = configUpgradeSet->getKey();
             app->getHerder().setUpgrades(scheduledUpgrades);
-            ltx.commit();
+            upgradeLtx.commit();
         }
-        LedgerTxn ltx(app->getLedgerTxnRoot());
+        ltx.loadHeader().current() = header;
         LedgerUpgrade outUpgrade;
+        auto ls = LedgerSnapshot(ltx);
         REQUIRE(Upgrades::isValidForApply(
                     toUpgradeType(makeConfigUpgrade(*configUpgradeSet)),
-                    outUpgrade, *app, ltx, header) == expectedRes);
+                    outUpgrade, *app, ls) == expectedRes);
     };
 
     SECTION("valid for apply")
@@ -2346,7 +2347,7 @@ TEST_CASE("configuration initialized in version upgrade", "[upgrades]")
 TEST_CASE("parallel Soroban settings upgrade", "[upgrades]")
 {
     VirtualClock clock;
-    auto cfg = getTestConfig(0);
+    auto cfg = getTestConfig(0, Config::TESTDB_IN_MEMORY_NO_OFFERS);
     cfg.USE_CONFIG_FOR_GENESIS = false;
 
     auto app = createTestApplication(clock, cfg);
@@ -2364,8 +2365,8 @@ TEST_CASE("parallel Soroban settings upgrade", "[upgrades]")
     }
 
     {
-        LedgerTxn ltx(app->getLedgerTxnRoot());
-        REQUIRE(!ltx.load(getParallelComputeSettingsLedgerKey()));
+        LedgerSnapshot ls(*app);
+        REQUIRE(!ls.load(getParallelComputeSettingsLedgerKey()));
     }
 
     executeUpgrade(*app, makeProtocolVersionUpgrade(static_cast<uint32_t>(
@@ -2373,9 +2374,9 @@ TEST_CASE("parallel Soroban settings upgrade", "[upgrades]")
 
     // Make sure initial value is correct.
     {
-        LedgerTxn ltx(app->getLedgerTxnRoot());
+        LedgerSnapshot ls(*app);
         auto parellelComputeEntry =
-            ltx.load(getParallelComputeSettingsLedgerKey())
+            ls.load(getParallelComputeSettingsLedgerKey())
                 .current()
                 .data.configSetting();
         REQUIRE(parellelComputeEntry.configSettingID() ==
@@ -2400,9 +2401,9 @@ TEST_CASE("parallel Soroban settings upgrade", "[upgrades]")
         executeUpgrade(*app, makeConfigUpgrade(*configUpgradeSet));
     }
 
-    LedgerTxn ltx(app->getLedgerTxnRoot());
+    LedgerSnapshot ls(*app);
 
-    REQUIRE(ltx.load(getParallelComputeSettingsLedgerKey())
+    REQUIRE(ls.load(getParallelComputeSettingsLedgerKey())
                 .current()
                 .data.configSetting()
                 .contractParallelCompute()

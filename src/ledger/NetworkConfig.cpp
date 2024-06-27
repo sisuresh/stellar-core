@@ -1344,17 +1344,18 @@ SorobanNetworkConfig::loadFromLedger(AbstractLedgerTxn& ltxRoot,
     loadExecutionLanesSettings(ltx);
     loadBucketListSizeWindow(ltx);
     loadEvictionIterator(ltx);
-    // NB: this should follow loading state archival settings
-    maybeUpdateBucketListWindowSize(ltx);
-    // NB: this should follow loading/updating bucket list window
-    // size and state archival settings
-    computeWriteFee(configMaxProtocol, protocolVersion);
 
     if (protocolVersionStartsFrom(protocolVersion,
                                   PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
     {
         loadParallelComputeConfig(ltx);
     }
+
+    // NB: this should follow loading state archival settings
+    maybeUpdateBucketListWindowSize(ltx);
+    // NB: this should follow loading/updating bucket list window
+    // size and state archival settings
+    computeWriteFee(configMaxProtocol, protocolVersion);
 }
 
 void
@@ -2012,6 +2013,19 @@ SorobanNetworkConfig::writeAllSettings(AbstractLedgerTxn& ltx,
     stateArchivalSettingsEntry.stateArchivalSettings() = mStateArchivalSettings;
     entries.emplace_back(
         writeConfigSettingEntry(stateArchivalSettingsEntry, ltx, app));
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    if (protocolVersionStartsFrom(ltx.loadHeader().current().ledgerVersion,
+                                  PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
+    {
+        ConfigSettingEntry parallelComputeEntry(
+            CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0);
+        parallelComputeEntry.contractParallelCompute()
+            .ledgerMaxParallelThreads = mLedgerMaxParallelThreads;
+        entries.emplace_back(
+            writeConfigSettingEntry(parallelComputeEntry, ltx, app));
+    }
+#endif
 
     writeBucketListSizeWindow(ltx);
     updateEvictionIterator(ltx, mEvictionIterator);
