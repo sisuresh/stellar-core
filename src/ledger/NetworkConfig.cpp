@@ -680,6 +680,17 @@ updateMemCostParamsEntryForV21(AbstractLedgerTxn& ltxRoot)
     ltx.commit();
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+ConfigSettingEntry
+initialParallelComputeEntry()
+{
+    ConfigSettingEntry entry(CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0);
+    entry.contractParallelCompute().ledgerMaxParallelThreads =
+        InitialSorobanNetworkConfig::LEDGER_MAX_PARALLEL_THREADS;
+    return entry;
+}
+#endif
+
 ConfigSettingEntry
 initialBucketListSizeWindow(Application& app)
 {
@@ -828,6 +839,15 @@ SorobanNetworkConfig::isValidConfigSettingEntry(ConfigSettingEntry const& cfg,
     case ConfigSettingID::CONFIG_SETTING_EVICTION_ITERATOR:
         valid = true;
         break;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    case ConfigSettingID::CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0:
+        valid = protocolVersionStartsFrom(
+                    ledgerVersion, PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION) &&
+                cfg.contractParallelCompute().ledgerMaxParallelThreads > 0;
+        break;
+#endif
+    default:
+        break;
     }
     return valid;
 }
@@ -904,6 +924,18 @@ SorobanNetworkConfig::createCostTypesForV21(AbstractLedgerTxn& ltx,
 }
 
 void
+SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(
+    AbstractLedgerTxn& ltx, Application& app)
+{
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    ZoneScoped;
+    createConfigSettingEntry(
+        initialParallelComputeEntry(), ltx,
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
+#endif
+}
+
+void
 SorobanNetworkConfig::initializeGenesisLedgerForTesting(
     uint32_t genesisLedgerProtocol, AbstractLedgerTxn& ltx, Application& app)
 {
@@ -922,6 +954,11 @@ SorobanNetworkConfig::initializeGenesisLedgerForTesting(
     if (protocolVersionStartsFrom(genesisLedgerProtocol, ProtocolVersion::V_21))
     {
         SorobanNetworkConfig::createCostTypesForV21(ltx, app);
+    }
+    if (protocolVersionStartsFrom(genesisLedgerProtocol,
+                                  PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
+    {
+        SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(ltx, app);
     }
 }
 
@@ -952,6 +989,12 @@ SorobanNetworkConfig::loadFromLedger(AbstractLedgerTxn& ltxRoot,
     // NB: this should follow loading/updating bucket list window
     // size and state archival settings
     computeWriteFee(configMaxProtocol, protocolVersion);
+
+    if (protocolVersionStartsFrom(protocolVersion,
+                                  PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
+    {
+        loadParallelComputeConfig(ltx);
+    }
 }
 
 void
@@ -1150,6 +1193,21 @@ SorobanNetworkConfig::loadEvictionIterator(AbstractLedgerTxn& ltx)
     auto txle = ltx.loadWithoutRecord(key);
     releaseAssert(txle);
     mEvictionIterator = txle.current().data.configSetting().evictionIterator();
+}
+
+void
+SorobanNetworkConfig::loadParallelComputeConfig(AbstractLedgerTxn& ltx)
+{
+    ZoneScoped;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    LedgerKey key(CONFIG_SETTING);
+    key.configSetting().configSettingID =
+        ConfigSettingID::CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0;
+    auto le = ltx.loadWithoutRecord(key).current();
+    auto const& configSetting =
+        le.data.configSetting().contractParallelCompute();
+    mLedgerMaxParallelThreads = configSetting.ledgerMaxParallelThreads;
+#endif
 }
 
 void
@@ -1622,6 +1680,12 @@ SorobanNetworkConfig::updateEvictionIterator(
 
     txle.current().data.configSetting().evictionIterator() = mEvictionIterator;
     ltx.commit();
+}
+
+uint32_t
+SorobanNetworkConfig::ledgerMaxParallelThreads() const
+{
+    return mLedgerMaxParallelThreads;
 }
 
 #ifdef BUILD_TESTS

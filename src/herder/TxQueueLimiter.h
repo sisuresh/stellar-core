@@ -19,7 +19,7 @@ class TxQueueLimiter
     uint32 const mPoolLedgerMultiplier;
     LedgerManager& mLedgerManager;
 
-    UnorderedMap<TransactionFrameBasePtr, TxStackPtr> mStackForTx;
+    UnorderedMap<TransactionFrameBasePtr, SurgePricingQueueTxBasePtr> mStackForTx;
 
     // all known transactions
     std::unique_ptr<SurgePricingPriorityQueue> mTxs;
@@ -53,7 +53,7 @@ class TxQueueLimiter
     std::pair<bool, int64>
     canAddTx(TransactionFrameBasePtr const& tx,
              TransactionFrameBasePtr const& oldTx,
-             std::vector<std::pair<TxStackPtr, bool>>& txsToEvict);
+             std::vector<std::pair<SurgePricingQueueTxBasePtr, bool>>& txsToEvict);
 #endif
     Resource maxScaledLedgerResources(bool isSoroban) const;
 
@@ -61,7 +61,7 @@ class TxQueueLimiter
     // `txsToEvict` should be provided by the `canAddTx` call.
     // Note that evict must call `removeTransaction` as to make space.
     void evictTransactions(
-        std::vector<std::pair<TxStackPtr, bool>> const& txsToEvict,
+        std::vector<std::pair<SurgePricingQueueTxBasePtr, bool>> const& txsToEvict,
         TransactionFrameBase const& txToFit,
         std::function<void(TransactionFrameBasePtr const&)> evict);
 
@@ -78,7 +78,7 @@ class TxQueueLimiter
     std::pair<bool, int64>
     canAddTx(TransactionFrameBasePtr const& tx,
              TransactionFrameBasePtr const& oldTx,
-             std::vector<std::pair<TxStackPtr, bool>>& txsToEvict,
+             std::vector<std::pair<SurgePricingQueueTxBasePtr, bool>>& txsToEvict,
              uint32_t ledgerVersion);
 
     // Resets the state related to evictions (maximum evicted bid).

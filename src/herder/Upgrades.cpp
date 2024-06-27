@@ -1284,6 +1284,11 @@ Upgrades::applyVersionUpgrade(Application& app, AbstractLedgerTxn& ltx,
     {
         SorobanNetworkConfig::createCostTypesForV21(ltx, app);
     }
+    if (needUpgradeToVersion(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION,
+                             prevVersion, newVersion))
+    {
+        SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(ltx, app);
+    }
 }
 
 void

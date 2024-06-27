@@ -85,7 +85,7 @@ AccountTransactionQueue::AccountTransactionQueue(
 }
 
 TransactionFrameBasePtr
-AccountTransactionQueue::getTopTx() const
+AccountTransactionQueue::getTx() const
 {
     releaseAssert(!mTxs.empty());
     return mTxs.front();
@@ -111,7 +111,7 @@ AccountTransactionQueue::getResources() const
     return empty() ? Resource::makeEmpty(mIsSoroban
                                              ? NUM_SOROBAN_TX_RESOURCES
                                              : NUM_CLASSIC_TX_BYTES_RESOURCES)
-                   : getTopTx()->getResources(true);
+                   : getTx()->getResources(true);
 }
 
 bool
@@ -141,27 +141,19 @@ TxSetUtils::sortParallelTxsInHashOrder(TxStageFrameList const& stages)
     {
         for (auto& thread : stage)
         {
-            for (auto& cluster : thread)
-            {
-                std::sort(cluster.begin(), cluster.end(),
-                          TxSetUtils::hashTxSorter);
-            }
-            std::sort(thread.begin(), thread.end(),
-                      [](std::vector<TransactionFrameBasePtr> const& a,
-                         std::vector<TransactionFrameBasePtr> const& b) {
-                          releaseAssert(!a.empty() && !b.empty());
-                          return hashTxSorter(a.front(), b.front());
-                      });
+            std::sort(thread.begin(), thread.end(), TxSetUtils::hashTxSorter);
         }
-        std::sort(
-            stage.begin(), stage.end(),
-            [](std::vector<std::vector<TransactionFrameBasePtr>> const& a,
-               std::vector<std::vector<TransactionFrameBasePtr>> const& b) {
-                releaseAssert(!a.empty() && !b.empty());
-                releaseAssert(!a.front().empty() && !b.front().empty());
-                return hashTxSorter(a.front().front(), b.front().front());
-            });
+        std::sort(stage.begin(), stage.end(), [](auto const& a, auto const& b) {
+            releaseAssert(!a.empty() && !b.empty());
+            return hashTxSorter(a.front(), b.front());
+        });
     }
+    std::sort(sortedStages.begin(), sortedStages.end(),
+              [](auto const& a, auto const& b) {
+                  releaseAssert(!a.empty() && !b.empty());
+                  releaseAssert(!a.front().empty() && !b.front().empty());
+                  return hashTxSorter(a.front().front(), b.front().front());
+              });
     return sortedStages;
 }
 

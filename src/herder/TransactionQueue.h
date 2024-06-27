@@ -202,7 +202,7 @@ class TransactionQueue
     BroadcastStatus broadcastTx(TimestampedTx& tx);
     AddResult canAdd(TransactionFrameBasePtr tx,
                      AccountStates::iterator& stateIter,
-                     std::vector<std::pair<TxStackPtr, bool>>& txsToEvict);
+                     std::vector<std::pair<SurgePricingQueueTxBasePtr, bool>>& txsToEvict);
 
     void releaseFeeMaybeEraseAccountState(TransactionFrameBasePtr tx);
 

@@ -1347,6 +1347,9 @@
     <ClCompile Include="..\..\src\overlay\Hmac.cpp">
       <Filter>overlay</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\herder\ParallelTxSetBuilder.cpp">
+      <Filter>herder</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\lib\util\cpptoml.h">
@@ -2344,6 +2347,9 @@
     </ClInclude>
     <ClInclude Include="..\..\src\overlay\Hmac.h">
       <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\herder\ParallelTxSetBuilder.h">
+      <Filter>herder</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

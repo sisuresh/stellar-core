@@ -13,16 +13,16 @@
 namespace stellar
 {
 
-class AccountTransactionQueue : public TxStack
+class AccountTransactionQueue
 {
   public:
     AccountTransactionQueue(
         std::vector<TransactionFrameBasePtr> const& accountTxs);
 
-    TransactionFrameBasePtr getTopTx() const override;
-    bool empty() const override;
-    void popTopTx() override;
-    Resource getResources() const override;
+    TransactionFrameBasePtr getTx() const;
+    bool empty() const;
+    void popTopTx();
+    Resource getResources() const;
 
     std::deque<TransactionFrameBasePtr> mTxs;
 

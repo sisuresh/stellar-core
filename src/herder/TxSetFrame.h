@@ -206,7 +206,7 @@ class TxSetXDRFrame : public NonMovableOrCopyable
 //   *different* threads in parallel.
 //
 // This structure mimics the XDR structure of the `ParallelTxsComponent`.
-using TxThreadFrame = std::vector<TxFrameList>;
+using TxThreadFrame = TxFrameList;
 using TxStageFrame = std::vector<TxThreadFrame>;
 using TxStageFrameList = std::vector<TxStageFrame>;
 
@@ -278,7 +278,6 @@ class TxSetPhaseFrame
         std::variant<TxFrameList, TxStageFrameList> const& mTxs;
         size_t mStageIndex = 0;
         size_t mThreadIndex = 0;
-        size_t mClusterIndex = 0;
         size_t mTxIndex = 0;
     };
     Iterator begin() const;
@@ -315,15 +314,15 @@ class TxSetPhaseFrame
                               bool enforceTxsApplyOrder);
 #endif
 
-    TxSetPhaseFrame(TxFrameList&& txs,
-                    std::shared_ptr<InclusionFeeMap> inclusionFeeMap);
-    TxSetPhaseFrame(TxStageFrameList&& txs,
+    TxSetPhaseFrame(TxSetPhase phase,
+                    std::variant<TxFrameList, TxStageFrameList>&& txs,
                     std::shared_ptr<InclusionFeeMap> inclusionFeeMap);
 
     // Creates a new phase from `TransactionPhase` XDR coming from a
     // `GeneralizedTransactionSet`.
     static std::optional<TxSetPhaseFrame>
-    makeFromWire(Hash const& networkID, TransactionPhase const& xdrPhase);
+    makeFromWire(TxSetPhase phase, Hash const& networkID,
+                 TransactionPhase const& xdrPhase);
 
     // Creates a new phase from all the transactions in the legacy
     // `TransactionSet` XDR.
@@ -332,13 +331,16 @@ class TxSetPhaseFrame
                        xdr::xvector<TransactionEnvelope> const& xdrTxs);
 
     // Creates a valid empty phase with given `isParallel` flag.
-    static TxSetPhaseFrame makeEmpty(bool isParallel);
+    static TxSetPhaseFrame makeEmpty(TxSetPhase phase, bool isParallel);
 
     // Returns a copy of this phase with transactions sorted for apply.
     TxSetPhaseFrame sortedForApply(Hash const& txSetHash) const;
 
-    std::shared_ptr<InclusionFeeMap> mInclusionFeeMap;
+    bool checkValidStructure() const;
+
+    TxSetPhase mPhase;
     std::variant<TxFrameList, TxStageFrameList> mTxs;
+    std::shared_ptr<InclusionFeeMap> mInclusionFeeMap;
 };
 
 // Transaction set that is suitable for being applied to the ledger.
