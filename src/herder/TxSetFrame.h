@@ -281,7 +281,9 @@ class TxSetPhaseFrame
     };
     Iterator begin() const;
     Iterator end() const;
-    size_t size() const;
+    size_t sizeTx() const;
+    size_t sizeOp() const;
+    size_t size(LedgerHeader const& lclHeader) const;
     bool empty() const;
 
     // Get _inclusion_ fee map for this phase. The map contains lowest base
@@ -312,16 +314,16 @@ class TxSetPhaseFrame
                               TxFrameList& invalidTxs,
                               bool enforceTxsApplyOrder);
 #endif
-
-    TxSetPhaseFrame(TxFrameList const& txs,
+    TxSetPhaseFrame(TxSetPhase phase, TxFrameList const& txs,
                     std::shared_ptr<InclusionFeeMap> inclusionFeeMap);
-    TxSetPhaseFrame(TxStageFrameList&& txs,
+    TxSetPhaseFrame(TxSetPhase phase, TxStageFrameList&& txs,
                     std::shared_ptr<InclusionFeeMap> inclusionFeeMap);
 
     // Creates a new phase from `TransactionPhase` XDR coming from a
     // `GeneralizedTransactionSet`.
     static std::optional<TxSetPhaseFrame>
-    makeFromWire(Hash const& networkID, TransactionPhase const& xdrPhase);
+    makeFromWire(TxSetPhase phase, Hash const& networkID,
+                 TransactionPhase const& xdrPhase);
 
     // Creates a new phase from all the transactions in the legacy
     // `TransactionSet` XDR.
@@ -330,10 +332,20 @@ class TxSetPhaseFrame
                        xdr::xvector<TransactionEnvelope> const& xdrTxs);
 
     // Creates a valid empty phase with given `isParallel` flag.
-    static TxSetPhaseFrame makeEmpty(bool isParallel);
+    static TxSetPhaseFrame makeEmpty(TxSetPhase phase, bool isParallel);
 
     // Returns a copy of this phase with transactions sorted for apply.
     TxSetPhaseFrame sortedForApply(Hash const& txSetHash) const;
+    bool checkValid(Application& app, uint64_t lowerBoundCloseTimeOffset,
+                    uint64_t upperBoundCloseTimeOffset) const;
+    bool checkValidClassic(LedgerHeader const& lclHeader) const;
+    bool checkValidSoroban(LedgerHeader const& lclHeader,
+                           SorobanNetworkConfig const& sorobanConfig) const;
+
+    bool txsAreValid(Application& app, uint64_t lowerBoundCloseTimeOffset,
+                     uint64_t upperBoundCloseTimeOffset) const;
+
+    TxSetPhase mPhase;
 
     TxStageFrameList mStages;
     std::shared_ptr<InclusionFeeMap> mInclusionFeeMap;
@@ -436,6 +448,7 @@ class ApplicableTxSetFrame
   private:
 #endif
     TxSetXDRFrameConstPtr toWireTxSetFrame() const;
+    std::optional<Resource> getTxSetSorobanResource() const;
 
   private:
     friend class TxSetXDRFrame;
@@ -470,8 +483,6 @@ class ApplicableTxSetFrame
                          std::optional<Hash> contentsHash);
     ApplicableTxSetFrame(ApplicableTxSetFrame const&) = default;
     ApplicableTxSetFrame(ApplicableTxSetFrame&&) = default;
-
-    std::optional<Resource> getTxSetSorobanResource() const;
 
     void toXDR(TransactionSet& set) const;
     void toXDR(GeneralizedTransactionSet& generalizedTxSet) const;

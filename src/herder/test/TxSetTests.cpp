@@ -12,6 +12,9 @@
 #include "test/TestUtils.h"
 #include "test/TxTests.h"
 #include "test/test.h"
+#include "transactions/MutableTransactionResult.h"
+#include "transactions/TransactionUtils.h"
+#include "transactions/test/SorobanTxTestUtils.h"
 #include "util/ProtocolVersion.h"
 
 namespace stellar
@@ -1066,5 +1069,318 @@ TEST_CASE("generalized tx set fees", "[txset][soroban]")
     }
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+TEST_CASE("parallel tx set building", "[txset][soroban]")
+{
+    uint32_t const STAGE_COUNT = 4;
+    uint32_t const THREAD_COUNT = 8;
+
+    VirtualClock clock;
+    auto cfg = getTestConfig();
+    cfg.LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.SOROBAN_PHASE_STAGE_COUNT = STAGE_COUNT;
+    Application::pointer app = createTestApplication(clock, cfg);
+    overrideSorobanNetworkConfigForTest(*app);
+    modifySorobanNetworkConfig(
+        *app, [THREAD_COUNT](SorobanNetworkConfig& sorobanCfg) {
+            sorobanCfg.mLedgerMaxInstructions = 400'000'000;
+            sorobanCfg.mLedgerMaxReadLedgerEntries = 3000;
+            sorobanCfg.mLedgerMaxWriteLedgerEntries = 2000;
+            sorobanCfg.mLedgerMaxReadBytes = 1'000'000;
+            sorobanCfg.mLedgerMaxWriteBytes = 100'000;
+            sorobanCfg.mLedgerMaxTxCount = 1000;
+            sorobanCfg.mLedgerMaxParallelThreads = THREAD_COUNT;
+        });
+    auto root = TestAccount::createRoot(*app);
+    std::map<int, TestAccount> accounts;
+    int accountId = 1;
+    SCAddress contract(SC_ADDRESS_TYPE_CONTRACT);
+
+    auto generateKey = [&contract](int i) {
+        return stellar::contractDataKey(
+            contract, txtest::makeU32(i),
+            i % 2 == 0 ? ContractDataDurability::PERSISTENT
+                       : ContractDataDurability::TEMPORARY);
+    };
+
+    auto createTx = [&](int instructions, std::vector<int> const& roKeys,
+                        std::vector<int> rwKeys, int64_t inclusionFee = 1000,
+                        int readBytes = 1000, int writeBytes = 100) {
+        auto it = accounts.find(accountId);
+        if (it == accounts.end())
+        {
+            it = accounts
+                     .emplace(accountId, root.create(std::to_string(accountId),
+                                                     1'000'000'000))
+                     .first;
+        }
+        ++accountId;
+        auto source = it->second;
+        SorobanResources resources;
+        resources.instructions = instructions;
+        resources.readBytes = readBytes;
+        resources.writeBytes = writeBytes;
+        for (auto roKeyId : roKeys)
+        {
+            resources.footprint.readOnly.push_back(generateKey(roKeyId));
+        }
+        for (auto rwKeyId : rwKeys)
+        {
+            resources.footprint.readWrite.push_back(generateKey(rwKeyId));
+        }
+        auto resourceFee = sorobanResourceFee(*app, resources, 10'000, 40);
+        // It doesn't really matter what tx does as we're only interested in
+        // its resources.
+        auto tx = createUploadWasmTx(*app, source, inclusionFee, resourceFee,
+                                     resources);
+        LedgerSnapshot ls(*app);
+        auto res = tx->checkValid(*app, ls, 0, 0, 0);
+        if (!res->isSuccess())
+        {
+            int t = 0;
+        }
+        REQUIRE(tx->checkValid(*app, ls, 0, 0, 0)->isSuccess());
+
+        return tx;
+    };
+
+    auto validateShape = [&](ApplicableTxSetFrame const& txSet,
+                             size_t stageCount, size_t threadsPerStage,
+                             size_t txsPerThread) {
+        auto const& phase =
+            txSet.getPhase(TxSetPhase::SOROBAN).getParallelStages();
+
+        REQUIRE(phase.size() == stageCount);
+        for (auto const& stage : phase)
+        {
+            REQUIRE(stage.size() == threadsPerStage);
+            for (auto const& thread : stage)
+            {
+                REQUIRE(thread.size() == txsPerThread);
+            }
+        }
+    };
+
+    auto validateBaseFee = [&](ApplicableTxSetFrame const& txSet,
+                               int64_t baseFee) {
+        for (auto const& tx : txSet.getPhase(TxSetPhase::SOROBAN))
+        {
+
+            REQUIRE(txSet.getTxBaseFee(tx) == baseFee);
+        }
+    };
+
+    SECTION("no conflicts")
+    {
+        SECTION("single stage")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < THREAD_COUNT; ++i)
+            {
+                sorobanTxs.push_back(createTx(100'000'000, {4 * i, 4 * i + 1},
+                                              {4 * i + 2, 4 * i + 3}));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+            validateShape(*txSet, 1, THREAD_COUNT, 1);
+            validateBaseFee(*txSet, 100);
+        }
+        SECTION("all stages")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < STAGE_COUNT * THREAD_COUNT; ++i)
+            {
+                sorobanTxs.push_back(createTx(100'000'000, {4 * i, 4 * i + 1},
+                                              {4 * i + 2, 4 * i + 3}));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+
+            validateShape(*txSet, STAGE_COUNT, THREAD_COUNT, 1);
+            validateBaseFee(*txSet, 100);
+        }
+        SECTION("all stages, smaller txs")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < STAGE_COUNT * THREAD_COUNT * 5; ++i)
+            {
+                sorobanTxs.push_back(createTx(20'000'000, {4 * i, 4 * i + 1},
+                                              {4 * i + 2, 4 * i + 3}));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+
+            validateShape(*txSet, STAGE_COUNT, THREAD_COUNT, 5);
+            validateBaseFee(*txSet, 100);
+        }
+
+        SECTION("all stages, smaller txs with prioritization")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < STAGE_COUNT * THREAD_COUNT * 10; ++i)
+            {
+                sorobanTxs.push_back(createTx(
+                    20'000'000, {4 * i, 4 * i + 1}, {4 * i + 2, 4 * i + 3},
+                    /* inclusionFee*/ (i + 1) * 1000LL));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+
+            validateShape(*txSet, STAGE_COUNT, THREAD_COUNT, 5);
+            validateBaseFee(
+                *txSet, 10LL * STAGE_COUNT * THREAD_COUNT * 1000 / 2 + 1000);
+        }
+
+        SECTION("read bytes limit reached")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < STAGE_COUNT * THREAD_COUNT; ++i)
+            {
+                sorobanTxs.push_back(createTx(1'000'000, {4 * i, 4 * i + 1},
+                                              {4 * i + 2, 4 * i + 3},
+                                              /* inclusionFee */ 100 + i,
+                                              /* readBytes */ 100'000));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+
+            validateShape(*txSet, 1, 1, 10);
+            validateBaseFee(*txSet, 100 + STAGE_COUNT * THREAD_COUNT - 10);
+        }
+    }
+
+    SECTION("with conflicts")
+    {
+        SECTION("all RW conflicting")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            for (int i = 0; i < THREAD_COUNT * STAGE_COUNT; ++i)
+            {
+                sorobanTxs.push_back(createTx(100'000'000,
+                                              {4 * i + 1, 4 * i + 2},
+                                              {4 * i + 3, 0, 4 * i + 4},
+                                              /* inclusionFee */ 100 + i));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+            validateShape(*txSet, STAGE_COUNT, 1, 1);
+            validateBaseFee(*txSet,
+                            100 + THREAD_COUNT * STAGE_COUNT - STAGE_COUNT);
+        }
+        SECTION("all RO conflict with one RW")
+        {
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            sorobanTxs.push_back(createTx(100'000'000, {1, 2}, {0, 3, 4},
+                                          /* inclusionFee */ 1'000'000));
+            for (int i = 1; i < THREAD_COUNT * STAGE_COUNT * 5; ++i)
+            {
+                sorobanTxs.push_back(createTx(20'000'000,
+                                              {0, 4 * i + 1, 4 * i + 2},
+                                              {4 * i + 3, 4 * i + 4},
+                                              /* inclusionFee */ 100 + i));
+            }
+
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+            auto const& phase =
+                txSet->getPhase(TxSetPhase::SOROBAN).getParallelStages();
+
+            bool wasSingleThreadStage = false;
+
+            for (auto const& stage : phase)
+            {
+                if (stage.size() == 1)
+                {
+                    REQUIRE(!wasSingleThreadStage);
+                    wasSingleThreadStage = true;
+                    REQUIRE(stage[0].size() == 1);
+                    REQUIRE(stage[0][0]->getEnvelope() ==
+                            sorobanTxs[0]->getEnvelope());
+                    continue;
+                }
+                REQUIRE(stage.size() == THREAD_COUNT);
+                for (auto const& thread : stage)
+                {
+                    REQUIRE(thread.size() == 5);
+                }
+            }
+            // We can't include any of the small txs into stage 0, as it's
+            // occupied by high fee tx that writes entry 0.
+            validateBaseFee(*txSet, 100 + THREAD_COUNT * 5);
+        }
+    }
+    SECTION("smoke test")
+    {
+        auto runTest = [&]() {
+            std::uniform_int_distribution<> maxInsnsDistr(20'000'000,
+                                                          100'000'000);
+            std::uniform_int_distribution<> keyRangeDistr(50, 1000);
+
+            std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+            std::uniform_int_distribution<> insnsDistr(
+                1'000'000, maxInsnsDistr(Catch::rng()));
+            std::uniform_int_distribution<> keyCountDistr(1, 10);
+            std::uniform_int_distribution<> keyDistr(
+                1, keyRangeDistr(Catch::rng()));
+            std::uniform_int_distribution<> feeDistr(100, 100'000);
+            std::uniform_int_distribution<> readBytesDistr(100, 10'000);
+            std::uniform_int_distribution<> writeBytesDistr(10, 1000);
+            accountId = 1;
+            for (int iter = 0; iter < 500; ++iter)
+            {
+                int roKeyCount = keyCountDistr(Catch::rng());
+                int rwKeyCount = keyCountDistr(Catch::rng());
+                std::unordered_set<int> usedKeys;
+                std::vector<int> roKeys;
+                std::vector<int> rwKeys;
+                for (int i = 0; i < roKeyCount + rwKeyCount; ++i)
+                {
+                    int key = keyDistr(Catch::rng());
+                    while (usedKeys.find(key) != usedKeys.end())
+                    {
+                        key = keyDistr(Catch::rng());
+                    }
+                    if (i < roKeyCount)
+                    {
+                        roKeys.push_back(key);
+                    }
+                    else
+                    {
+                        rwKeys.push_back(key);
+                    }
+                    usedKeys.insert(key);
+                }
+                sorobanTxs.push_back(createTx(insnsDistr(Catch::rng()), roKeys,
+                                              rwKeys, feeDistr(Catch::rng()),
+                                              readBytesDistr(Catch::rng()),
+                                              writeBytesDistr(Catch::rng())));
+            }
+            PerPhaseTransactionList phases = {{}, sorobanTxs};
+            // NB: `makeTxSetFromTransactions` does an XDR roundtrip and
+            // validation, so just calling it does a good amount of smoke
+            // testing.
+            auto [_, txSet] = makeTxSetFromTransactions(phases, *app, 0, 0);
+            auto const& phase =
+                txSet->getPhase(TxSetPhase::SOROBAN).getParallelStages();
+            // The only thing we can really be sure about is that all the
+            // stages are utilized, as we have enough transactions.
+            REQUIRE(phase.size() == STAGE_COUNT);
+            auto resources = *txSet->getTxSetSorobanResource();
+            std::cout << "txs: " << txSet->sizeTxTotal()
+                      << ", max insns : " << insnsDistr.max()
+                      << ", key range: " << keyDistr.max()
+                      << ", txset resources: " << resources.toString()
+                      << std::endl;
+        };
+        for (int iter = 0; iter < 100; ++iter)
+        {
+            runTest();
+        }
+    }
+}
+#endif
 } // namespace
 } // namespace stellar

@@ -126,6 +126,10 @@ TxSetUtils::sortParallelTxsInHashOrder(TxStageFrameList const& stages)
             std::sort(thread.begin(), thread.end(), TxSetUtils::hashTxSorter);
         }
         std::sort(stage.begin(), stage.end(), [](auto const& a, auto const& b) {
+            if (a.empty() && b.empty())
+            {
+                int t = 0;
+            }
             releaseAssert(!a.empty() && !b.empty());
             return hashTxSorter(a.front(), b.front());
         });
