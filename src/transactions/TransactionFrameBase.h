@@ -53,6 +53,7 @@ struct ParallelOpReturnVal
     bool mSuccess{false};
     ModifiedEntryMap mModifiedEntryMap;
     std::shared_ptr<SorobanOpMetrics> mOpMetrics;
+    std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
 // temporary. Remove this
@@ -70,6 +71,7 @@ class TxBundle
     // TODO: Stop using mutable
     mutable TransactionMetaFrame meta;
     mutable std::shared_ptr<SorobanOpMetrics> mOpMetrics;
+    mutable std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
 typedef std::vector<TxBundle> Cluster;

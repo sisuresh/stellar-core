@@ -17,6 +17,8 @@
 #include "herder/TxSetFrame.h"
 #include "herder/Upgrades.h"
 #include "history/HistoryManager.h"
+#include "invariant/InvariantDoesNotHold.h"
+#include "invariant/InvariantManager.h"
 #include "ledger/FlushAndRotateMetaDebugWork.h"
 #include "ledger/LedgerHeaderUtils.h"
 #include "ledger/LedgerRange.h"
@@ -1607,6 +1609,7 @@ LedgerManagerImpl::applyCluster(ClusterEntryMap& entryMap, Config const& config,
                                  txFAILED);
         }
         txBundle.mOpMetrics = res.mOpMetrics;
+        txBundle.mDelta = res.mDelta;
     }
 }
 
@@ -1746,6 +1749,31 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         {
             for (auto const& txBundle : cluster)
             {
+                // First check the invariants
+                if (txBundle.resPayload->isSuccess())
+                {
+                    try
+                    {
+                        // Soroban transactions don't have access to the ledger
+                        // header, so they can't modify it. Pass in the current
+                        // header as both current and previous.
+                        txBundle.mDelta->header.current =
+                            ltxInner.loadHeader().current();
+                        txBundle.mDelta->header.previous =
+                            ltxInner.loadHeader().current();
+                        app.getInvariantManager().checkOnOperationApply(
+                            txBundle.tx->getRawOperations().at(0),
+                            txBundle.resPayload->getOpResultAt(0),
+                            *txBundle.mDelta);
+                    }
+                    catch (InvariantDoesNotHold& e)
+                    {
+                        printErrorAndAbort(
+                            "Invariant failure while applying operations: ",
+                            e.what());
+                    }
+                }
+
                 txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
                                               txBundle.resPayload);
 
