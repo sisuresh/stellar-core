@@ -1563,6 +1563,8 @@ TransactionFrame::parallelApply(
 
         if (!fastFail && res.mSuccess)
         {
+            res.mDelta = std::make_shared<LedgerTxnDelta>();
+            auto& delta = *res.mDelta;
             // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.mModifiedEntryMap)
@@ -1605,6 +1607,27 @@ TransactionFrame::parallelApply(
                     changes.emplace_back(LEDGER_ENTRY_CREATED);
                     changes.back().created() = *le;
                 }
+
+                LedgerTxnDelta::EntryDelta entryDelta;
+                if (prevLe)
+                {
+                    entryDelta.previous =
+                        std::make_shared<InternalLedgerEntry>(*prevLe);
+                }
+                if (le)
+                {
+                    auto deltaLe = *le;
+                    // This is for the invariants check in LedgerManager
+                    deltaLe.lastModifiedLedgerSeq = ledgerSeq;
+
+                    entryDelta.current =
+                        std::make_shared<InternalLedgerEntry>(deltaLe);
+                }
+
+                delta.entry[lk] = entryDelta;
+                // Note that we don't set delta.header here because Soroban
+                // transactions don't modify the header. The header will be set
+                // right before we cal into the invariants.
             }
 
             xdr::xvector<OperationMeta> operationMetas;
@@ -1634,11 +1657,6 @@ TransactionFrame::parallelApply(
 
         return res;
     }
-    /* catch (InvariantDoesNotHold& e)
-    {
-        printErrorAndAbort("Invariant failure while applying operations: ",
-                           e.what());
-    } */
     catch (std::bad_alloc& e)
     {
         printErrorAndAbort("Exception while applying operations: ", e.what());
