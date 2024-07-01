@@ -163,7 +163,7 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
 }
 
 ParallelOpReturnVal
-OperationFrame::applyParallel(ClusterEntryMap const& entryMap,
+OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               Config const& config,
                               SorobanNetworkConfig const& sorobanConfig,
                               CxxLedgerInfo const& ledgerInfo,
@@ -181,7 +181,7 @@ OperationFrame::applyParallel(ClusterEntryMap const& entryMap,
 }
 
 ParallelOpReturnVal
-OperationFrame::doApplyParallel(ClusterEntryMap const& entryMap,
+OperationFrame::doApplyParallel(ThreadEntryMap const& entryMap,
                                 Config const& appConfig,
                                 SorobanNetworkConfig const& sorobanConfig,
                                 Hash const& sorobanBasePrngSeed,

@@ -91,23 +91,16 @@ class LedgerManagerImpl : public LedgerManager
         AbstractLedgerTxn& ltx, TransactionResultSet& txResultSet,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
 
-    ClusterEntryMap collectEntries(AbstractLedgerTxn& ltx, Cluster const& txs);
+    ThreadEntryMap collectEntries(AbstractLedgerTxn& ltx, Thread const& txs);
 
     TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx, Stage const& stage);
 
-    void applyThread(std::vector<ClusterEntryMap>& entryMapByCluster,
-                     std::vector<Cluster> const& clusters, Config const& config,
+    void applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
+                     Config const& config,
                      SorobanNetworkConfig const& sorobanConfig,
                      CxxLedgerInfo const& ledgerInfo,
                      Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
                      uint32_t ledgerVersion);
-
-    // TODO: Make these three methods const
-    void applyCluster(ClusterEntryMap& entryMap, Config const& config,
-                      SorobanNetworkConfig const& sorobanConfig,
-                      CxxLedgerInfo const& ledgerInfo,
-                      Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
-                      uint32_t ledgerVersion, Cluster const& txs);
 
     void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
                            Stage const& stage, Hash const& sorobanBasePrngSeed);

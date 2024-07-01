@@ -476,7 +476,7 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
 
 ParallelOpReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
-    ClusterEntryMap const& entryMap, // Must not be shared between threads
+    ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
     Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
     OperationResult& res, SorobanTxData& sorobanData, uint32_t ledgerSeq,
