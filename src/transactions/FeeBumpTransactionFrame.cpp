@@ -103,7 +103,7 @@ FeeBumpTransactionFrame::preParallelApply(Application& app,
 
 ParallelOpReturnVal
 FeeBumpTransactionFrame::parallelApply(
-    ClusterEntryMap const& entryMap, // Must not be shared between threads!,
+    ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
     Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
