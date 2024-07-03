@@ -99,7 +99,8 @@ class LedgerManagerImpl : public LedgerManager
                      Config const& config,
                      SorobanNetworkConfig const& sorobanConfig,
                      CxxLedgerInfo const& ledgerInfo,
-                     Hash const& sorobanBasePrngSeed, uint32_t ledgerSeq,
+                     Hash const& sorobanBasePrngSeed,
+                     SorobanMetrics& sorobanMetrics, uint32_t ledgerSeq,
                      uint32_t ledgerVersion);
 
     void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,

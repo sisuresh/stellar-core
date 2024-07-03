@@ -1564,6 +1564,7 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                                SorobanNetworkConfig const& sorobanConfig,
                                CxxLedgerInfo const& ledgerInfo,
                                Hash const& sorobanBasePrngSeed,
+                               SorobanMetrics& sorobanMetrics,
                                uint32_t ledgerSeq, uint32_t ledgerVersion)
 {
     // TTL extensions can't be observable between transactions, so we track them
@@ -1576,7 +1577,8 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
         releaseAssertOrThrow(txBundle.resPayload);
         auto res = txBundle.tx->parallelApply(
             entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
-            sorobanBasePrngSeed, txBundle.meta, ledgerSeq, ledgerVersion);
+            sorobanMetrics, sorobanBasePrngSeed, txBundle.meta, ledgerSeq,
+            ledgerVersion);
 
         if (res.mSuccess)
         {
@@ -1630,7 +1632,6 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
             releaseAssertOrThrow(txBundle.resPayload->getResultCode() ==
                                  txFAILED);
         }
-        txBundle.mOpMetrics = res.mOpMetrics;
         txBundle.mDelta = res.mDelta;
     }
 
@@ -1711,6 +1712,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
     auto const& config = app.getConfig();
     auto const& sorobanConfig =
         app.getLedgerManager().getSorobanNetworkConfig();
+    auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
     uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
     uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
@@ -1737,7 +1739,8 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         threads.push_back(std::thread(
             &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
             std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
-            sorobanBasePrngSeed, ledgerSeq, ledgerVersion));
+            sorobanBasePrngSeed, std::ref(sorobanMetrics), ledgerSeq,
+            ledgerVersion));
     }
 
     // TODO: This will change when we use a thread pool.
@@ -1779,9 +1782,6 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 
             txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
                                           txBundle.resPayload);
-
-            releaseAssertOrThrow(txBundle.mOpMetrics);
-            txBundle.mOpMetrics->updateSorobanMetrics(mSorobanMetrics);
 
             // We only increase the internal-error metric count if the
             // ledger is a newer version.

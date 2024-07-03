@@ -167,6 +167,7 @@ OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               Config const& config,
                               SorobanNetworkConfig const& sorobanConfig,
                               CxxLedgerInfo const& ledgerInfo,
+                              SorobanMetrics& sorobanMetrics,
                               OperationResult& res, SorobanTxData& sorobanData,
                               Hash const& sorobanBasePrngSeed,
                               uint32_t ledgerSeq, uint32_t ledgerVersion) const
@@ -176,19 +177,17 @@ OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
     // checkValid is called earlier in preParallelApply
 
     return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
-                           ledgerInfo, res, sorobanData, ledgerSeq,
-                           ledgerVersion);
+                           ledgerInfo, sorobanMetrics, res, sorobanData,
+                           ledgerSeq, ledgerVersion);
 }
 
 ParallelOpReturnVal
-OperationFrame::doApplyParallel(ThreadEntryMap const& entryMap,
-                                Config const& appConfig,
-                                SorobanNetworkConfig const& sorobanConfig,
-                                Hash const& sorobanBasePrngSeed,
-                                CxxLedgerInfo const& ledgerInfo,
-                                OperationResult& res,
-                                SorobanTxData& sorobanData, uint32_t ledgerSeq,
-                                uint32_t ledgerVersion) const
+OperationFrame::doApplyParallel(
+    ThreadEntryMap const& entryMap, Config const& appConfig,
+    SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
+    CxxLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    OperationResult& res, SorobanTxData& sorobanData, uint32_t ledgerSeq,
+    uint32_t ledgerVersion) const
 {
     throw std::runtime_error(
         "Cannot call doApplyParallel on a non Soroban operation");

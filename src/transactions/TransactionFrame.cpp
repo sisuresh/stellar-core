@@ -1515,8 +1515,9 @@ TransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
-    Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
-    uint32_t ledgerSeq, uint32_t ledgerVersion) const
+    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+    TransactionMetaFrame& meta, uint32_t ledgerSeq,
+    uint32_t ledgerVersion) const
 {
     ZoneScoped;
 
@@ -1556,7 +1557,7 @@ TransactionFrame::parallelApply(
         if (!fastFail)
         {
             res = op->applyParallel(entryMap, config, sorobanConfig, ledgerInfo,
-                                    opResult, *sorobanData,
+                                    sorobanMetrics, opResult, *sorobanData,
                                     sorobanBasePrngSeed /*fix*/, ledgerSeq,
                                     ledgerVersion);
         }

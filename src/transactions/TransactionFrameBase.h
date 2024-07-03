@@ -40,19 +40,10 @@ using ThreadEntryMap =
     UnorderedMap<LedgerKey,
                  std::pair<std::optional<LedgerEntry>, bool /*dirty*/>>;
 
-class SorobanOpMetrics
-{
-  public:
-    virtual ~SorobanOpMetrics() = default;
-    // This is not thread safe
-    virtual void updateSorobanMetrics(SorobanMetrics& metrics) = 0;
-};
-
 struct ParallelOpReturnVal
 {
     bool mSuccess{false};
     ModifiedEntryMap mModifiedEntryMap;
-    std::shared_ptr<SorobanOpMetrics> mOpMetrics;
     std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
@@ -70,7 +61,6 @@ class TxBundle
 
     // TODO: Stop using mutable
     mutable TransactionMetaFrame meta;
-    mutable std::shared_ptr<SorobanOpMetrics> mOpMetrics;
     mutable std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
@@ -98,8 +88,9 @@ class TransactionFrameBase
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
-        Hash const& sorobanBasePrngSeed, TransactionMetaFrame& meta,
-        uint32_t ledgerSeq, uint32_t ledgerVersion) const = 0;
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TransactionMetaFrame& meta, uint32_t ledgerSeq,
+        uint32_t ledgerVersion) const = 0;
 
     virtual MutableTxResultPtr
     checkValid(Application& app, AbstractLedgerTxn& ltxOuter,

@@ -25,12 +25,9 @@ class InvokeHostFunctionOpFrame : public OperationFrame
         return res.tr().invokeHostFunctionResult();
     }
 
-    // TODO: Temporarily templated while we have both HostFunctionMetrics and
-    // ParallelHostFunctionMetrics
-    template <typename MetricsT>
     void maybePopulateDiagnosticEvents(Config const& cfg,
                                        InvokeHostFunctionOutput const& output,
-                                       MetricsT const& metrics,
+                                       HostFunctionMetrics const& metrics,
                                        SorobanTxData& sorobanData) const;
 
     InvokeHostFunctionOp const& mInvokeHostFunction;
@@ -58,7 +55,8 @@ class InvokeHostFunctionOpFrame : public OperationFrame
         ThreadEntryMap const& entryMap, // Must not be shared between threads!
         Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
         Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
-        OperationResult& res, SorobanTxData& sorobanData, uint32_t ledgerSeq,
+        SorobanMetrics& sorobanMetrics, OperationResult& res,
+        SorobanTxData& sorobanData, uint32_t ledgerSeq,
         uint32_t ledgerVersion) const override;
 
     void
