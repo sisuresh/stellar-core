@@ -4336,12 +4336,14 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
     REQUIRE(client.getTTL("key1", ContractDataDurability::PERSISTENT) ==
             expectedPersistentLiveUntilLedger);
 
-    SECTION("parallel extensions")
-    {
+    auto parallelTtlExtensions = [&](bool largestExtensionIsFromContract) {
+        uint32_t tx1ExtendTo = largestExtensionIsFromContract ? 100'000 : 3'000;
+        uint32_t tx3ExtendTo = largestExtensionIsFromContract ? 3'000 : 100'000;
+
         auto i1 = client.getContract().prepareInvocation(
             "extend_persistent",
-            {makeSymbolSCVal("key1"), makeU32SCVal(100'000),
-             makeU32SCVal(100'000)},
+            {makeSymbolSCVal("key1"), makeU32SCVal(tx1ExtendTo),
+             makeU32SCVal(tx1ExtendTo)},
             client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
         auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
 
@@ -4351,11 +4353,12 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
         auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
 
-        auto i3 = client.getContract().prepareInvocation(
-            "extend_persistent",
-            {makeSymbolSCVal("key1"), makeU32SCVal(3000), makeU32SCVal(3000)},
-            client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
-        auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+        SorobanResources extendResources;
+        extendResources.footprint.readOnly = {client.getContract().getDataKey(
+            makeSymbolSCVal("key1"), ContractDataDurability::PERSISTENT)};
+        extendResources.readBytes = 100;
+        auto tx3 = test.createExtendOpTx(extendResources, tx3ExtendTo, 30'000,
+                                         30'000, &a3);
 
         auto i4 = client.getContract().prepareInvocation(
             "extend_persistent",
@@ -4435,7 +4438,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(extensionMetaChangesTx1.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + 100'000);
+                    .liveUntilLedgerSeq == test.getLedgerSeq() + tx1ExtendTo);
         REQUIRE(extensionMetaChangesTx2.at(1)
                     .updated()
                     .data.ttl()
@@ -4443,11 +4446,21 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(extensionMetaChangesTx3.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + 3000);
+                    .liveUntilLedgerSeq == test.getLedgerSeq() + tx3ExtendTo);
         REQUIRE(extensionMetaChangesTx4.at(1)
                     .updated()
                     .data.ttl()
                     .liveUntilLedgerSeq == test.getLedgerSeq() + 4000);
+    };
+
+    SECTION("parallel extensions - ExtendFootprint op has highest extension")
+    {
+        parallelTtlExtensions(false);
+    }
+
+    SECTION("parallel extensions - InvokeHostFunctionOp has highest extension")
+    {
+        parallelTtlExtensions(true);
     }
 
     SECTION("Creation and extension")
@@ -4543,6 +4556,10 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
                     .updated()
                     .data.ttl()
                     .liveUntilLedgerSeq == test.getLedgerSeq() + 2000);
+    }
+
+    SECTION("Contract and ExtendFootprintOp")
+    {
     }
 
     // TODO: Add deletion test.
