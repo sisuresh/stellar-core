@@ -1629,8 +1629,9 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
         }
         else
         {
-            releaseAssertOrThrow(txBundle.resPayload->getResultCode() ==
-                                 txFAILED);
+            releaseAssertOrThrow(
+                txBundle.resPayload->getResultCode() == txFAILED ||
+                txBundle.resPayload->getResultCode() == txINTERNAL_ERROR);
         }
         txBundle.mDelta = res.mDelta;
     }
