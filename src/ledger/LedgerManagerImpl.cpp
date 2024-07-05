@@ -1591,7 +1591,10 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                 auto it = entryMap.find(lk);
                 releaseAssertOrThrow(it != entryMap.end());
 
-                if (lk.type() == TTL && it->second.first && updatedLe)
+                auto opType = txBundle.tx->getRawOperations().at(0).body.type();
+
+                if (opType != RESTORE_FOOTPRINT && lk.type() == TTL &&
+                    it->second.first && updatedLe)
                 {
                     // If this is a TTL extension, then record it separately for
                     // now.
@@ -1612,14 +1615,20 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                 }
                 else
                 {
-                    // If this is a TTL entry, it is either being created or
-                    // deleted, so it should be observable.
+                    // If this is a TTL entry, it is either being created,
+                    // deleted, or restored, so it should be observable.
 
                     // TTL entry is being deleted, so extensions can be wiped.
                     if (lk.type() == TTL && !updatedLe)
                     {
                         ttlExtensions.erase(lk);
                     }
+
+                    // If this is a create or restore, the entry is in the
+                    // readWrite set, so it shouldn't be possible for an
+                    // extension to be accepted prior to the entry being
+                    // accessible.
+                    releaseAssertOrThrow(ttlExtensions.count(lk) == 0);
 
                     // A entry deletion will be marked by a nullopt le.
                     // Set the dirty bit so it'll be written to ltx later.

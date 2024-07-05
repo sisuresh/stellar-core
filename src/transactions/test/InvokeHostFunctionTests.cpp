@@ -4453,12 +4453,12 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
                     .liveUntilLedgerSeq == test.getLedgerSeq() + 4000);
     };
 
-    SECTION("parallel extensions - ExtendFootprint op has highest extension")
+    SECTION("Parallel extensions - ExtendFootprint op has highest extension")
     {
         parallelTtlExtensions(false);
     }
 
-    SECTION("parallel extensions - InvokeHostFunctionOp has highest extension")
+    SECTION("Parallel extensions - InvokeHostFunctionOp has highest extension")
     {
         parallelTtlExtensions(true);
     }
@@ -4558,10 +4558,81 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
                     .liveUntilLedgerSeq == test.getLedgerSeq() + 2000);
     }
 
-    SECTION("Contract and ExtendFootprintOp")
+    SECTION("Restore and extend")
     {
-    }
+        // Advance ledger until the contract expires
+        for (uint32_t i =
+                 test.getApp().getLedgerManager().getLastClosedLedgerNum();
+             i <= expectedPersistentLiveUntilLedger + 1; ++i)
+        {
+            closeLedgerOn(test.getApp(), i, 2, 1, 2016);
+        }
 
+        auto ledgerSeq = test.getLedgerSeq();
+        auto const& contractKeys = client.getContract().getKeys();
+        REQUIRE(!test.isEntryLive(contractKeys[0], ledgerSeq));
+        REQUIRE(!test.isEntryLive(contractKeys[1], ledgerSeq));
+
+        SorobanResources restoreResources;
+        restoreResources.footprint.readWrite = contractKeys;
+        restoreResources.readBytes = 9'000;
+        restoreResources.writeBytes = 9'000;
+
+        auto const resourceFee = 300'000 + 40'000 * contractKeys.size();
+        auto tx1 =
+            test.createRestoreTx(restoreResources, 1'000, resourceFee, &a1);
+
+        SorobanResources extendResources;
+        extendResources.footprint.readOnly = contractKeys;
+        extendResources.readBytes = 9'000;
+        auto tx2 = test.createExtendOpTx(extendResources, 10'000, 30'000,
+                                         500'000, &a2);
+
+        auto i3 = client.getContract().prepareInvocation(
+            "put_persistent", {makeSymbolSCVal("key2"), makeU64SCVal(100)},
+            client.writeKeySpec("key2", ContractDataDurability::PERSISTENT));
+        auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+
+        auto i4 = client.getContract().prepareInvocation(
+            "extend_persistent",
+            {makeSymbolSCVal("key2"), makeU32SCVal(5000), makeU32SCVal(5000)},
+            client.readKeySpec("key2", ContractDataDurability::PERSISTENT));
+        auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
+
+        LedgerTxn ltx(app.getLedgerTxnRoot());
+
+        TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+
+        std::vector<Stage> stages;
+        auto& stage = stages.emplace_back();
+
+        stage.resize(1);
+
+        // First thread
+        auto& thread1 = stage[0];
+
+        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
+        thread1.emplace_back(tx2, tx2->createSuccessResult(), tm);
+        thread1.emplace_back(tx3, tx3->createSuccessResult(), tm);
+        thread1.emplace_back(tx4, tx4->createSuccessResult(), tm);
+
+        {
+            auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
+            lmImpl->applySorobanStages(app, ltx, stages, Hash{});
+            ltx.commit();
+        }
+
+        REQUIRE(tx1->getResultCode() == txSUCCESS);
+        REQUIRE(tx2->getResultCode() == txSUCCESS);
+        REQUIRE(tx3->getResultCode() == txSUCCESS);
+        REQUIRE(tx4->getResultCode() == txSUCCESS);
+
+        REQUIRE(test.getTTL(contractKeys[0]) == ledgerSeq + 10'000);
+        REQUIRE(test.getTTL(contractKeys[1]) == ledgerSeq + 10'000);
+
+        REQUIRE(client.getTTL("key2", ContractDataDurability::PERSISTENT) ==
+                test.getLedgerSeq() + 5000);
+    }
     // TODO: Add deletion test.
 }
 

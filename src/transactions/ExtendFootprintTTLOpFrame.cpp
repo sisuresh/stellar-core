@@ -62,7 +62,7 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
     SorobanTxData& sorobanData, uint32_t ledgerSeq,
     uint32_t ledgerVersion) const
 {
-    ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame apply", true);
+    ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame doApplyParallel", true);
 
     ExtendFootprintTTLMetrics metrics(sorobanMetrics);
     auto timeScope = metrics.getExecTimer();
@@ -82,29 +82,25 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
     for (auto const& lk : footprint.readOnly)
     {
         auto ttlKey = getTTLKey(lk);
+        auto ttlIter = entryMap.find(ttlKey);
+
+        // auto ttlConstLtxe = ltx.loadWithoutRecord(ttlKey);
+        if (ttlIter == entryMap.end() || !ttlIter->second.first ||
+            !isLive(*ttlIter->second.first, ledgerSeq))
         {
-            // Initially load without record since we may not need to modify
-            // entry
-            auto ttlIter = entryMap.find(ttlKey);
+            // Skip archived entries, as those must be restored.
+            //
+            // Also skip the missing entries. Since this happens at apply
+            // time and we refund the unspent fees, it is more beneficial
+            // to extend as many entries as possible.
+            continue;
+        }
 
-            // auto ttlConstLtxe = ltx.loadWithoutRecord(ttlKey);
-            if (ttlIter == entryMap.end() || !ttlIter->second.first ||
-                !isLive(*ttlIter->second.first, ledgerSeq))
-            {
-                // Skip archived entries, as those must be restored.
-                //
-                // Also skip the missing entries. Since this happens at apply
-                // time and we refund the unspent fees, it is more beneficial
-                // to extend as many entries as possible.
-                continue;
-            }
-
-            auto currLiveUntilLedgerSeq =
-                ttlIter->second.first->data.ttl().liveUntilLedgerSeq;
-            if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
-            {
-                continue;
-            }
+        auto currLiveUntilLedgerSeq =
+            ttlIter->second.first->data.ttl().liveUntilLedgerSeq;
+        if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
+        {
+            continue;
         }
 
         auto entryIter = entryMap.find(lk);
@@ -138,8 +134,6 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
             return {false, {}};
         }
 
-        // We already checked that the TTLEntry exists in the logic above
-        auto ttlIter = entryMap.find(ttlKey);
         auto ttlLe = *ttlIter->second.first;
 
         rustEntryRentChanges.emplace_back();

@@ -334,7 +334,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     SorobanTxData& sorobanData, uint32_t ledgerSeq,
     uint32_t ledgerVersion) const
 {
-    ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame apply", true);
+    ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doApplyParallel", true);
 
     std::vector<LedgerEntryChange> changes;
 
