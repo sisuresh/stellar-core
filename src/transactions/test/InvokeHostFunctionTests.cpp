@@ -4633,7 +4633,48 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(client.getTTL("key2", ContractDataDurability::PERSISTENT) ==
                 test.getLedgerSeq() + 5000);
     }
-    // TODO: Add deletion test.
+    SECTION("Extend and delete")
+    {
+        auto i1 = client.getContract().prepareInvocation(
+            "del_persistent", {makeSymbolSCVal("key1")},
+            client.writeKeySpec("key1", ContractDataDurability::PERSISTENT));
+        auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+
+        auto i2 = client.getContract().prepareInvocation(
+            "extend_persistent",
+            {makeSymbolSCVal("key1"), makeU32SCVal(5000), makeU32SCVal(5000)},
+            client.readKeySpec("key1", ContractDataDurability::PERSISTENT));
+        auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+
+        LedgerTxn ltx(app.getLedgerTxnRoot());
+
+        TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+
+        std::vector<Stage> stages;
+        auto& stage = stages.emplace_back();
+
+        stage.resize(1);
+
+        // First thread
+        auto& thread1 = stage[0];
+        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
+        thread1.emplace_back(tx2, tx2->createSuccessResult(), tm);
+
+        {
+            auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
+            lmImpl->applySorobanStages(app, ltx, stages, Hash{});
+            ltx.commit();
+        }
+
+        REQUIRE(tx1->getResultCode() == txSUCCESS);
+        REQUIRE(tx2->getResultCode() == txFAILED);
+        // tx1 deleted key1, so tx2 will trap when it tries to extend key1
+        REQUIRE(tx2->getResult()
+                    .result.results()[0]
+                    .tr()
+                    .invokeHostFunctionResult()
+                    .code() == INVOKE_HOST_FUNCTION_TRAPPED);
+    }
 }
 
 TEST_CASE("parallel", "[tx][soroban][parallelapply]")

@@ -84,7 +84,6 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
         auto ttlKey = getTTLKey(lk);
         auto ttlIter = entryMap.find(ttlKey);
 
-        // auto ttlConstLtxe = ltx.loadWithoutRecord(ttlKey);
         if (ttlIter == entryMap.end() || !ttlIter->second.first ||
             !isLive(*ttlIter->second.first, ledgerSeq))
         {
