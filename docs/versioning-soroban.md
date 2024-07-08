@@ -47,16 +47,13 @@ We follow this process for protocol upgrades:
      and a new stellar-core `(N+1).0.0`, and the stellar-core will set its
      `Config::CURRENT_LEDGER_PROTOCOL_VERSION` to `N+1`.
 
-  3. We configure the build of stellar-core v(N+1).0.0 as a "transitionary
-     build" that has _both_ versions of soroban in it. In the `Cargo.toml` of
+  3. In the `Cargo.toml` of
      stellar-core, we copy the `N.x.y` version number and git hash from the
-     existing dependency named `soroban-env-host-curr` to the optional
+     existing dependency named `soroban-env-host-curr` to the
      dependency named `soroban-env-host-prev`, then set `soroban-env-host-curr`
-     to `(N+1).0.0` and the appropriate git hash, and configure stellar-core
-     with `--enable-protocol-upgrade-via-soroban-env-host-prev`, which will
-     cause the rust build phase to use `--feature=soroban-env-host-prev`.
-     We will also have to update both pinned dependency tree files as
-     described below in "Pinned soroban dependency trees".
+     to `(N+1).0.0` and the appropriate git hash. We will also have to update
+     both pinned dependency tree files as described below in "Pinned soroban
+     dependency trees".
 
   4. We deploy this dual-version "transitionary build" to the network. This must
      be the first version with support for `N+1`, and since it was built with
