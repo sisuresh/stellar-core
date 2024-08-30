@@ -1,4 +1,4 @@
-soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb
+soroban-env-host 22.0.0 git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443
 ├── wasmparser 0.116.1 checksum:a58e28b80dd8340cb07b8242ae654756161f6fc8d0038123d679b7b99964fa50
 │   ├── semver 1.0.17 checksum:bebd363326d05ec3e2f532ab7660680f3b02130d780c299bca73469d521bc0ed
 │   │   └── serde 1.0.192 checksum:bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001
@@ -124,10 +124,10 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 │   │   └── proc-macro2 1.0.69 checksum:134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da
 │   ├── multi-stash 0.2.0 checksum:685a9ac4b61f4e728e1d2c6a7844609c16527aeb5e6c865915c08e619c16410f
 │   └── arrayvec 0.7.6 checksum:7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50
-├── soroban-env-common 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb
+├── soroban-env-common 22.0.0 git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443
 │   ├── wasmparser 0.116.1 checksum:a58e28b80dd8340cb07b8242ae654756161f6fc8d0038123d679b7b99964fa50
 │   ├── tracy-client 0.16.4 checksum:82da0d50d9df1106619b1e5b118f39de779f7d8b9c3504485b291cb16fabd20f
-│   ├── stellar-xdr 21.2.0 git+https://github.com/stellar/rs-stellar-xdr?rev=ae805d0f8c28ca86327a834eea9ce7d29b0a63bb#ae805d0f8c28ca86327a834eea9ce7d29b0a63bb
+│   ├── stellar-xdr 22.0.0 git+https://github.com/stellar/rs-stellar-xdr?rev=550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac#550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac
 │   │   ├── stellar-strkey 0.0.8 checksum:12d2bf45e114117ea91d820a846fd1afbe3ba7d717988fee094ce8227a3bf8bd
 │   │   ├── hex 0.4.3 checksum:7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70
 │   │   ├── escape-bytes 0.1.1 checksum:2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2
@@ -135,9 +135,9 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 │   │   └── base64 0.13.1 checksum:9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8
 │   ├── static_assertions 1.1.0 checksum:a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f
 │   ├── soroban-wasmi 0.36.0-soroban.22.0.0 git+https://github.com/stellar/wasmi?rev=122a74a7c491929e5ac9de876099154ef7c06d06#122a74a7c491929e5ac9de876099154ef7c06d06
-│   ├── soroban-env-macros 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb
+│   ├── soroban-env-macros 22.0.0 git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443
 │   │   ├── syn 2.0.39 checksum:23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a
-│   │   ├── stellar-xdr 21.2.0 git+https://github.com/stellar/rs-stellar-xdr?rev=ae805d0f8c28ca86327a834eea9ce7d29b0a63bb#ae805d0f8c28ca86327a834eea9ce7d29b0a63bb
+│   │   ├── stellar-xdr 22.0.0 git+https://github.com/stellar/rs-stellar-xdr?rev=550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac#550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac
 │   │   ├── serde_json 1.0.108 checksum:3d1c7e3eac408d115102c4c24ad393e0821bb3a5df4d506a80f85f7a742a526b
 │   │   ├── serde 1.0.192 checksum:bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001
 │   │   ├── quote 1.0.33 checksum:5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae
@@ -148,7 +148,7 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 │   ├── num-derive 0.4.1 checksum:cfb77679af88f8b125209d354a202862602672222e7f2313fdd6dc349bad4712
 │   ├── ethnum 1.5.0 checksum:b90ca2580b73ab6a1f724b76ca11ab632df820fd6040c336200d2c1df7b3c82c
 │   └── crate-git-revision 0.0.6 checksum:c521bf1f43d31ed2f73441775ed31935d77901cb3451e44b38a1c1612fcbaf98
-├── soroban-builtin-sdk-macros 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb
+├── soroban-builtin-sdk-macros 22.0.0 git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443
 │   ├── syn 2.0.39 checksum:23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a
 │   ├── quote 1.0.33 checksum:5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae
 │   ├── proc-macro2 1.0.69 checksum:134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da
@@ -260,8 +260,9 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 ├── getrandom 0.2.11 checksum:fe9006bed769170c11f845cf00c7c1e9092aeb3f268e007c3e760ac68008070f
 ├── generic-array 0.14.7 checksum:85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a
 ├── elliptic-curve 0.13.5 checksum:968405c8fdc9b3bf4df0a6638858cc0b52462836ab6b1c87377785dd09cf1c0b
-├── ed25519-dalek 2.0.0 checksum:7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980
+├── ed25519-dalek 2.1.1 git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00
 │   ├── zeroize 1.6.0 checksum:2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9
+│   ├── subtle 2.5.0 checksum:81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc
 │   ├── sha2 0.10.8 checksum:793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8
 │   ├── serde 1.0.192 checksum:bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001
 │   ├── rand_core 0.6.4 checksum:ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c
@@ -272,7 +273,7 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 │   │       │   ├── der 0.7.6 checksum:56acb310e15652100da43d130af8d97b509e95af61aab1c5a7939ef24337ee17
 │   │       │   └── base64ct 1.6.0 checksum:8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b
 │   │       └── der 0.7.6 checksum:56acb310e15652100da43d130af8d97b509e95af61aab1c5a7939ef24337ee17
-│   └── curve25519-dalek 4.1.1 checksum:e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c
+│   └── curve25519-dalek 4.1.2 git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00
 │       ├── zeroize 1.6.0 checksum:2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9
 │       ├── subtle 2.5.0 checksum:81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc
 │       ├── rustc_version 0.4.0 checksum:bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366
@@ -280,11 +281,21 @@ soroban-env-host 22.0.0 git+https://github.com/stellar/rs-soroban-env?rev=81a423
 │       ├── platforms 3.0.2 checksum:e3d7ddaed09e0eb771a79ab0fd64609ba0afb0a8366421957936ad14cbd13630
 │       ├── fiat-crypto 0.2.5 checksum:27573eac26f4dd11e2b1916c3fe1baa56407c83c71a773a8ba17ec0bca03b6b7
 │       ├── digest 0.10.7 checksum:9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292
-│       ├── curve25519-dalek-derive 0.1.0 checksum:83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b
+│       ├── curve25519-dalek-derive 0.1.1 git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00
 │       │   ├── syn 2.0.39 checksum:23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a
 │       │   ├── quote 1.0.33 checksum:5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae
 │       │   └── proc-macro2 1.0.69 checksum:134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da
 │       ├── cpufeatures 0.2.8 checksum:03e69e28e9f7f77debdedbaafa2866e1de9ba56df55a8bd7cfc724c25a09987c
 │       └── cfg-if 1.0.0 checksum:baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd
 ├── ecdsa 0.16.7 checksum:0997c976637b606099b9985693efa3581e84e41f5c11ba5255f88711058ad428
-└── curve25519-dalek 4.1.1 checksum:e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c
+└── curve25519-dalek 4.1.3 git+https://github.com/dalek-cryptography/curve25519-dalek/?rev=5312a0311ec40df95be953eacfa8a11b9a34bc54#5312a0311ec40df95be953eacfa8a11b9a34bc54
+    ├── subtle 2.5.0 checksum:81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc
+    ├── rustc_version 0.4.0 checksum:bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366
+    ├── fiat-crypto 0.2.5 checksum:27573eac26f4dd11e2b1916c3fe1baa56407c83c71a773a8ba17ec0bca03b6b7
+    ├── digest 0.10.7 checksum:9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292
+    ├── curve25519-dalek-derive 0.1.1 git+https://github.com/dalek-cryptography/curve25519-dalek/?rev=5312a0311ec40df95be953eacfa8a11b9a34bc54#5312a0311ec40df95be953eacfa8a11b9a34bc54
+    │   ├── syn 2.0.39 checksum:23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a
+    │   ├── quote 1.0.33 checksum:5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae
+    │   └── proc-macro2 1.0.69 checksum:134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da
+    ├── cpufeatures 0.2.8 checksum:03e69e28e9f7f77debdedbaafa2866e1de9ba56df55a8bd7cfc724c25a09987c
+    └── cfg-if 1.0.0 checksum:baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd

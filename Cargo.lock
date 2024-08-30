@@ -163,7 +163,7 @@ checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "curve25519-dalek-derive",
+ "curve25519-dalek-derive 0.1.0",
  "digest",
  "fiat-crypto",
  "platforms",
@@ -173,10 +173,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "curve25519-dalek"
+version = "4.1.2"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive 0.1.1 (git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00)",
+ "digest",
+ "fiat-crypto",
+ "platforms",
+ "rustc_version",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek"
+version = "4.1.3"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek/?rev=5312a0311ec40df95be953eacfa8a11b9a34bc54#5312a0311ec40df95be953eacfa8a11b9a34bc54"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive 0.1.1 (git+https://github.com/dalek-cryptography/curve25519-dalek/?rev=5312a0311ec40df95be953eacfa8a11b9a34bc54)",
+ "digest",
+ "fiat-crypto",
+ "rustc_version",
+ "subtle",
+]
+
+[[package]]
 name = "curve25519-dalek-derive"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.1"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.1"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek/?rev=5312a0311ec40df95be953eacfa8a11b9a34bc54#5312a0311ec40df95be953eacfa8a11b9a34bc54"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -280,11 +330,25 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 4.1.1",
  "ed25519",
  "rand_core",
  "serde",
  "sha2",
+ "zeroize",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "2.1.1"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek?rev=4ac84dd0668b1d2e51654fcdffe4ae6a687bef00#4ac84dd0668b1d2e51654fcdffe4ae6a687bef00"
+dependencies = [
+ "curve25519-dalek 4.1.2",
+ "ed25519",
+ "rand_core",
+ "serde",
+ "sha2",
+ "subtle",
  "zeroize",
 ]
 
@@ -963,7 +1027,7 @@ dependencies = [
 [[package]]
 name = "soroban-builtin-sdk-macros"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 dependencies = [
  "itertools",
  "proc-macro2",
@@ -983,7 +1047,7 @@ dependencies = [
  "soroban-env-macros 21.2.0",
  "soroban-wasmi 0.31.1-soroban.20.0.1",
  "static_assertions",
- "stellar-xdr",
+ "stellar-xdr 21.2.0",
  "tracy-client",
  "wasmparser",
 ]
@@ -991,7 +1055,7 @@ dependencies = [
 [[package]]
 name = "soroban-env-common"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 dependencies = [
  "crate-git-revision",
  "ethnum",
@@ -1000,7 +1064,7 @@ dependencies = [
  "soroban-env-macros 22.0.0",
  "soroban-wasmi 0.36.0-soroban.22.0.0",
  "static_assertions",
- "stellar-xdr",
+ "stellar-xdr 22.0.0",
  "tracy-client",
  "wasmparser",
 ]
@@ -1010,9 +1074,9 @@ name = "soroban-env-host"
 version = "21.2.0"
 source = "git+https://github.com/stellar/rs-soroban-env?rev=8809852dcf8489f99407a5ceac12625ee3d14693#8809852dcf8489f99407a5ceac12625ee3d14693"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 4.1.1",
  "ecdsa",
- "ed25519-dalek",
+ "ed25519-dalek 2.0.0",
  "elliptic-curve",
  "generic-array",
  "getrandom",
@@ -1040,11 +1104,11 @@ dependencies = [
 [[package]]
 name = "soroban-env-host"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 4.1.3",
  "ecdsa",
- "ed25519-dalek",
+ "ed25519-dalek 2.1.1",
  "elliptic-curve",
  "generic-array",
  "getrandom",
@@ -1079,33 +1143,33 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "stellar-xdr",
+ "stellar-xdr 21.2.0",
  "syn",
 ]
 
 [[package]]
 name = "soroban-env-macros"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 dependencies = [
  "itertools",
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
- "stellar-xdr",
+ "stellar-xdr 22.0.0",
  "syn",
 ]
 
 [[package]]
 name = "soroban-synth-wasm"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 dependencies = [
  "arbitrary",
  "soroban-env-common 22.0.0",
  "soroban-env-macros 22.0.0",
- "stellar-xdr",
+ "stellar-xdr 22.0.0",
  "wasm-encoder",
  "wasmparser",
 ]
@@ -1113,7 +1177,7 @@ dependencies = [
 [[package]]
 name = "soroban-test-wasms"
 version = "22.0.0"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=81a4239f3e1ab5e4030140310faa64aba28dfdcb#81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+source = "git+https://github.com/sisuresh/rs-soroban-env?rev=81605c6725668f0c2c4315eb6710a3a95238e443#81605c6725668f0c2c4315eb6710a3a95238e443"
 
 [[package]]
 name = "soroban-wasmi"
@@ -1200,6 +1264,18 @@ dependencies = [
 name = "stellar-xdr"
 version = "21.2.0"
 source = "git+https://github.com/stellar/rs-stellar-xdr?rev=ae805d0f8c28ca86327a834eea9ce7d29b0a63bb#ae805d0f8c28ca86327a834eea9ce7d29b0a63bb"
+dependencies = [
+ "base64",
+ "crate-git-revision",
+ "escape-bytes",
+ "hex",
+ "stellar-strkey",
+]
+
+[[package]]
+name = "stellar-xdr"
+version = "22.0.0"
+source = "git+https://github.com/stellar/rs-stellar-xdr?rev=550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac#550743b50cd3ca5a63f03f9d7175b4cfdfd9c4ac"
 dependencies = [
  "base64",
  "crate-git-revision",

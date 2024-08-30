@@ -56,9 +56,9 @@ itertools = "=0.11.0"
 
 [dependencies.soroban-env-host-p22]
 version = "=22.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
+git = "https://github.com/sisuresh/rs-soroban-env"
 package = "soroban-env-host"
-rev = "81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+rev = "81605c6725668f0c2c4315eb6710a3a95238e443"
 
 [dependencies.soroban-env-host-p21]
 version = "=21.2.0"
@@ -71,13 +71,13 @@ rev = "8809852dcf8489f99407a5ceac12625ee3d14693"
 
 [dependencies.soroban-test-wasms]
 version = "=22.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
-rev = "81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+git = "https://github.com/sisuresh/rs-soroban-env"
+rev = "81605c6725668f0c2c4315eb6710a3a95238e443"
 
 [dependencies.soroban-synth-wasm]
 version = "=22.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
-rev = "81a4239f3e1ab5e4030140310faa64aba28dfdcb"
+git = "https://github.com/sisuresh/rs-soroban-env"
+rev = "81605c6725668f0c2c4315eb6710a3a95238e443"
 
 [dependencies.cargo-lock]
 version = "=9.0.0"
