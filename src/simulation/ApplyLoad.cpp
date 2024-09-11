@@ -248,10 +248,12 @@ ApplyLoad::benchmark()
             }
             break;
         }
-
         txs.emplace_back(tx.second);
     }
 
+
+    //std::cout << xdrToCerealString(txs.front()->getEnvelope(), "front") << std::endl << std::endl << std::endl << std::endl;
+    //std::cout << xdrToCerealString(txs.back()->getEnvelope(), "back") << std::endl;
     closeLedger(txs);
 }
 

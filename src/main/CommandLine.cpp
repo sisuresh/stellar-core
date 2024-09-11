@@ -1935,7 +1935,6 @@ runApplyLoad(CommandLineArgs const& args)
             config.RUN_STANDALONE = true;
 
             VirtualClock clock(VirtualClock::REAL_TIME);
-            int result;
             auto appPtr = Application::create(clock, config);
 
             auto& app = *appPtr;
@@ -1952,21 +1951,33 @@ runApplyLoad(CommandLineArgs const& args)
                     app.getMetrics().NewTimer({"ledger", "ledger", "close"});
                 ledgerClose.Clear();
 
+                auto& cpuInsRatio = app.getMetrics().NewHistogram(
+                    {"soroban", "host-fn-op", "invoke-time-fsecs-cpu-insn-ratio"});
+                cpuInsRatio.Clear();
+
+                auto& cpuInsRatioExclVm = app.getMetrics().NewHistogram({"soroban", "host-fn-op",
+                                "invoke-time-fsecs-cpu-insn-ratio-excl-vm"});
+                cpuInsRatioExclVm.Clear();
+
                 for (size_t i = 0; i < 20; ++i)
                 {
                     al.benchmark();
                 }
 
-                CLOG_INFO(Perf, "Max ledger close: {} milliseconds",
-                          ledgerClose.max());
-                CLOG_INFO(Perf, "Mean ledger close:  {} milliseconds",
-                          ledgerClose.mean());
+                CLOG_INFO(Perf, "Max ledger close: {} milliseconds", ledgerClose.max());
+                CLOG_INFO(Perf, "Mean ledger close:  {} milliseconds", ledgerClose.mean());
+
+                CLOG_INFO(Perf, "Max CPU ins ratio: {}", cpuInsRatio.max() / 1000000);
+                CLOG_INFO(Perf, "Mean CPU ins ratio:  {}", cpuInsRatio.mean() / 1000000);
+
+                CLOG_INFO(Perf, "Max CPU ins ratio excl VM: {}", cpuInsRatioExclVm.max() / 1000000);
+                CLOG_INFO(Perf, "Mean CPU ins ratio excl VM:  {}", cpuInsRatioExclVm.mean() / 1000000);
 
                 CLOG_INFO(Perf, "Tx Success Rate: {:f}%",
                           al.successRate() * 100);
             }
 
-            return result;
+            return 0;
         });
 }
 #endif

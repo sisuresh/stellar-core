@@ -5,6 +5,8 @@
 #include "transactions/test/SorobanTxTestUtils.h"
 #include <crypto/SHA.h>
 
+#include "util/XDRCereal.h"
+
 namespace stellar
 {
 
@@ -390,6 +392,9 @@ TxGenerator::invokeSorobanLoadTransaction(
         sampleDiscrete(appCfg.LOADGEN_NUM_DATA_ENTRIES_FOR_TESTING,
                        appCfg.LOADGEN_NUM_DATA_ENTRIES_DISTRIBUTION_FOR_TESTING,
                        DEFAULT_NUM_DATA_ENTRIES);
+    
+    //std::cout << "numEntries  " << numEntries << std::endl << std::endl; 
+    
     for (uint32_t i = 0; i < numEntries; ++i)
     {
         auto lk = contractDataKey(instance.contractID, makeU32(i),
@@ -402,6 +407,9 @@ TxGenerator::invokeSorobanLoadTransaction(
     auto totalKbWriteBytes = sampleDiscrete(
         ioKilobytesValues, appCfg.LOADGEN_IO_KILOBYTES_DISTRIBUTION_FOR_TESTING,
         DEFAULT_IO_KILOBYTES);
+    
+    // std::cout << "totalKbWriteBytes  " << totalKbWriteBytes << std::endl << std::endl; 
+
 
     // Make sure write bytes is sufficient for number of entries written
     if (totalKbWriteBytes < numEntries)
