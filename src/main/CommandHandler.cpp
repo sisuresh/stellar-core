@@ -1404,15 +1404,9 @@ CommandHandler::generateLoad(std::string const& params, std::string& retStr)
 
         if (cfg.mode == LoadGenMode::SOROBAN_CREATE_UPGRADE)
         {
-            auto testingKeys =
-                mApp.getLoadGenerator().getContractInstanceKeysForTesting();
-            releaseAssert(testingKeys.size() == 1);
-            auto contractId =
-                testingKeys.begin()->contractData().contract.contractId();
-
             auto configUpgradeKey =
                 mApp.getLoadGenerator().getConfigUpgradeSetKey(
-                    cfg.getSorobanUpgradeConfig(), contractId);
+                    cfg.getSorobanUpgradeConfig());
             auto configUpgradeKeyStr = stellar::decoder::encode_b64(
                 xdr::xdr_to_opaque(configUpgradeKey));
             res["config_upgrade_set_key"] = configUpgradeKeyStr;
