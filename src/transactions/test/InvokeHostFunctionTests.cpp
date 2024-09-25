@@ -4470,7 +4470,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             INVOKE_HOST_FUNCTION_SUCCESS);
 
     auto expectedPersistentLiveUntilLedger =
-        stateArchivalSettings.minPersistentTTL + test.getLedgerSeq() - 1;
+        stateArchivalSettings.minPersistentTTL + test.getLCLSeq() - 1;
 
     REQUIRE(client.getTTL("key1", ContractDataDurability::PERSISTENT) ==
             expectedPersistentLiveUntilLedger);
@@ -4516,15 +4516,20 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         stage.resize(2);
 
+        auto tx1Res = tx1->createSuccessResult();
+        auto tx2Res = tx2->createSuccessResult();
+        auto tx3Res = tx3->createSuccessResult();
+        auto tx4Res = tx4->createSuccessResult();
+
         // First thread
         auto& thread1 = stage[0];
-        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
-        thread1.emplace_back(tx4, tx4->createSuccessResult(), tm);
+        thread1.emplace_back(tx1, tx1Res, tm);
+        thread1.emplace_back(tx4, tx2Res, tm);
 
         // Second thread
         auto& thread2 = stage[1];
-        thread2.emplace_back(tx2, tx2->createSuccessResult(), tm);
-        thread2.emplace_back(tx3, tx3->createSuccessResult(), tm);
+        thread2.emplace_back(tx2, tx3Res, tm);
+        thread2.emplace_back(tx3, tx4Res, tm);
 
         {
             auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
@@ -4532,10 +4537,10 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             ltx.commit();
         }
 
-        REQUIRE(tx1->getResultCode() == txSUCCESS);
-        REQUIRE(tx2->getResultCode() == txINTERNAL_ERROR);
-        REQUIRE(tx3->getResultCode() == txSUCCESS);
-        REQUIRE(tx4->getResultCode() == txSUCCESS);
+        REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx2Res->getResultCode() == txINTERNAL_ERROR);
+        REQUIRE(tx3Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx4Res->getResultCode() == txSUCCESS);
 
         // FeeCharged is initialized to 0 in this test which is incorrect.
         // That's why these values are negative after the refund.
@@ -4545,7 +4550,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         // REQUIRE(tx4->getResult().feeCharged == -39699);
 
         REQUIRE(client.getTTL("key1", ContractDataDurability::PERSISTENT) ==
-                test.getLedgerSeq() + 100'000);
+                test.getLCLSeq() + 100'000);
 
         auto const& extensionMetaChangesTx1 =
             thread1[0].meta.getXDR().v3().operations.front().changes;
@@ -4576,15 +4581,15 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(extensionMetaChangesTx1.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + tx1ExtendTo);
+                    .liveUntilLedgerSeq == test.getLCLSeq() + tx1ExtendTo);
         REQUIRE(extensionMetaChangesTx3.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + tx3ExtendTo);
+                    .liveUntilLedgerSeq == test.getLCLSeq() + tx3ExtendTo);
         REQUIRE(extensionMetaChangesTx4.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + 4000);
+                    .liveUntilLedgerSeq == test.getLCLSeq() + 4000);
     };
 
     SECTION("Parallel extensions - ExtendFootprint op has highest extension")
@@ -4630,15 +4635,20 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         stage.resize(2);
 
+        auto tx1Res = tx1->createSuccessResult();
+        auto tx2Res = tx2->createSuccessResult();
+        auto tx3Res = tx3->createSuccessResult();
+        auto tx4Res = tx4->createSuccessResult();
+
         // First thread
         auto& thread1 = stage[0];
-        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
-        thread1.emplace_back(tx2, tx2->createSuccessResult(), tm);
-        thread1.emplace_back(tx3, tx3->createSuccessResult(), tm);
+        thread1.emplace_back(tx1, tx1Res, tm);
+        thread1.emplace_back(tx2, tx2Res, tm);
+        thread1.emplace_back(tx3, tx3Res, tm);
 
         // Second thread
         auto& thread2 = stage[1];
-        thread2.emplace_back(tx4, tx4->createSuccessResult(), tm);
+        thread2.emplace_back(tx4, tx4Res, tm);
 
         {
             auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
@@ -4646,10 +4656,10 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             ltx.commit();
         }
 
-        REQUIRE(tx1->getResultCode() == txSUCCESS);
-        REQUIRE(tx2->getResultCode() == txSUCCESS);
-        REQUIRE(tx3->getResultCode() == txSUCCESS);
-        REQUIRE(tx4->getResultCode() == txSUCCESS);
+        REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx2Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx3Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx4Res->getResultCode() == txSUCCESS);
 
         // TODO: Check fee charged!
         // FeeCharged is initialized to 0 in this test which is incorrect.
@@ -4660,7 +4670,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(tx4->getResult().feeCharged == -39699); */
 
         REQUIRE(client.getTTL("key2", ContractDataDurability::PERSISTENT) ==
-                test.getLedgerSeq() + 5000);
+                test.getLCLSeq() + 5000);
 
         REQUIRE(client.getTTL("key3", ContractDataDurability::PERSISTENT) ==
                 expectedPersistentLiveUntilLedger);
@@ -4685,11 +4695,11 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         REQUIRE(extensionMetaChangesTx2.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + 5000);
+                    .liveUntilLedgerSeq == test.getLCLSeq() + 5000);
         REQUIRE(extensionMetaChangesTx3.at(1)
                     .updated()
                     .data.ttl()
-                    .liveUntilLedgerSeq == test.getLedgerSeq() + 2000);
+                    .liveUntilLedgerSeq == test.getLCLSeq() + 2000);
     }
 
     SECTION("Restore and extend")
@@ -4702,7 +4712,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             closeLedgerOn(test.getApp(), i, 2, 1, 2016);
         }
 
-        auto ledgerSeq = test.getLedgerSeq();
+        auto ledgerSeq = test.getLCLSeq();
         auto const& contractKeys = client.getContract().getKeys();
         REQUIRE(!test.isEntryLive(contractKeys[0], ledgerSeq));
         REQUIRE(!test.isEntryLive(contractKeys[1], ledgerSeq));
@@ -4745,10 +4755,15 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         // First thread
         auto& thread1 = stage[0];
 
-        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
-        thread1.emplace_back(tx2, tx2->createSuccessResult(), tm);
-        thread1.emplace_back(tx3, tx3->createSuccessResult(), tm);
-        thread1.emplace_back(tx4, tx4->createSuccessResult(), tm);
+        auto tx1Res = tx1->createSuccessResult();
+        auto tx2Res = tx2->createSuccessResult();
+        auto tx3Res = tx3->createSuccessResult();
+        auto tx4Res = tx4->createSuccessResult();
+
+        thread1.emplace_back(tx1, tx1Res, tm);
+        thread1.emplace_back(tx2, tx2Res, tm);
+        thread1.emplace_back(tx3, tx3Res, tm);
+        thread1.emplace_back(tx4, tx4Res, tm);
 
         {
             auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
@@ -4756,16 +4771,16 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             ltx.commit();
         }
 
-        REQUIRE(tx1->getResultCode() == txSUCCESS);
-        REQUIRE(tx2->getResultCode() == txSUCCESS);
-        REQUIRE(tx3->getResultCode() == txSUCCESS);
-        REQUIRE(tx4->getResultCode() == txSUCCESS);
+        REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx2Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx3Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx4Res->getResultCode() == txSUCCESS);
 
         REQUIRE(test.getTTL(contractKeys[0]) == ledgerSeq + 10'000);
         REQUIRE(test.getTTL(contractKeys[1]) == ledgerSeq + 10'000);
 
         REQUIRE(client.getTTL("key2", ContractDataDurability::PERSISTENT) ==
-                test.getLedgerSeq() + 5000);
+                test.getLCLSeq() + 5000);
     }
     SECTION("Extend and delete")
     {
@@ -4784,6 +4799,9 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
 
+        auto tx1Res = tx1->createSuccessResult();
+        auto tx2Res = tx2->createSuccessResult();
+
         std::vector<Stage> stages;
         auto& stage = stages.emplace_back();
 
@@ -4791,8 +4809,8 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         // First thread
         auto& thread1 = stage[0];
-        thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
-        thread1.emplace_back(tx2, tx2->createSuccessResult(), tm);
+        thread1.emplace_back(tx1, tx1Res, tm);
+        thread1.emplace_back(tx2, tx2Res, tm);
 
         {
             auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
@@ -4800,10 +4818,10 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
             ltx.commit();
         }
 
-        REQUIRE(tx1->getResultCode() == txSUCCESS);
-        REQUIRE(tx2->getResultCode() == txFAILED);
+        REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+        REQUIRE(tx2Res->getResultCode() == txFAILED);
         // tx1 deleted key1, so tx2 will trap when it tries to extend key1
-        REQUIRE(tx2->getResult()
+        REQUIRE(tx2Res->getResult()
                     .result.results()[0]
                     .tr()
                     .invokeHostFunctionResult()
@@ -4886,25 +4904,34 @@ TEST_CASE("parallel", "[tx][soroban][parallelapply]")
     auto transferTx2 = assetClient.getTransferTx(issuer, a6Addr, 25);
 
     LedgerTxn ltx(app.getLedgerTxnRoot());
-
+    // TransactionMetaFrame tm(getLclProtocolVersion(app));
     TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+
+    auto tx1Res = tx1->createSuccessResult();
+    auto tx2Res = tx2->createSuccessResult();
+    auto tx3Res = tx3->createSuccessResult();
+    auto tx4Res = tx4->createSuccessResult();
+    auto tx7Res = tx7->createSuccessResult();
+
+    auto transferTx1Res = transferTx1->createSuccessResult();
+    auto transferTx2Res = transferTx2->createSuccessResult();
 
     std::vector<Stage> stages;
     auto& stage = stages.emplace_back();
 
     stage.resize(3);
     auto& thread1 = stage[0];
-    thread1.emplace_back(tx1, tx1->createSuccessResult(), tm);
-    thread1.emplace_back(tx3, tx3->createSuccessResult(), tm);
+    thread1.emplace_back(tx1, tx1Res, tm);
+    thread1.emplace_back(tx3, tx3Res, tm);
 
     auto& thread2 = stage[1];
-    thread2.emplace_back(tx2, tx2->createSuccessResult(), tm);
-    thread2.emplace_back(tx7, tx7->createSuccessResult(), tm);
+    thread2.emplace_back(tx2, tx2Res, tm);
+    thread2.emplace_back(tx7, tx7Res, tm);
 
     auto& thread3 = stage[2];
-    thread3.emplace_back(tx4, tx4->createSuccessResult(), tm);
-    thread3.emplace_back(transferTx1, transferTx1->createSuccessResult(), tm);
-    thread3.emplace_back(transferTx2, transferTx2->createSuccessResult(), tm);
+    thread3.emplace_back(tx4, tx4Res, tm);
+    thread3.emplace_back(transferTx1, transferTx1Res, tm);
+    thread3.emplace_back(transferTx2, transferTx2Res, tm);
 
     auto timerBefore = hostFnExecTimer.count();
     {
@@ -4928,15 +4955,15 @@ TEST_CASE("parallel", "[tx][soroban][parallelapply]")
     REQUIRE(client.has("key7", ContractDataDurability::TEMPORARY, false) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 
-    REQUIRE(tx1->getResultCode() == txSUCCESS);
-    REQUIRE(tx2->getResultCode() == txSUCCESS);
-    REQUIRE(tx3->getResultCode() == txSUCCESS);
-    REQUIRE(tx4->getResultCode() == txSUCCESS);
-    REQUIRE(transferTx1->getResultCode() == txSUCCESS);
-    REQUIRE(transferTx2->getResultCode() == txSUCCESS);
+    REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx2Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx3Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx4Res->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx1Res->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx2Res->getResultCode() == txSUCCESS);
 
-    REQUIRE(tx7->getResultCode() == txFAILED);
-    REQUIRE(tx7->getResult()
+    REQUIRE(tx7Res->getResultCode() == txFAILED);
+    REQUIRE(tx7Res->getResult()
                 .result.results()[0]
                 .tr()
                 .invokeHostFunctionResult()
