@@ -345,7 +345,7 @@ class AssetContractTestClient
     int64_t getBalance(SCAddress const& addr);
     SorobanInvocationSpec defaultSpec() const;
 
-    TransactionTestFramePtr
+    TransactionFrameBasePtr
     getTransferTx(TestAccount& from, SCAddress const& toAddr, int64_t amount);
     bool transfer(TestAccount& from, SCAddress const& toAddr, int64_t amount);
     bool mint(TestAccount& admin, SCAddress const& toAddr, int64_t amount);

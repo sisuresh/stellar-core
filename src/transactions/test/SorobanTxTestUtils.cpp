@@ -681,7 +681,6 @@ TestContract::Invocation::getSpec()
     return mSpec;
 }
 
-
 TransactionFrameBaseConstPtr
 TestContract::Invocation::createTx(TestAccount* source,
                                    std::optional<std::string> memo)
@@ -1313,7 +1312,7 @@ AssetContractTestClient::getContract() const
 }
 
 // TODO:Deduplicate
-TransactionTestFramePtr
+TransactionFrameBasePtr
 AssetContractTestClient::getTransferTx(TestAccount& fromAcc,
                                        SCAddress const& toAddr, int64_t amount)
 {
