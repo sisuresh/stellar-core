@@ -52,6 +52,9 @@ struct SorobanUpgradeConfig
     uint32_t bucketListWindowSamplePeriod{};
     uint32_t evictionScanSize{};
     uint32_t startingEvictionScanLevel{};
+
+    // Parallel execution settings
+    uint32_t ledgerMaxParallelThreads{};
 };
 
 class TxGenerator

@@ -4511,7 +4511,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
 
-        std::vector<Stage> stages;
+        std::vector<ApplyStage> stages;
         auto& stage = stages.emplace_back();
 
         stage.resize(2);
@@ -4630,7 +4630,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
 
-        std::vector<Stage> stages;
+        std::vector<ApplyStage> stages;
         auto& stage = stages.emplace_back();
 
         stage.resize(2);
@@ -4747,7 +4747,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
 
         TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
 
-        std::vector<Stage> stages;
+        std::vector<ApplyStage> stages;
         auto& stage = stages.emplace_back();
 
         stage.resize(1);
@@ -4802,7 +4802,7 @@ TEST_CASE("parallel ttl", "[tx][soroban][parallelapply]")
         auto tx1Res = tx1->createSuccessResult();
         auto tx2Res = tx2->createSuccessResult();
 
-        std::vector<Stage> stages;
+        std::vector<ApplyStage> stages;
         auto& stage = stages.emplace_back();
 
         stage.resize(1);
@@ -4916,7 +4916,7 @@ TEST_CASE("parallel", "[tx][soroban][parallelapply]")
     auto transferTx1Res = transferTx1->createSuccessResult();
     auto transferTx2Res = transferTx2->createSuccessResult();
 
-    std::vector<Stage> stages;
+    std::vector<ApplyStage> stages;
     auto& stage = stages.emplace_back();
 
     stage.resize(3);
@@ -4973,4 +4973,187 @@ TEST_CASE("parallel", "[tx][soroban][parallelapply]")
 
     REQUIRE(a5.getTrustlineBalance(idr) == 150);
     REQUIRE(a6.getTrustlineBalance(idr) == 75);
+}
+
+TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
+{
+    auto cfg = getTestConfig();
+    cfg.LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.SOROBAN_PHASE_STAGE_COUNT = 2;
+
+    SorobanTest test(cfg);
+    ContractStorageTestClient client(test);
+
+    auto issuerKey = getAccount("issuer");
+    Asset idr = makeAsset(issuerKey, "IDR");
+    AssetContractTestClient assetClient(test, idr);
+
+    auto& app = test.getApp();
+    auto& lm = app.getLedgerManager();
+
+    const int64_t startingBalance = lm.getLastMinBalance(50);
+
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", startingBalance);
+    auto a2 = root.create("a2", startingBalance);
+    auto a3 = root.create("a3", startingBalance);
+    auto a4 = root.create("a4", startingBalance);
+
+    auto issuer = root.create(issuerKey, startingBalance);
+    auto a5 = root.create("a5", startingBalance);
+    auto a6 = root.create("a6", startingBalance);
+    a5.changeTrust(idr, 200);
+    a6.changeTrust(idr, 75);
+    issuer.pay(a5, idr, 200);
+
+    auto a7 = root.create("a7", startingBalance);
+
+    auto& hostFnExecTimer =
+        app.getMetrics().NewTimer({"soroban", "host-fn-op", "exec"});
+    auto& hostFnSuccessMeter =
+        app.getMetrics().NewMeter({"soroban", "host-fn-op", "success"}, "call");
+    auto& hostFnFailureMeter =
+        app.getMetrics().NewMeter({"soroban", "host-fn-op", "failure"}, "call");
+
+    auto successesBefore = hostFnSuccessMeter.count();
+
+    auto i1 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY));
+    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+
+    auto i2 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key2"), makeU64SCVal(123)},
+        client.writeKeySpec("key2", ContractDataDurability::TEMPORARY));
+    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+
+    // Rewrite key1 value
+    auto i3 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(8)},
+        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY));
+    auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+
+    auto i4 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key3"), makeU64SCVal(1)},
+        client.writeKeySpec("key3", ContractDataDurability::TEMPORARY));
+    auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
+
+    auto i7Spec =
+        client.writeKeySpec("key7", ContractDataDurability::TEMPORARY);
+    i7Spec = i7Spec.setRefundableResourceFee(1);
+    auto i7 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key7"), makeU64SCVal(1)}, i7Spec);
+    auto tx7 = i7.withExactNonRefundableResourceFee().createTx(&a7);
+
+    auto a6Addr = makeAccountAddress(a6.getPublicKey());
+    auto transferTx1 = assetClient.getTransferTx(a5, a6Addr, 50);
+
+    auto issuerAddr = makeAccountAddress(issuer.getPublicKey());
+    auto transferTx2 = assetClient.getTransferTx(issuer, a6Addr, 25);
+
+    modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
+        cfg.mLedgerMaxInstructions = 7'000'000;
+        cfg.mLedgerMaxParallelThreads = 1;
+    });
+
+    std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+    sorobanTxs.emplace_back(tx1);
+    // sorobanTxs.emplace_back(tx2);
+    sorobanTxs.emplace_back(tx3);
+    // sorobanTxs.emplace_back(tx4);
+    // sorobanTxs.emplace_back(tx7);
+    // sorobanTxs.emplace_back(transferTx1);
+    // sorobanTxs.emplace_back(transferTx2);
+
+    auto r = closeLedger(test.getApp(), sorobanTxs);
+    REQUIRE(r.results.size() == 1);
+
+    checkTx(0, r, txSUCCESS);
+    // checkTx(1, r, txSUCCESS);
+    // checkTx(2, r, txSUCCESS);
+    // checkTx(3, r, txSUCCESS);
+    // checkTx(4, r, txSUCCESS);
+    // checkTx(5, r, txFAILED);
+    // checkTx(6, r, txSUCCESS);
+
+    /* REQUIRE(r.results[5]
+                        .result.result.results()[0]
+                        .tr()
+                        .invokeHostFunctionResult()
+                        .code() ==
+       INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE); */
+
+    REQUIRE(client.has("key1", ContractDataDurability::TEMPORARY, true) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+    REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 123) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+    // REQUIRE(client.has("key2", ContractDataDurability::TEMPORARY, true) ==
+    //        INVOKE_HOST_FUNCTION_SUCCESS);
+
+    /* LedgerTxn ltx(app.getLedgerTxnRoot());
+    // TransactionMetaFrame tm(getLclProtocolVersion(app));
+    TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
+
+    auto tx1Res = tx1->createSuccessResult();
+    auto tx2Res = tx2->createSuccessResult();
+    auto tx3Res = tx3->createSuccessResult();
+    auto tx4Res = tx4->createSuccessResult();
+    auto tx7Res = tx7->createSuccessResult();
+
+    auto transferTx1Res = transferTx1->createSuccessResult();
+    auto transferTx2Res = transferTx2->createSuccessResult();
+
+    std::vector<ApplyStage> stages;
+    auto& stage = stages.emplace_back();
+
+    stage.resize(3);
+    auto& thread1 = stage[0];
+    thread1.emplace_back(tx1, tx1Res, tm);
+    thread1.emplace_back(tx3, tx3Res, tm);
+
+    auto& thread2 = stage[1];
+    thread2.emplace_back(tx2, tx2Res, tm);
+    thread2.emplace_back(tx7, tx7Res, tm);
+
+    auto& thread3 = stage[2];
+    thread3.emplace_back(tx4, tx4Res, tm);
+    thread3.emplace_back(transferTx1, transferTx1Res, tm);
+    thread3.emplace_back(transferTx2, transferTx2Res, tm);
+
+    auto timerBefore = hostFnExecTimer.count();
+    {
+        auto lmImpl = dynamic_cast<LedgerManagerImpl*>(&lm);
+        lmImpl->applySorobanStages(app, ltx, stages, Hash{});
+        ltx.commit();
+    }
+    REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
+
+    REQUIRE(hostFnSuccessMeter.count() - successesBefore == 6);
+    REQUIRE(hostFnFailureMeter.count() == 1);
+
+    // Key should be missing because the put transaction failed.
+    REQUIRE(client.has("key7", ContractDataDurability::TEMPORARY, false) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+
+    REQUIRE(tx1Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx2Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx3Res->getResultCode() == txSUCCESS);
+    REQUIRE(tx4Res->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx1Res->getResultCode() == txSUCCESS);
+    REQUIRE(transferTx2Res->getResultCode() == txSUCCESS);
+
+    REQUIRE(tx7Res->getResultCode() == txFAILED);
+    REQUIRE(tx7Res->getResult()
+                .result.results()[0]
+                .tr()
+                .invokeHostFunctionResult()
+                .code() == INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
+
+    // TODO: Check fee charged!
+
+    REQUIRE(a5.getTrustlineBalance(idr) == 150);
+    REQUIRE(a6.getTrustlineBalance(idr) == 75); */
 }

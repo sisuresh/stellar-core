@@ -1036,8 +1036,6 @@ initialParallelComputeEntry()
 }
 #endif
 
-
-
 ConfigSettingEntry
 initialBucketListSizeWindow(Application& app)
 {
@@ -1319,7 +1317,7 @@ SorobanNetworkConfig::initializeGenesisLedgerForTesting(
                                   PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
     {
         SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(ltx, app);
-    }    
+    }
 }
 
 void

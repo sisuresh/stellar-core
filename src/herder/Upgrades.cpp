@@ -1256,7 +1256,7 @@ Upgrades::applyVersionUpgrade(Application& app, AbstractLedgerTxn& ltx,
                              prevVersion, newVersion))
     {
         SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(ltx, app);
-    }    
+    }
 }
 
 void
@@ -1282,6 +1282,7 @@ ConfigUpgradeSetFrame::makeFromKey(LedgerSnapshot const& ls,
     auto ltxe = ls.load(lk);
     if (!ltxe)
     {
+        std::cout << "missing" << std::endl;
         return nullptr;
     }
 
@@ -1449,6 +1450,7 @@ ConfigUpgradeSetFrame::isValidForApply() const
 {
     if (!mValidXDR)
     {
+        std::cout << "invalid" << std::endl;
         return Upgrades::UpgradeValidity::XDR_INVALID;
     }
     for (auto const& cfg : mConfigUpgradeSet.updatedEntry)
@@ -1457,6 +1459,7 @@ ConfigUpgradeSetFrame::isValidForApply() const
                                                              mLedgerVersion) ||
             SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry(cfg))
         {
+            std::cout << xdrToCerealString(cfg, "cfg") << std::endl;
             return Upgrades::UpgradeValidity::INVALID;
         }
     }

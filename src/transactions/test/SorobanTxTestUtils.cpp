@@ -11,6 +11,7 @@
 #include "test/TxTests.h"
 #include "transactions/InvokeHostFunctionOpFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "util/XDRCereal.h"
 #include "xdrpp/printer.h"
 
 namespace stellar
@@ -1116,6 +1117,7 @@ SorobanTest::invokeTx(TransactionFrameBaseConstPtr tx,
     }
 
     auto resultSet = closeLedger(*mApp, {tx});
+    std::cout << xdrToCerealString(tx->getEnvelope(), "gs") << std::endl;
     REQUIRE(resultSet.results.size() == 1);
     if (txMeta != nullptr)
     {

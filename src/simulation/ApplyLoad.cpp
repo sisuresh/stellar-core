@@ -72,6 +72,7 @@ ApplyLoad::ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
     mUpgradeConfig.bucketListSizeWindowSampleSize = 30;
     mUpgradeConfig.evictionScanSize = 100000;
     mUpgradeConfig.startingEvictionScanLevel = 7;
+    mUpgradeConfig.ledgerMaxParallelThreads = 6;
 
     setupAccountsAndUpgradeProtocol();
 
@@ -229,6 +230,9 @@ ApplyLoad::benchmark()
 
     auto resources = multiplyByDouble(
         lm.maxLedgerResources(true), SOROBAN_TRANSACTION_QUEUE_SIZE_MULTIPLIER);
+    resources.setVal(Resource::Type::INSTRUCTIONS,
+                     resources.getVal(Resource::Type::INSTRUCTIONS) *
+                         mUpgradeConfig.ledgerMaxParallelThreads);
 
     // Save a snapshot so we can calculate what % we used up.
     auto const resourcesSnapshot = resources;

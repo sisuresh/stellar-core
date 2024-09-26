@@ -224,7 +224,6 @@ class SorobanNetworkConfig
     // upgrade.
     static void createCostTypesForV22(AbstractLedgerTxn& ltx, Application& app);
 
-
     static void createLedgerEntriesForParallelSoroban(AbstractLedgerTxn& ltx,
                                                       Application& app);
     // Test-only function that initializes contract network configuration

@@ -552,9 +552,16 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
 {
     xdr::xvector<ConfigSettingEntry> updatedEntries;
 
+    auto lastSetting =
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        static_cast<uint32_t>(CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0) + 1
+#else
+        static_cast<uint32_t>(CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW)
+#endif
+        ;
+
     LedgerSnapshot lsg(mApp);
-    for (uint32_t i = 0;
-         i < static_cast<uint32_t>(CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW); ++i)
+    for (uint32_t i = 0; i < lastSetting; ++i)
     {
         auto entry = lsg.load(configSettingKey(static_cast<ConfigSettingID>(i)))
                          .current();
@@ -741,6 +748,18 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
                     upgradeCfg.ledgerMaxTxCount;
             }
             break;
+        case CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW:
+        case CONFIG_SETTING_EVICTION_ITERATOR:
+            break;
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        case CONFIG_SETTING_CONTRACT_PARALLEL_COMPUTE_V0:
+            if (upgradeCfg.ledgerMaxParallelThreads > 0)
+            {
+                setting.contractParallelCompute().ledgerMaxParallelThreads =
+                    upgradeCfg.ledgerMaxParallelThreads;
+            }
+            break;
+#endif
         default:
             releaseAssert(false);
             break;
@@ -751,7 +770,11 @@ TxGenerator::getConfigUpgradeSetFromLoadConfig(
         if (entry.data.configSetting().configSettingID() !=
                 CONFIG_SETTING_CONTRACT_COST_PARAMS_CPU_INSTRUCTIONS &&
             entry.data.configSetting().configSettingID() !=
-                CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES)
+                CONFIG_SETTING_CONTRACT_COST_PARAMS_MEMORY_BYTES &&
+            entry.data.configSetting().configSettingID() !=
+                CONFIG_SETTING_BUCKETLIST_SIZE_WINDOW &&
+            entry.data.configSetting().configSettingID() !=
+                CONFIG_SETTING_EVICTION_ITERATOR)
         {
             updatedEntries.emplace_back(entry.data.configSetting());
         }
