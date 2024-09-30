@@ -50,7 +50,7 @@ class LedgerManagerImpl : public LedgerManager
 
   public:
     void applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
-                            std::vector<Stage> const& stages,
+                            std::vector<ApplyStage> const& stages,
                             Hash const& sorobanBasePrngSeed);
 
   private:
@@ -91,7 +91,8 @@ class LedgerManagerImpl : public LedgerManager
 
     ThreadEntryMap collectEntries(AbstractLedgerTxn& ltx, Thread const& txs);
 
-    TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx, Stage const& stage);
+    TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx,
+                                  ApplyStage const& stage);
 
     void applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
                      Config const& config,
@@ -102,7 +103,8 @@ class LedgerManagerImpl : public LedgerManager
                      uint32_t ledgerVersion);
 
     void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
-                           Stage const& stage, Hash const& sorobanBasePrngSeed);
+                           ApplyStage const& stage,
+                           Hash const& sorobanBasePrngSeed);
 
     // initialLedgerVers must be the ledger version at the start of the ledger.
     // On the ledger in which a protocol upgrade from vN to vN + 1 occurs,

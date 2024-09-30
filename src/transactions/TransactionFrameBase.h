@@ -66,7 +66,7 @@ class TxBundle
 };
 
 typedef std::vector<TxBundle> Thread;
-typedef std::vector<Thread> Stage;
+typedef std::vector<Thread> ApplyStage;
 typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
 
 class TransactionFrameBase

@@ -1531,6 +1531,8 @@ GeneratedLoadConfig::copySorobanNetworkConfigToUpgradeConfig(
     upgradeCfg.evictionScanSize = cfg.stateArchivalSettings().evictionScanSize;
     upgradeCfg.startingEvictionScanLevel =
         cfg.stateArchivalSettings().startingEvictionScanLevel;
+
+    upgradeCfg.ledgerMaxParallelThreads = cfg.ledgerMaxParallelThreads();
 }
 
 GeneratedLoadConfig

@@ -1556,7 +1556,7 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
 
 TTLs
 LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
-                                            Stage const& stage)
+                                            ApplyStage const& stage)
 {
     UnorderedMap<LedgerKey, TTLEntry> initialTTLs;
     auto getTTLEntries = [&](xdr::xvector<LedgerKey> const& keys) {
@@ -1731,7 +1731,7 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
 
 void
 LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
-                                     Stage const& stage,
+                                     ApplyStage const& stage,
                                      Hash const& sorobanBasePrngSeed)
 {
     for (auto const& thread : stage)
@@ -1879,7 +1879,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 
 void
 LedgerManagerImpl::applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
-                                      std::vector<Stage> const& stages,
+                                      std::vector<ApplyStage> const& stages,
                                       Hash const& sorobanBasePrngSeed)
 {
     for (auto const& stage : stages)
@@ -1926,81 +1926,180 @@ LedgerManagerImpl::applyTransactions(
     size_t resultIndex = 0;
     for (auto const& phase : phases)
     {
-        for (auto const& tx : phase)
+        if (phase.isParallel())
         {
-            ZoneNamedN(txZone, "applyTransaction", true);
-            auto mutableTxResult = mutableTxResults.at(resultIndex++);
+            auto txSetStages = phase.getParallelStages();
 
-            auto txTime = mTransactionApply.TimeScope();
-            TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
-            CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
-                       hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
-                       tx->getSeqNum(),
-                       mApp.getConfig().toShortString(tx->getSourceID()));
+            std::vector<ApplyStage> applyStages;
+            applyStages.resize(txSetStages.size());
 
-            Hash subSeed = sorobanBasePrngSeed;
-            // If tx can use the seed, we need to compute a sub-seed for it.
-            if (tx->isSoroban())
+            for (size_t i = 0; i < txSetStages.size(); ++i)
             {
-                SHA256 subSeedSha;
-                subSeedSha.add(sorobanBasePrngSeed);
-                subSeedSha.add(xdr::xdr_to_opaque(txNum));
-                subSeed = subSeedSha.finish();
-            }
-            ++txNum;
+                auto const& stage = txSetStages[i];
+                auto& applyStage = applyStages[i];
+                applyStage.resize(stage.size());
 
-            tx->apply(mApp, ltx, tm, mutableTxResult, subSeed);
-            tx->processPostApply(mApp, ltx, tm, mutableTxResult);
-            TransactionResultPair results;
-            results.transactionHash = tx->getContentsHash();
-            results.result = mutableTxResult->getResult();
-            if (results.result.result.code() ==
-                TransactionResultCode::txSUCCESS)
-            {
-                if (tx->isSoroban())
+                for (size_t j = 0; j < stage.size(); ++j)
                 {
-                    ++sorobanTxSucceeded;
+                    auto const& thread = stage[j];
+                    auto& applyThread = applyStage[j];
+
+                    for (auto const& tx : thread)
+                    {
+                        //std::cout << xdrToCerealString(tx->getEnvelope(), "fsd") << std::endl;
+                        /* std::cout << "THREAD SIZE " << thread.size()
+                                  << "  stage " << i << " thread " << j
+                                  << std::endl
+                                  << std::endl; */
+                        TransactionMetaFrame tm(
+                            ltx.loadHeader().current().ledgerVersion);
+                        auto mutableTxResult =
+                            mutableTxResults.at(resultIndex++);
+                        applyThread.emplace_back(tx, mutableTxResult, tm);
+                    }
                 }
-                ++txSucceeded;
-            }
-            else
-            {
-                if (tx->isSoroban())
-                {
-                    ++sorobanTxFailed;
-                }
-                ++txFailed;
             }
 
-            // First gather the TransactionResultPair into the TxResultSet for
-            // hashing into the ledger header.
-            txResultSet.results.emplace_back(results);
+            applySorobanStages(mApp, ltx, applyStages,
+                               sorobanBasePrngSeed /*TODO:FIX SEED*/);
+
+            for (auto const& stage : applyStages)
+            {
+                for (auto const& thread : stage)
+                {
+                    for (auto const& txBundle : thread)
+                    {
+                        // TODO: The following code can probably be
+                        // de-duplicated with the not-parallel apply path
+                        TransactionResultPair results;
+                        results.transactionHash =
+                            txBundle.tx->getContentsHash();
+                        results.result = txBundle.resPayload->getResult();
+                        if (results.result.result.code() ==
+                            TransactionResultCode::txSUCCESS)
+                        {
+                            if (txBundle.tx->isSoroban())
+                            {
+                                ++sorobanTxSucceeded;
+                            }
+                            ++txSucceeded;
+                        }
+                        else
+                        {
+                            if (txBundle.tx->isSoroban())
+                            {
+                                ++sorobanTxFailed;
+                            }
+                            ++txFailed;
+                        }
+
+                        txResultSet.results.emplace_back(results);
+
 #ifdef BUILD_TESTS
-            mLastLedgerTxMeta.push_back(tm);
+                        mLastLedgerTxMeta.push_back(txBundle.meta);
 #endif
-            // Then potentially add that TRP and its associated TransactionMeta
-            // into the associated slot of any LedgerCloseMeta we're collecting.
-            if (ledgerCloseMeta)
-            {
-                ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                    tm.getXDR(), std::move(results), index);
-            }
 
-            // Then finally store the results and meta into the txhistory table.
-            // if we're running in a mode that has one.
-            //
-            // Note to future: when we eliminate the txhistory for archiving,
-            // the next step can be removed.
-            //
-            // Also note: for historical reasons the history tables number
-            // txs counting from 1, not 0. We preserve this for the time being
-            // in case anyone depends on it.
-            ++index;
-            if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
+                        if (ledgerCloseMeta)
+                        {
+                            ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+                                txBundle.meta.getXDR(), std::move(results),
+                                index);
+                        }
+                        ++index;
+                        if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
+                        {
+                            auto ledgerSeq =
+                                ltx.loadHeader().current().ledgerSeq;
+                            storeTransaction(mApp.getDatabase(), ledgerSeq,
+                                             txBundle.tx,
+                                             txBundle.meta.getXDR(),
+                                             txResultSet, mApp.getConfig());
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (auto const& tx : phase)
             {
-                auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-                storeTransaction(mApp.getDatabase(), ledgerSeq, tx, tm.getXDR(),
-                                 txResultSet, mApp.getConfig());
+                ZoneNamedN(txZone, "applyTransaction", true);
+                auto mutableTxResult = mutableTxResults.at(resultIndex++);
+
+                auto txTime = mTransactionApply.TimeScope();
+                TransactionMetaFrame tm(
+                    ltx.loadHeader().current().ledgerVersion);
+                CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
+                           hexAbbrev(tx->getContentsHash()),
+                           tx->getNumOperations(), tx->getSeqNum(),
+                           mApp.getConfig().toShortString(tx->getSourceID()));
+
+                Hash subSeed = sorobanBasePrngSeed;
+                // If tx can use the seed, we need to compute a sub-seed for it.
+                if (tx->isSoroban())
+                {
+                    SHA256 subSeedSha;
+                    subSeedSha.add(sorobanBasePrngSeed);
+                    subSeedSha.add(xdr::xdr_to_opaque(txNum));
+                    subSeed = subSeedSha.finish();
+                }
+                ++txNum;
+
+                tx->apply(mApp, ltx, tm, mutableTxResult, subSeed);
+                tx->processPostApply(mApp, ltx, tm, mutableTxResult);
+                TransactionResultPair results;
+                results.transactionHash = tx->getContentsHash();
+                results.result = mutableTxResult->getResult();
+                if (results.result.result.code() ==
+                    TransactionResultCode::txSUCCESS)
+                {
+                    if (tx->isSoroban())
+                    {
+                        ++sorobanTxSucceeded;
+                    }
+                    ++txSucceeded;
+                }
+                else
+                {
+                    if (tx->isSoroban())
+                    {
+                        ++sorobanTxFailed;
+                    }
+                    ++txFailed;
+                }
+
+                // First gather the TransactionResultPair into the TxResultSet
+                // for hashing into the ledger header.
+                txResultSet.results.emplace_back(results);
+#ifdef BUILD_TESTS
+                mLastLedgerTxMeta.push_back(tm);
+#endif
+                // Then potentially add that TRP and its associated
+                // TransactionMeta into the associated slot of any
+                // LedgerCloseMeta we're collecting.
+                if (ledgerCloseMeta)
+                {
+                    ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+                        tm.getXDR(), std::move(results), index);
+                }
+
+                // Then finally store the results and meta into the txhistory
+                // table. if we're running in a mode that has one.
+                //
+                // Note to future: when we eliminate the txhistory for
+                // archiving, the next step can be removed.
+                //
+                // Also note: for historical reasons the history tables number
+                // txs counting from 1, not 0. We preserve this for the time
+                // being in case anyone depends on it.
+                ++index;
+                if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
+                {
+                    auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+                    storeTransaction(mApp.getDatabase(), ledgerSeq, tx,
+                                     tm.getXDR(), txResultSet,
+                                     mApp.getConfig());
+                }
             }
         }
     }

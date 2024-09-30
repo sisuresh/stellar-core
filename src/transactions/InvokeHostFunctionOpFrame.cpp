@@ -528,6 +528,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                 "operation instructions exceeds amount specified",
                 {makeU64SCVal(out.cpu_insns),
                  makeU64SCVal(resources.instructions)});
+
             innerResult(res).code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
         }
         else if (sorobanConfig.txMemoryLimit() < out.mem_bytes)

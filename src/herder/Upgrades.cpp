@@ -1256,7 +1256,7 @@ Upgrades::applyVersionUpgrade(Application& app, AbstractLedgerTxn& ltx,
                              prevVersion, newVersion))
     {
         SorobanNetworkConfig::createLedgerEntriesForParallelSoroban(ltx, app);
-    }    
+    }
 }
 
 void
