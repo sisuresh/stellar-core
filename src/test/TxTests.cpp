@@ -499,7 +499,7 @@ closeLedgerOn(Application& app, int day, int month, int year,
 
 TransactionResultSet
 closeLedger(Application& app, std::vector<TransactionFrameBasePtr> const& txs,
-            bool strictOrder)
+            bool strictOrder, xdr::xvector<UpgradeType, 6> const& upgrades)
 {
     auto lastCloseTime = app.getLedgerManager()
                              .getLastClosedLedgerHeader()
@@ -507,12 +507,14 @@ closeLedger(Application& app, std::vector<TransactionFrameBasePtr> const& txs,
 
     auto nextLedgerSeq = app.getLedgerManager().getLastClosedLedgerNum() + 1;
 
-    return closeLedgerOn(app, nextLedgerSeq, lastCloseTime, txs, strictOrder);
+    return closeLedgerOn(app, nextLedgerSeq, lastCloseTime, txs, strictOrder,
+                         upgrades);
 }
 
 TransactionResultSet
 closeLedgerOn(Application& app, uint32 ledgerSeq, TimePoint closeTime,
-              std::vector<TransactionFrameBasePtr> const& txs, bool strictOrder)
+              std::vector<TransactionFrameBasePtr> const& txs, bool strictOrder,
+              xdr::xvector<UpgradeType, 6> const& upgrades)
 {
     auto lastCloseTime = app.getLedgerManager()
                              .getLastClosedLedgerHeader()
@@ -560,7 +562,7 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, TimePoint closeTime,
         REQUIRE(txSet.second->checkValid(app, 0, 0));
     }
     app.getHerder().externalizeValue(txSet.first, ledgerSeq, closeTime,
-                                     emptyUpgradeSteps);
+                                     upgrades);
     REQUIRE(app.getLedgerManager().getLastClosedLedgerNum() == ledgerSeq);
     return getTransactionHistoryResults(app.getDatabase(), ledgerSeq);
 }
