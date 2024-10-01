@@ -76,7 +76,6 @@ ApplyLoad::ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
     setupAccountsAndUpgradeProtocol();
 
     setupUpgradeContract();
-
     upgradeSettings();
 
     setupLoadContracts();
@@ -97,9 +96,7 @@ ApplyLoad::closeLedger(std::vector<TransactionFrameBasePtr> const& txs,
         mApp.getHerder().makeStellarValue(txSet.first->getContentsHash(), 1,
                                           upgrades, mApp.getConfig().NODE_SEED);
 
-    auto& lm = mApp.getLedgerManager();
-    LedgerCloseData lcd(lm.getLastClosedLedgerNum() + 1, txSet.first, sv);
-    lm.closeLedger(lcd);
+    stellar::txtest::closeLedger(mApp, txs, /* strictOrder */ false, upgrades);
 }
 
 void
@@ -111,8 +108,18 @@ ApplyLoad::setupAccountsAndUpgradeProtocol()
     std::vector<Operation> creationOps = mTxGenerator.createAccounts(
         0, mNumAccounts, lm.getLastClosedLedgerNum() + 1, false);
 
-    auto initTx = mTxGenerator.createTransactionFramePtr(mRoot, creationOps,
-                                                         false, std::nullopt);
+    for (size_t i = 0; i < creationOps.size(); i += MAX_OPS_PER_TX)
+    {
+        std::vector<TransactionFrameBaseConstPtr> txs;
+
+        size_t end_id = std::min(i + MAX_OPS_PER_TX, creationOps.size());
+        std::vector<Operation> currOps(creationOps.begin() + i,
+                                       creationOps.begin() + end_id);
+        txs.push_back(mTxGenerator.createTransactionFramePtr(
+            mRoot, currOps, false, std::nullopt));
+
+        closeLedger(txs);
+    }
 
     // Upgrade to latest protocol as well
     auto upgrade = xdr::xvector<UpgradeType, 6>{};
@@ -121,7 +128,7 @@ ApplyLoad::setupAccountsAndUpgradeProtocol()
     auto v = xdr::xdr_to_opaque(ledgerUpgrade);
     upgrade.push_back(UpgradeType{v.begin(), v.end()});
 
-    closeLedger({initTx}, upgrade);
+    closeLedger({}, upgrade);
 }
 
 void
@@ -153,6 +160,8 @@ ApplyLoad::setupUpgradeContract()
 
     mUpgradeInstanceKey =
         createTx.second->sorobanResources().footprint.readWrite.back();
+
+    releaseAssert(mTxGenerator.getApplySorobanSuccess().count() == 2);
 }
 
 // To upgrade settings, just modify mUpgradeConfig and then call
