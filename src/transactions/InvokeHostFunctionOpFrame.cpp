@@ -497,7 +497,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             sorobanConfig.rustBridgeRentFeeConfiguration());
         metrics.mCpuInsn = out.cpu_insns;
         metrics.mMemByte = out.mem_bytes;
-        metrics.mInvokeTimeNsecs = out.time_nsecs;
+        metrics.mInvokeTimeNsecs = out.time_nsecs; 
         metrics.mCpuInsnExclVm = out.cpu_insns_excluding_vm_instantiation;
         metrics.mInvokeTimeNsecsExclVm =
             out.time_nsecs_excluding_vm_instantiation;

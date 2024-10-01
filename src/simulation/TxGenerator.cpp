@@ -372,8 +372,8 @@ TxGenerator::invokeSorobanLoadTransaction(
     // resource limitations, but failures will be rare and those failures
     // will happen at apply time, so they will still generate significant load.
     uint64_t const baseInstructionCount = 1'500'000;
-    uint64_t const instructionsPerGuestCycle = 80;
-    uint64_t const instructionsPerHostCycle = 5030;
+    uint64_t const instructionsPerGuestCycle = 32;
+    uint64_t const instructionsPerHostCycle = 4700;
 
     // Very rough estimates.
     uint64_t const instructionsPerKbWritten = 8000;
