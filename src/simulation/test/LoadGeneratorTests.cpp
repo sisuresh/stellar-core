@@ -852,7 +852,7 @@ TEST_CASE("apply only load", "[loadgen][applyload]")
     uint64_t ledgerMaxReadBytes = 5'000'000;
     uint64_t ledgerMaxWriteLedgerEntries = 1250;
     uint64_t ledgerMaxWriteBytes = 700'000;
-    uint64_t ledgerMaxTxCount = 1000;
+    uint64_t ledgerMaxTxCount = 1'000;
     uint64_t ledgerMaxTransactionsSizeBytes = 800'000;
 
     ApplyLoad al(*app, ledgerMaxInstructions, ledgerMaxReadLedgerEntries,
