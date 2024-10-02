@@ -1510,6 +1510,8 @@ LedgerManagerImpl::prefetchTransactionData(ApplicableTxSetFrame const& txSet)
 ThreadEntryMap
 LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
 {
+    //TODO: fast fail if read entry limit is exceeded.
+
     ThreadEntryMap entryMap;
     auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) {
         for (auto const& lk : keys)

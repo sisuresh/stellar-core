@@ -1890,7 +1890,7 @@ runApplyLoad(CommandLineArgs const& args)
         [&] {
             auto config = configOption.getConfig();
             config.RUN_STANDALONE = true;
-            config.SOROBAN_PHASE_STAGE_COUNT = 2; // TODO:make this 2
+            config.SOROBAN_PHASE_STAGE_COUNT = 2;
 
             VirtualClock clock(VirtualClock::REAL_TIME);
             auto appPtr = Application::create(clock, config);
