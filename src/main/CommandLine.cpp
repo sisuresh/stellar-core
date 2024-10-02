@@ -1815,6 +1815,9 @@ runApplyLoad(CommandLineArgs const& args)
     uint64_t ledgerMaxTxCount = 0;
     uint64_t ledgerMaxTransactionsSizeBytes = 0;
 
+    uint64_t stageCount = 0;
+    uint64_t threadCount = 0;
+
     ParserWithValidation ledgerMaxInstructionsParser{
         clara::Opt(ledgerMaxInstructions,
                    "LedgerMaxInstructions")["--ledger-max-instructions"]
@@ -1881,16 +1884,38 @@ runApplyLoad(CommandLineArgs const& args)
                        : "ledgerMaxTransactionsSizeBytes must be > 0";
         }};
 
+    ParserWithValidation stageParser{
+        clara::Opt(stageCount,
+                   "StageCount")["--stage-count"]
+            .required(),
+        [&] {
+            // More stages reduces the instruction limit per thread, which doesn't work
+            // with the applyLoad setup at the moment due to low initial limits.
+            return stageCount > 0 && stageCount <= 2
+                       ? ""
+                       : "stageCount must be > 0 and <= 2";
+        }};
+
+    ParserWithValidation threadParser{
+        clara::Opt(threadCount,
+                   "ThreadCount")["--thread-count"]
+            .required(),
+        [&] {
+            return threadCount > 0
+                       ? ""
+                       : "threadCount must be > 0";
+        }};
+
     return runWithHelp(
         args,
         {configurationParser(configOption), ledgerMaxInstructionsParser,
          ledgerMaxReadLedgerEntriesParser, ledgerMaxReadBytesParser,
          ledgerMaxWriteLedgerEntriesParser, ledgerMaxWriteBytesParser,
-         ledgerMaxTxCountParser, ledgerMaxTransactionsSizeBytesParser},
+         ledgerMaxTxCountParser, ledgerMaxTransactionsSizeBytesParser, stageParser, threadParser},
         [&] {
             auto config = configOption.getConfig();
             config.RUN_STANDALONE = true;
-            config.SOROBAN_PHASE_STAGE_COUNT = 2;
+            config.SOROBAN_PHASE_STAGE_COUNT = stageCount;
 
             VirtualClock clock(VirtualClock::REAL_TIME);
             auto appPtr = Application::create(clock, config);
@@ -1903,7 +1928,7 @@ runApplyLoad(CommandLineArgs const& args)
                 ApplyLoad al(app, ledgerMaxInstructions,
                              ledgerMaxReadLedgerEntries, ledgerMaxReadBytes,
                              ledgerMaxWriteLedgerEntries, ledgerMaxWriteBytes,
-                             ledgerMaxTxCount, ledgerMaxTransactionsSizeBytes);
+                             ledgerMaxTxCount, ledgerMaxTransactionsSizeBytes, threadCount);
 
                 auto& ledgerClose =
                     app.getMetrics().NewTimer({"ledger", "ledger", "close"});
@@ -1919,7 +1944,7 @@ runApplyLoad(CommandLineArgs const& args)
                      "invoke-time-fsecs-cpu-insn-ratio-excl-vm"});
                 cpuInsRatioExclVm.Clear();
 
-                for (size_t i = 0; i < 20; ++i)
+                for (size_t i = 0; i < 10; ++i)
                 {
                     al.benchmark();
                 }

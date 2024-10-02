@@ -858,7 +858,7 @@ TEST_CASE("apply only load", "[loadgen][applyload]")
     ApplyLoad al(*app, ledgerMaxInstructions, ledgerMaxReadLedgerEntries,
                  ledgerMaxReadBytes, ledgerMaxWriteLedgerEntries,
                  ledgerMaxWriteBytes, ledgerMaxTxCount,
-                 ledgerMaxTransactionsSizeBytes);
+                 ledgerMaxTransactionsSizeBytes, 1/*numThreads*/);
 
     auto& ledgerClose =
         app->getMetrics().NewTimer({"ledger", "ledger", "close"});
