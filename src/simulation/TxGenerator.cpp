@@ -373,7 +373,7 @@ TxGenerator::invokeSorobanLoadTransaction(
     uint64_t const instructionsPerHostCycle = 4700;
 
     // Very rough estimates.
-    uint64_t const instructionsPerKbWritten = 8000;
+    uint64_t const instructionsPerKbWritten = 40000;
 
     // instructionsPerPaddingByte is just a value we know works. We use an auth
     // payload as padding, so it consumes instructions on the host side.
