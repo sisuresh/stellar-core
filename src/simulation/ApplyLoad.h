@@ -50,7 +50,7 @@ class ApplyLoad
 
     void setupAccountsAndUpgradeProtocol();
     void setupUpgradeContract();
-    void setupLoadContracts();
+    void setupLoadContract();
 
     // Upgrades using mUpgradeConfig
     void upgradeSettings();
@@ -59,7 +59,9 @@ class ApplyLoad
     LedgerKey mUpgradeInstanceKey;
 
     LedgerKey mLoadCodeKey;
-    UnorderedMap<uint64_t, TxGenerator::ContractInstance> mLoadInstances;
+    TxGenerator::ContractInstance mLoadInstance;
+    size_t mDataEntryCount = 0;
+    size_t mDataEntrySize = 0;
 
     SorobanUpgradeConfig mUpgradeConfig;
 

@@ -829,13 +829,29 @@ TEST_CASE("apply load", "[loadgen][applyload]")
     cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 1000;
     cfg.USE_CONFIG_FOR_GENESIS = true;
     cfg.LEDGER_PROTOCOL_VERSION = Config::CURRENT_LEDGER_PROTOCOL_VERSION;
+    cfg.MANUAL_CLOSE = true;
 
-    cfg.LOADGEN_NUM_DATA_ENTRIES_FOR_TESTING = {5, 10, 30};
-    cfg.LOADGEN_NUM_DATA_ENTRIES_DISTRIBUTION_FOR_TESTING = {1, 1, 1};
-    cfg.LOADGEN_IO_KILOBYTES_FOR_TESTING = {1, 5, 10};
-    cfg.LOADGEN_IO_KILOBYTES_DISTRIBUTION_FOR_TESTING = {10, 2, 1};
+
+    cfg.APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING = 1000;
+
+    cfg.APPLY_LOAD_BL_SIMULATED_LEDGERS = 10000;
+    cfg.APPLY_LOAD_BL_WRITE_FREQUENCY = 1000;
+    cfg.APPLY_LOAD_BL_BATCH_SIZE = 1000;
+    cfg.APPLY_LOAD_BL_LAST_BATCH_LEDGERS = 300;
+    cfg.APPLY_LOAD_BL_LAST_BATCH_SIZE = 100;
+
+    cfg.APPLY_LOAD_NUM_RO_ENTRIES_FOR_TESTING = {5, 10, 30};
+    cfg.APPLY_LOAD_NUM_RO_ENTRIES_DISTRIBUTION_FOR_TESTING = {1, 1, 1};
+
+    cfg.APPLY_LOAD_NUM_RW_ENTRIES_FOR_TESTING = {1, 5, 10};
+    cfg.APPLY_LOAD_NUM_RW_ENTRIES_DISTRIBUTION_FOR_TESTING = {1, 1, 1};
+
+    cfg.APPLY_LOAD_EVENT_COUNT_FOR_TESTING = {100};
+    cfg.APPLY_LOAD_EVENT_COUNT_DISTRIBUTION_FOR_TESTING = {1};
+
     cfg.LOADGEN_TX_SIZE_BYTES_FOR_TESTING = {1'000, 2'000, 5'000};
     cfg.LOADGEN_TX_SIZE_BYTES_DISTRIBUTION_FOR_TESTING = {3, 2, 1};
+
     cfg.LOADGEN_INSTRUCTIONS_FOR_TESTING = {10'000'000, 50'000'000};
     cfg.LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING = {5, 1};
 
@@ -873,7 +889,7 @@ TEST_CASE("apply load", "[loadgen][applyload]")
     {
         al.benchmark();
     }
-    REQUIRE(al.successRate() - 1.0 < std::numeric_limits<double>::epsilon());
+    REQUIRE(1.0 - al.successRate() < std::numeric_limits<double>::epsilon());
     CLOG_INFO(Perf, "Max ledger close: {} milliseconds", ledgerClose.max());
     CLOG_INFO(Perf, "Min ledger close: {} milliseconds", ledgerClose.min());
     CLOG_INFO(Perf, "Mean ledger close:  {} milliseconds", ledgerClose.mean());
