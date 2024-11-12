@@ -1499,7 +1499,7 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                      LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING =
                          readIntArray<uint32_t>(item);
                  }},
-                 {"APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING",
+                {"APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING",
                  [&]() {
                      APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING =
                          readInt<uint32_t>(item);
@@ -1522,7 +1522,7 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                  [&]() {
                      APPLY_LOAD_BL_LAST_BATCH_SIZE = readInt<uint32_t>(item);
                  }},
-                 {"APPLY_LOAD_NUM_RO_ENTRIES_FOR_TESTING",
+                {"APPLY_LOAD_NUM_RO_ENTRIES_FOR_TESTING",
                  [&]() {
                      APPLY_LOAD_NUM_RO_ENTRIES_FOR_TESTING =
                          readIntArray<uint32>(item);

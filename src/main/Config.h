@@ -315,12 +315,12 @@ class Config : public std::enable_shared_from_this<Config>
     // apply-load-specific configuration parameters:
     // Size of the synthetic contract data entries used in apply-load.
     // Currently we generate entries of the equal size for more precise
-    // control over the modelled instructions. 
+    // control over the modelled instructions.
     uint32_t APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING = 0;
 
     // The parameters below control the synthetic bucket list generation in
     // apply-load.
-    
+
     // Number of ledgers to simulate in apply-load. The more ledgers there are,
     // the more bucket list levels will be populated.
     uint32_t APPLY_LOAD_BL_SIMULATED_LEDGERS = 1000;
@@ -332,12 +332,12 @@ class Config : public std::enable_shared_from_this<Config>
     // have `APPLY_LOAD_BL_LAST_BATCH_SIZE` entries in order to populate the
     // lowest BL levels.
     uint32_t APPLY_LOAD_BL_LAST_BATCH_LEDGERS = 300;
-    // Number of entries to write in every ledger of 
+    // Number of entries to write in every ledger of
     // `APPLY_LOAD_BL_LAST_BATCH_LEDGERS`.
     uint32_t APPLY_LOAD_BL_LAST_BATCH_SIZE = 100;
 
-    // Number of read-only and read-write entries in the apply-load 
-    // transactions. Every entry will have 
+    // Number of read-only and read-write entries in the apply-load
+    // transactions. Every entry will have
     // `APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING` size.
     std::vector<uint32_t> APPLY_LOAD_NUM_RO_ENTRIES_FOR_TESTING;
     std::vector<uint32_t> APPLY_LOAD_NUM_RO_ENTRIES_DISTRIBUTION_FOR_TESTING;
@@ -347,7 +347,6 @@ class Config : public std::enable_shared_from_this<Config>
     // Number of events to generate in the apply-load transactions.
     std::vector<uint32_t> APPLY_LOAD_EVENT_COUNT_FOR_TESTING;
     std::vector<uint32_t> APPLY_LOAD_EVENT_COUNT_DISTRIBUTION_FOR_TESTING;
-    
 
     // Waits for merges to complete before applying transactions during catchup
     bool CATCHUP_WAIT_MERGES_TX_APPLY_FOR_TESTING;

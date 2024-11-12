@@ -319,7 +319,7 @@ ApplyLoad::setupLoadContract()
             }
         }
         bl.addBatch(mApp, lh.ledgerSeq, lh.ledgerVersion, initEntries, {}, {});
-    }    
+    }
     lh.ledgerSeq++;
     mDataEntryCount = currentKey;
     CLOG_INFO(Bucket, "Final generated bucket list levels");
