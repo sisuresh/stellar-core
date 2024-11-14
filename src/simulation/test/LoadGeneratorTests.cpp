@@ -854,23 +854,33 @@ TEST_CASE("apply load", "[loadgen][applyload]")
     cfg.LOADGEN_INSTRUCTIONS_FOR_TESTING = {10'000'000, 50'000'000};
     cfg.LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING = {5, 1};
 
+    cfg.APPLY_LOAD_LEDGER_MAX_INSTRUCTIONS = 500'000'000;
+    cfg.APPLY_LOAD_TX_MAX_INSTRUCTIONS = 100'000'000;
+
+    cfg.APPLY_LOAD_LEDGER_MAX_READ_LEDGER_ENTRIES = 2000;
+    cfg.APPLY_LOAD_TX_MAX_READ_LEDGER_ENTRIES = 100;
+
+    cfg.APPLY_LOAD_LEDGER_MAX_READ_BYTES = 50'000'000;
+    cfg.APPLY_LOAD_TX_MAX_READ_BYTES = 200'000;
+
+    cfg.APPLY_LOAD_LEDGER_MAX_WRITE_LEDGER_ENTRIES = 1250;
+    cfg.APPLY_LOAD_TX_MAX_WRITE_LEDGER_ENTRIES = 50;
+
+    cfg.APPLY_LOAD_LEDGER_MAX_WRITE_BYTES = 700'000;
+    cfg.APPLY_LOAD_TX_MAX_WRITE_BYTES = 66560;
+
+    cfg.APPLY_LOAD_MAX_TX_SIZE_BYTES = 71680;
+    cfg.APPLY_LOAD_MAX_LEDGER_TX_SIZE_BYTES = 800'000;
+
+    cfg.APPLY_LOAD_MAX_CONTRACT_EVENT_SIZE_BYTES = 8198;
+    cfg.APPLY_LOAD_MAX_TX_COUNT = 50;
+
     REQUIRE(cfg.isUsingBucketListDB());
 
     VirtualClock clock(VirtualClock::REAL_TIME);
     auto app = createTestApplication(clock, cfg);
 
-    uint64_t ledgerMaxInstructions = 500'000'000;
-    uint64_t ledgerMaxReadLedgerEntries = 2000;
-    uint64_t ledgerMaxReadBytes = 50'000'000;
-    uint64_t ledgerMaxWriteLedgerEntries = 1250;
-    uint64_t ledgerMaxWriteBytes = 700'000;
-    uint64_t ledgerMaxTxCount = 50;
-    uint64_t ledgerMaxTransactionsSizeBytes = 800'000;
-
-    ApplyLoad al(*app, ledgerMaxInstructions, ledgerMaxReadLedgerEntries,
-                 ledgerMaxReadBytes, ledgerMaxWriteLedgerEntries,
-                 ledgerMaxWriteBytes, ledgerMaxTxCount,
-                 ledgerMaxTransactionsSizeBytes);
+    ApplyLoad al(*app);
 
     auto& ledgerClose =
         app->getMetrics().NewTimer({"ledger", "ledger", "close"});

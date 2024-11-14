@@ -1552,6 +1552,69 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                      APPLY_LOAD_EVENT_COUNT_DISTRIBUTION_FOR_TESTING =
                          readIntArray<uint32>(item);
                  }},
+                {"APPLY_LOAD_LEDGER_MAX_INSTRUCTIONS",
+                 [&]() {
+                     APPLY_LOAD_LEDGER_MAX_INSTRUCTIONS =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_TX_MAX_INSTRUCTIONS",
+                 [&]() {
+                     APPLY_LOAD_TX_MAX_INSTRUCTIONS = readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_LEDGER_MAX_READ_LEDGER_ENTRIES",
+                 [&]() {
+                     APPLY_LOAD_LEDGER_MAX_READ_LEDGER_ENTRIES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_TX_MAX_READ_LEDGER_ENTRIES",
+                 [&]() {
+                     APPLY_LOAD_TX_MAX_READ_LEDGER_ENTRIES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_LEDGER_MAX_WRITE_LEDGER_ENTRIES",
+                 [&]() {
+                     APPLY_LOAD_LEDGER_MAX_WRITE_LEDGER_ENTRIES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_TX_MAX_WRITE_LEDGER_ENTRIES",
+                 [&]() {
+                     APPLY_LOAD_TX_MAX_WRITE_LEDGER_ENTRIES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_LEDGER_MAX_READ_BYTES",
+                 [&]() {
+                     APPLY_LOAD_LEDGER_MAX_READ_BYTES = readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_TX_MAX_READ_BYTES",
+                 [&]() {
+                     APPLY_LOAD_TX_MAX_READ_BYTES = readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_LEDGER_MAX_WRITE_BYTES",
+                 [&]() {
+                     APPLY_LOAD_LEDGER_MAX_WRITE_BYTES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_TX_MAX_WRITE_BYTES",
+                 [&]() {
+                     APPLY_LOAD_TX_MAX_WRITE_BYTES = readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_MAX_TX_SIZE_BYTES",
+                 [&]() {
+                     APPLY_LOAD_MAX_TX_SIZE_BYTES = readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_MAX_LEDGER_TX_SIZE_BYTES",
+                 [&]() {
+                     APPLY_LOAD_MAX_LEDGER_TX_SIZE_BYTES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_MAX_CONTRACT_EVENT_SIZE_BYTES",
+                 [&]() {
+                     APPLY_LOAD_MAX_CONTRACT_EVENT_SIZE_BYTES =
+                         readInt<uint32_t>(item);
+                 }},
+                {"APPLY_LOAD_MAX_TX_COUNT",
+                 [&]() { APPLY_LOAD_MAX_TX_COUNT = readInt<uint32_t>(item); }},
+
                 {"CATCHUP_WAIT_MERGES_TX_APPLY_FOR_TESTING",
                  [&]() {
                      CATCHUP_WAIT_MERGES_TX_APPLY_FOR_TESTING = readBool(item);

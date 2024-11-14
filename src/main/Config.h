@@ -336,6 +336,27 @@ class Config : public std::enable_shared_from_this<Config>
     // `APPLY_LOAD_BL_LAST_BATCH_LEDGERS`.
     uint32_t APPLY_LOAD_BL_LAST_BATCH_SIZE = 100;
 
+    uint32_t APPLY_LOAD_LEDGER_MAX_INSTRUCTIONS = 0;
+    uint32_t APPLY_LOAD_TX_MAX_INSTRUCTIONS = 0;
+
+    uint32_t APPLY_LOAD_LEDGER_MAX_READ_LEDGER_ENTRIES = 0;
+    uint32_t APPLY_LOAD_TX_MAX_READ_LEDGER_ENTRIES = 0;
+
+    uint32_t APPLY_LOAD_LEDGER_MAX_WRITE_LEDGER_ENTRIES = 0;
+    uint32_t APPLY_LOAD_TX_MAX_WRITE_LEDGER_ENTRIES = 0;
+
+    uint32_t APPLY_LOAD_LEDGER_MAX_READ_BYTES = 0;
+    uint32_t APPLY_LOAD_TX_MAX_READ_BYTES = 0;
+
+    uint32_t APPLY_LOAD_LEDGER_MAX_WRITE_BYTES = 0;
+    uint32_t APPLY_LOAD_TX_MAX_WRITE_BYTES = 0;
+
+    uint32_t APPLY_LOAD_MAX_TX_SIZE_BYTES = 0;
+    uint32_t APPLY_LOAD_MAX_LEDGER_TX_SIZE_BYTES = 0;
+
+    uint32_t APPLY_LOAD_MAX_CONTRACT_EVENT_SIZE_BYTES = 0;
+    uint32_t APPLY_LOAD_MAX_TX_COUNT = 0;
+
     // Number of read-only and read-write entries in the apply-load
     // transactions. Every entry will have
     // `APPLY_LOAD_DATA_ENTRY_SIZE_FOR_TESTING` size.

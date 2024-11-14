@@ -22,16 +22,12 @@
 namespace stellar
 {
 
-ApplyLoad::ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
-                     uint64_t ledgerMaxReadLedgerEntries,
-                     uint64_t ledgerMaxReadBytes,
-                     uint64_t ledgerMaxWriteLedgerEntries,
-                     uint64_t ledgerMaxWriteBytes, uint64_t ledgerMaxTxCount,
-                     uint64_t ledgerMaxTransactionsSizeBytes)
+ApplyLoad::ApplyLoad(Application& app)
     : mTxGenerator(app)
     , mApp(app)
-    , mNumAccounts(
-          ledgerMaxTxCount * SOROBAN_TRANSACTION_QUEUE_SIZE_MULTIPLIER + 1)
+    , mNumAccounts(mApp.getConfig().APPLY_LOAD_MAX_TX_COUNT *
+                       SOROBAN_TRANSACTION_QUEUE_SIZE_MULTIPLIER +
+                   1)
     , mTxCountUtilization(
           mApp.getMetrics().NewHistogram({"soroban", "benchmark", "tx-count"}))
     , mInstructionUtilization(
@@ -52,25 +48,33 @@ ApplyLoad::ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
     mRoot = std::make_shared<TestAccount>(rootTestAccount);
     releaseAssert(mTxGenerator.loadAccount(mRoot));
 
+    auto const& cfg = mApp.getConfig();
+
     mUpgradeConfig.maxContractSizeBytes = 65536;
     mUpgradeConfig.maxContractDataKeySizeBytes = 250;
     mUpgradeConfig.maxContractDataEntrySizeBytes = 65536;
-    mUpgradeConfig.ledgerMaxInstructions = ledgerMaxInstructions;
-    mUpgradeConfig.txMaxInstructions = 100000000;
+    mUpgradeConfig.ledgerMaxInstructions =
+        cfg.APPLY_LOAD_LEDGER_MAX_INSTRUCTIONS;
+    mUpgradeConfig.txMaxInstructions = cfg.APPLY_LOAD_TX_MAX_INSTRUCTIONS;
     mUpgradeConfig.txMemoryLimit = 41943040;
-    mUpgradeConfig.ledgerMaxReadLedgerEntries = ledgerMaxReadLedgerEntries;
-    mUpgradeConfig.ledgerMaxReadBytes = ledgerMaxReadBytes;
-    mUpgradeConfig.ledgerMaxWriteLedgerEntries = ledgerMaxWriteLedgerEntries;
-    mUpgradeConfig.ledgerMaxWriteBytes = ledgerMaxWriteBytes;
-    mUpgradeConfig.ledgerMaxTxCount = ledgerMaxTxCount;
-    mUpgradeConfig.txMaxReadLedgerEntries = 100;
-    mUpgradeConfig.txMaxReadBytes = 200000;
-    mUpgradeConfig.txMaxWriteLedgerEntries = 50;
-    mUpgradeConfig.txMaxWriteBytes = 66560;
-    mUpgradeConfig.txMaxContractEventsSizeBytes = 8198;
+    mUpgradeConfig.ledgerMaxReadLedgerEntries =
+        cfg.APPLY_LOAD_LEDGER_MAX_READ_LEDGER_ENTRIES;
+    mUpgradeConfig.ledgerMaxReadBytes = cfg.APPLY_LOAD_LEDGER_MAX_READ_BYTES;
+    mUpgradeConfig.ledgerMaxWriteLedgerEntries =
+        cfg.APPLY_LOAD_LEDGER_MAX_WRITE_LEDGER_ENTRIES;
+    mUpgradeConfig.ledgerMaxWriteBytes = cfg.APPLY_LOAD_LEDGER_MAX_WRITE_BYTES;
+    mUpgradeConfig.ledgerMaxTxCount = cfg.APPLY_LOAD_MAX_TX_COUNT;
+    mUpgradeConfig.txMaxReadLedgerEntries =
+        cfg.APPLY_LOAD_TX_MAX_READ_LEDGER_ENTRIES;
+    mUpgradeConfig.txMaxReadBytes = cfg.APPLY_LOAD_TX_MAX_READ_BYTES;
+    mUpgradeConfig.txMaxWriteLedgerEntries =
+        cfg.APPLY_LOAD_TX_MAX_WRITE_LEDGER_ENTRIES;
+    mUpgradeConfig.txMaxWriteBytes = cfg.APPLY_LOAD_TX_MAX_WRITE_BYTES;
+    mUpgradeConfig.txMaxContractEventsSizeBytes =
+        cfg.APPLY_LOAD_MAX_CONTRACT_EVENT_SIZE_BYTES;
     mUpgradeConfig.ledgerMaxTransactionsSizeBytes =
-        ledgerMaxTransactionsSizeBytes;
-    mUpgradeConfig.txMaxSizeBytes = 132'096;
+        cfg.APPLY_LOAD_MAX_LEDGER_TX_SIZE_BYTES;
+    mUpgradeConfig.txMaxSizeBytes = cfg.APPLY_LOAD_MAX_TX_SIZE_BYTES;
     mUpgradeConfig.bucketListSizeWindowSampleSize = 30;
     mUpgradeConfig.evictionScanSize = 100000;
     mUpgradeConfig.startingEvictionScanLevel = 7;
@@ -82,6 +86,21 @@ ApplyLoad::ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
     mUpgradeConfig.maxEntryTTL = 1'000'000'001;
     mUpgradeConfig.persistentRentRateDenominator = 1'000'000'000'000LL;
     mUpgradeConfig.tempRentRateDenominator = 1'000'000'000'000LL;
+
+    releaseAssert(mUpgradeConfig.ledgerMaxInstructions > 0);
+    releaseAssert(mUpgradeConfig.txMaxInstructions > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxReadLedgerEntries > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxReadBytes > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxWriteLedgerEntries > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxWriteBytes > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxTxCount > 0);
+    releaseAssert(mUpgradeConfig.txMaxReadLedgerEntries > 0);
+    releaseAssert(mUpgradeConfig.txMaxReadBytes > 0);
+    releaseAssert(mUpgradeConfig.txMaxWriteLedgerEntries > 0);
+    releaseAssert(mUpgradeConfig.txMaxWriteBytes > 0);
+    releaseAssert(mUpgradeConfig.txMaxContractEventsSizeBytes > 0);
+    releaseAssert(mUpgradeConfig.ledgerMaxTransactionsSizeBytes > 0);
+    releaseAssert(mUpgradeConfig.txMaxSizeBytes > 0);
 
     setupAccountsAndUpgradeProtocol();
 

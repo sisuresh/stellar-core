@@ -14,11 +14,7 @@ namespace stellar
 class ApplyLoad
 {
   public:
-    ApplyLoad(Application& app, uint64_t ledgerMaxInstructions,
-              uint64_t ledgerMaxReadLedgerEntries, uint64_t ledgerMaxReadBytes,
-              uint64_t ledgerMaxWriteLedgerEntries,
-              uint64_t ledgerMaxWriteBytes, uint64_t ledgerMaxTxCount,
-              uint64_t ledgerMaxTransactionsSizeBytes);
+    ApplyLoad(Application& app);
 
     // Fills up a list of transactions with
     // SOROBAN_TRANSACTION_QUEUE_SIZE_MULTIPLIER * the max ledger resources
