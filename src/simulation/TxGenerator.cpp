@@ -528,7 +528,7 @@ TxGenerator::invokeSorobanLoadTransactionV2(
     uint32_t const instructionsPerGuestCycle = 40;
     uint32_t const instructionsPerHostCycle = 4'875;
     uint32_t const instructionsPerAuthByte = 35;
-    uint32_t const instructionsPerEvent = 8'150;
+    uint32_t const instructionsPerEvent = 8'500;
 
     // The entry encoding estimates are somewhat loose because we're
     // unfortunately building storage with O(n^2) complexity.

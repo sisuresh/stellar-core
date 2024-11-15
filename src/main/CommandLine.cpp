@@ -1810,6 +1810,12 @@ runApplyLoad(CommandLineArgs const& args)
         config.LEDGER_PROTOCOL_VERSION =
             Config::CURRENT_LEDGER_PROTOCOL_VERSION;
 
+        TmpDirManager tdm(std::string("soroban-storage-meta-"));
+        TmpDir td = tdm.tmpDir("soroban-meta-ok");
+        std::string metaPath = td.getName() + "/stream.xdr";
+
+        config.METADATA_OUTPUT_STREAM = metaPath;
+
         VirtualClock clock(VirtualClock::REAL_TIME);
         auto appPtr = Application::create(clock, config);
 
