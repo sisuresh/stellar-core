@@ -554,7 +554,8 @@ TxGenerator::invokeSorobanLoadTransactionV2(
         roEntries = 0;
     }
     std::unordered_set<uint64_t> usedEntries;
-    std::uniform_int_distribution<uint64_t> entryDist(0, dataEntryCount - 1);
+    stellar::uniform_int_distribution<uint64_t> entryDist(0,
+                                                          dataEntryCount - 1);
     auto generateEntries = [&](uint32_t entryCount,
                                xdr::xvector<LedgerKey>& footprint) {
         for (uint32_t i = 0; i < entryCount; ++i)
