@@ -3,6 +3,7 @@
 #include "ledger/LedgerManager.h"
 #include "transactions/TransactionBridge.h"
 #include "transactions/test/SorobanTxTestUtils.h"
+#include <cmath>
 #include <crypto/SHA.h>
 
 namespace stellar
@@ -530,11 +531,6 @@ TxGenerator::invokeSorobanLoadTransactionV2(
     uint32_t const instructionsPerAuthByte = 35;
     uint32_t const instructionsPerEvent = 8'500;
 
-    // The entry encoding estimates are somewhat loose because we're
-    // unfortunately building storage with O(n^2) complexity.
-    uint32_t const instructionsPerEntry = 15'000;
-    uint32_t const instructionsPerEntryByte = 44;
-
     SorobanResources resources;
     resources.footprint.readOnly = instance.readOnlyKeys;
     uint32_t roEntries = sampleDiscrete(
@@ -593,11 +589,28 @@ TxGenerator::invokeSorobanLoadTransactionV2(
         appCfg.LOADGEN_INSTRUCTIONS_FOR_TESTING,
         appCfg.LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING, 0u);
 
+    auto numEntries = (roEntries + rwEntries + instance.readOnlyKeys.size());
+
+    // The entry encoding estimates are somewhat loose because we're
+    // unfortunately building storage with O(n^2) complexity.
+
+    // Figuring out the number of instructions for storage is difficult because
+    // we build storage with O(n^2) complexity, so instead, I graphed the
+    // instruction count provided in the diagnostics as the invocation starts
+    // against different entry counts, and got the equation below from that. The
+    // estimate is pretty close (usually off by 50,000 to 200,000 instructions).
+    //
+    // The instructionsPerEntryByte should probably be taken into account here
+    // but I left the linear calculation for that because the estimate is
+    // already close.
+    uint32_t instructionsForEntries =
+        (205 * std::pow(numEntries, 2)) + (12000 * numEntries) + 65485;
+
+    uint32_t const instructionsPerEntryByte = 44;
+
     uint32_t instructionsWithoutCpuLoad =
         baseInstructionCount + instructionsPerAuthByte * paddingBytes +
-        instructionsPerEntryByte * entriesSize +
-        instructionsPerEntry *
-            (roEntries + rwEntries + instance.readOnlyKeys.size()) +
+        instructionsPerEntryByte * entriesSize + instructionsForEntries +
         eventCount * instructionsPerEvent;
     if (targetInstructions > instructionsWithoutCpuLoad)
     {
