@@ -621,23 +621,23 @@ TxGenerator::invokeSorobanLoadTransactionV2(
         targetInstructions = 0;
     }
 
-    /*
+    
     // Randomly select a number of guest cycles
     uint64_t guestCyclesMax = targetInstructions / instructionsPerGuestCycle;
-    uint64_t guestCycles = rand_uniform<uint64_t>(0, guestCyclesMax);
+    uint64_t guestCycles = 0;
 
     // Rest of instructions consumed by host cycles
     targetInstructions -= guestCycles * instructionsPerGuestCycle;
     uint64_t hostCycles = targetInstructions / instructionsPerHostCycle;
-    */
+   
 
     // Instead of mixing both guest and host cycles using the commented out code
     // above, we just use guestCycles because there's an issue with how the U256
     // add host function is modeled in the host. The instruction count is
     // greatly overestimated relative to actual time spent.
-    uint64_t guestCycles = targetInstructions / instructionsPerGuestCycle;
-    targetInstructions -= guestCycles * instructionsPerGuestCycle;
-    uint64_t hostCycles = 0;
+    //uint64_t guestCycles = targetInstructions / instructionsPerGuestCycle;
+    //targetInstructions -= guestCycles * instructionsPerGuestCycle;
+    //uint64_t hostCycles = 0;
 
     Operation op;
     op.body.type(INVOKE_HOST_FUNCTION);
