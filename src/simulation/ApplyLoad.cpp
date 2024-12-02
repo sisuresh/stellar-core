@@ -87,6 +87,8 @@ ApplyLoad::ApplyLoad(Application& app)
     mUpgradeConfig.persistentRentRateDenominator = 1'000'000'000'000LL;
     mUpgradeConfig.tempRentRateDenominator = 1'000'000'000'000LL;
 
+    // These values are set above using values from Config, so the assertions
+    // will fail if the config file is missing any of these values.
     releaseAssert(mUpgradeConfig.ledgerMaxInstructions > 0);
     releaseAssert(mUpgradeConfig.txMaxInstructions > 0);
     releaseAssert(mUpgradeConfig.ledgerMaxReadLedgerEntries > 0);
