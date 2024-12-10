@@ -1510,16 +1510,22 @@ LedgerManagerImpl::prefetchTransactionData(ApplicableTxSetFrame const& txSet)
 ThreadEntryMap
 LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
 {
-    //TODO: fast fail if read entry limit is exceeded.
+    // TODO: fast fail if read entry limit is exceeded.
 
     ThreadEntryMap entryMap;
-    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) {
+    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys,
+                          bool isReadOnly) {
         for (auto const& lk : keys)
         {
             auto ltxe = ltx.loadWithoutRecord(lk);
             if (ltxe)
             {
-                entryMap.emplace(lk, std::make_pair(ltxe.current(), false));
+                auto it = entryMap.emplace(
+                    lk, ThreadEntry{ltxe.current(), false, isReadOnly});
+                if (!it.second && !isReadOnly)
+                {
+                    it.first->second.isOnlyReadOnly = false;
+                }
                 if (isSorobanEntry(lk))
                 {
                     auto ttlKey = getTTLKey(lk);
@@ -1527,21 +1533,35 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
                     // TTL entry must exist
                     releaseAssertOrThrow(ttlLtxe);
 
-                    entryMap.emplace(ttlKey,
-                                     std::make_pair(ttlLtxe.current(), false));
+                    auto ttlIt = entryMap.emplace(
+                        ttlKey,
+                        ThreadEntry{ttlLtxe.current(), false, isReadOnly});
+                    if (!ttlIt.second && !isReadOnly)
+                    {
+                        ttlIt.first->second.isOnlyReadOnly = false;
+                    }
                 }
             }
             else
             {
-                entryMap.emplace(lk, std::make_pair(std::nullopt, false));
+                auto it = entryMap.emplace(
+                    lk, ThreadEntry{std::nullopt, false, isReadOnly});
+                if (!it.second && !isReadOnly)
+                {
+                    it.first->second.isOnlyReadOnly = false;
+                }
                 if (isSorobanEntry(lk))
                 {
                     auto ttlKey = getTTLKey(lk);
                     auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
                     // TTL entry must not exist
                     releaseAssertOrThrow(!ttlLtxe);
-                    entryMap.emplace(ttlKey,
-                                     std::make_pair(std::nullopt, false));
+                    auto ttlIt = entryMap.emplace(
+                        ttlKey, ThreadEntry{std::nullopt, false, isReadOnly});
+                    if (!ttlIt.second && !isReadOnly)
+                    {
+                        ttlIt.first->second.isOnlyReadOnly = false;
+                    }
                 }
             }
         }
@@ -1549,8 +1569,8 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
 
     for (auto const& txBundle : txs)
     {
-        getEntries(txBundle.tx->sorobanResources().footprint.readOnly);
-        getEntries(txBundle.tx->sorobanResources().footprint.readWrite);
+        getEntries(txBundle.tx->sorobanResources().footprint.readOnly, true);
+        getEntries(txBundle.tx->sorobanResources().footprint.readWrite, false);
     }
 
     return entryMap;
@@ -1594,10 +1614,11 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                                SorobanMetrics& sorobanMetrics,
                                uint32_t ledgerSeq, uint32_t ledgerVersion)
 {
-    // TTL extensions can't be observable between transactions, so we track them
-    // separately and update the entry map at the end of the thread.
+    // TTL extensions for keys that don't appear in any RW set can't be
+    // observable between transactions, so we track them separately and update
+    // the entry map at the end of the thread.
 
-    UnorderedMap<LedgerKey, TTLEntry> ttlExtensions;
+    UnorderedMap<LedgerKey, TTLEntry> readOnlyTtlExtensions;
 
     for (auto const& txBundle : thread)
     {
@@ -1621,12 +1642,11 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                 auto opType = txBundle.tx->getRawOperations().at(0).body.type();
 
                 if (opType != RESTORE_FOOTPRINT && lk.type() == TTL &&
-                    it->second.first && updatedLe)
+                    it->second.mLedgerEntry && updatedLe &&
+                    it->second.isOnlyReadOnly)
                 {
-                    // If this is a TTL extension, then record it separately for
-                    // now.
-                    auto ttlIt = ttlExtensions.find(lk);
-                    if (ttlIt != ttlExtensions.end())
+                    auto ttlIt = readOnlyTtlExtensions.find(lk);
+                    if (ttlIt != readOnlyTtlExtensions.end())
                     {
                         ttlIt->second.liveUntilLedgerSeq =
                             std::max(ttlIt->second.liveUntilLedgerSeq,
@@ -1636,26 +1656,18 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                     {
                         releaseAssertOrThrow(
                             updatedLe->data.ttl().liveUntilLedgerSeq >
-                            it->second.first->data.ttl().liveUntilLedgerSeq);
-                        ttlExtensions.emplace(lk, updatedLe->data.ttl());
+                            it->second.mLedgerEntry->data.ttl()
+                                .liveUntilLedgerSeq);
+                        readOnlyTtlExtensions.emplace(lk,
+                                                      updatedLe->data.ttl());
                     }
                 }
                 else
                 {
-                    // If this is a TTL entry, it is either being created,
-                    // deleted, or restored, so it should be observable.
-
-                    // TTL entry is being deleted, so extensions can be wiped.
-                    if (lk.type() == TTL && !updatedLe)
-                    {
-                        ttlExtensions.erase(lk);
-                    }
-
-                    // If this is a create or restore, the entry is in the
-                    // readWrite set, so it shouldn't be possible for an
-                    // extension to be accepted prior to the entry being
-                    // accessible.
-                    releaseAssertOrThrow(ttlExtensions.count(lk) == 0);
+                    // readOnlyTtlExtensions should only be used for keys that
+                    // never appear in a RW set in this thread
+                    releaseAssertOrThrow(readOnlyTtlExtensions.count(lk) == 0);
+                    releaseAssertOrThrow(it->second.isOnlyReadOnly);
 
                     // A entry deletion will be marked by a nullopt le.
                     // Set the dirty bit so it'll be written to ltx later.
@@ -1837,33 +1849,30 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         for (auto const& entry : threadEntryMap)
         {
             // Only update if dirty bit is set
-            if (!entry.second.second)
+            if (!entry.second.isDirty)
             {
                 continue;
             }
 
-            if (entry.second.first)
+            if (entry.second.mLedgerEntry)
             {
-                auto const& updatedTTL = *entry.second.first;
+                auto const& updatedEntry = *entry.second.mLedgerEntry;
                 auto ltxe = ltxInner.load(entry.first);
                 if (ltxe)
                 {
                     if (ltxe.current().data.type() == TTL)
                     {
-                        // Only update TTL if we're increasing it
                         auto currLiveUntil =
                             ltxe.current().data.ttl().liveUntilLedgerSeq;
-                        if (currLiveUntil >=
-                            updatedTTL.data.ttl().liveUntilLedgerSeq)
-                        {
-                            continue;
-                        }
+                        releaseAssertOrThrow(
+                            updatedEntry.data.ttl().liveUntilLedgerSeq >=
+                            currLiveUntil);
                     }
-                    ltxe.current() = updatedTTL;
+                    ltxe.current() = updatedEntry;
                 }
                 else
                 {
-                    ltxInner.create(updatedTTL);
+                    ltxInner.create(updatedEntry);
                 }
             }
             else
