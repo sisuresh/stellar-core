@@ -37,9 +37,17 @@ using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
 using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
-using ThreadEntryMap =
-    UnorderedMap<LedgerKey,
-                 std::pair<std::optional<LedgerEntry>, bool /*dirty*/>>;
+
+struct ThreadEntry
+{
+    std::optional<LedgerEntry> mLedgerEntry;
+    bool isDirty;
+    // Should only be true if this entry does not exist in any RW footprint in
+    // this thread
+    bool isOnlyReadOnly;
+};
+
+using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
 
 struct ParallelOpReturnVal
 {

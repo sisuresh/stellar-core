@@ -353,10 +353,6 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                      ledgerSeq, this](auto const& keys) -> bool {
         for (auto const& lk : keys)
         {
-            // For testing
-            /* auto threadID =
-                std::hash<std::thread::id>{}(std::this_thread::get_id()); */
-
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
             uint32_t entrySize = 0u;
             std::optional<TTLEntry> ttlEntry;
@@ -367,9 +363,9 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             {
                 auto ttlKey = getTTLKey(lk);
                 auto ttlIter = entryMap.find(ttlKey);
-                if (ttlIter != entryMap.end() && ttlIter->second.first)
+                if (ttlIter != entryMap.end() && ttlIter->second.mLedgerEntry)
                 {
-                    if (!isLive(*(ttlIter->second.first), ledgerSeq))
+                    if (!isLive(*(ttlIter->second.mLedgerEntry), ledgerSeq))
                     {
                         // For temporary entries, treat the expired entry as
                         // if the key did not exist
@@ -404,7 +400,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                     else
                     {
                         sorobanEntryLive = true;
-                        ttlEntry = ttlIter->second.first.value().data.ttl();
+                        ttlEntry =
+                            ttlIter->second.mLedgerEntry.value().data.ttl();
                     }
                 }
                 // If ttlLtxe doesn't exist, this is a new Soroban entry
@@ -415,8 +412,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                 auto entryIter = entryMap.find(lk);
                 if (entryIter != entryMap.end())
                 {
-                    releaseAssertOrThrow(entryIter->second.first);
-                    auto leBuf = toCxxBuf(*(entryIter->second.first));
+                    releaseAssertOrThrow(entryIter->second.mLedgerEntry);
+                    auto leBuf = toCxxBuf(*(entryIter->second.mLedgerEntry));
                     entrySize = static_cast<uint32_t>(leBuf.data->size());
 
                     // For entry types that don't have an ttlEntry (i.e.
