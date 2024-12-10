@@ -84,8 +84,8 @@ RestoreFootprintOpFrame::doApplyParallel(
         auto ttlIter = entryMap.find(ttlKey);
 
         // Skip entry if the TTLEntry is missing or if it's already live.
-        if (ttlIter == entryMap.end() || !ttlIter->second.first ||
-            isLive(*ttlIter->second.first, ledgerSeq))
+        if (ttlIter == entryMap.end() || !ttlIter->second.mLedgerEntry ||
+            isLive(*ttlIter->second.mLedgerEntry, ledgerSeq))
         {
             continue;
         }
@@ -96,9 +96,9 @@ RestoreFootprintOpFrame::doApplyParallel(
 
         // We checked for TTLEntry existence above
         releaseAssertOrThrow(entryIter != entryMap.end() &&
-                             entryIter->second.first);
+                             entryIter->second.mLedgerEntry);
 
-        auto const& entryLe = *entryIter->second.first;
+        auto const& entryLe = *entryIter->second.mLedgerEntry;
 
         uint32_t entrySize = static_cast<uint32>(xdr::xdr_size(entryLe));
         metrics.mLedgerReadByte += entrySize;
@@ -144,7 +144,7 @@ RestoreFootprintOpFrame::doApplyParallel(
         rustChange.new_size_bytes = entrySize;
         rustChange.new_live_until_ledger = restoredLiveUntilLedger;
 
-        auto ttlLe = *ttlIter->second.first;
+        auto ttlLe = *ttlIter->second.mLedgerEntry;
         ttlLe.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
 
         opEntryMap.emplace(ttlKey, ttlLe);

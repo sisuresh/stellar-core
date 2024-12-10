@@ -80,8 +80,8 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
         auto ttlKey = getTTLKey(lk);
         auto ttlIter = entryMap.find(ttlKey);
 
-        if (ttlIter == entryMap.end() || !ttlIter->second.first ||
-            !isLive(*ttlIter->second.first, ledgerSeq))
+        if (ttlIter == entryMap.end() || !ttlIter->second.mLedgerEntry ||
+            !isLive(*ttlIter->second.mLedgerEntry, ledgerSeq))
         {
             // Skip archived entries, as those must be restored.
             //
@@ -92,7 +92,7 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
         }
 
         auto currLiveUntilLedgerSeq =
-            ttlIter->second.first->data.ttl().liveUntilLedgerSeq;
+            ttlIter->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
         if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
         {
             continue;
@@ -104,8 +104,8 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
 
         // We checked for TTLEntry existence above
         releaseAssertOrThrow(entryIter != entryMap.end() &&
-                             entryIter->second.first);
-        auto const& entryLe = *entryIter->second.first;
+                             entryIter->second.mLedgerEntry);
+        auto const& entryLe = *entryIter->second.mLedgerEntry;
 
         uint32_t entrySize = static_cast<uint32>(xdr::xdr_size(entryLe));
         metrics.mLedgerReadByte += entrySize;
@@ -129,7 +129,7 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
             return {false, {}};
         }
 
-        auto ttlLe = *ttlIter->second.first;
+        auto ttlLe = *ttlIter->second.mLedgerEntry;
 
         rustEntryRentChanges.emplace_back();
         auto& rustChange = rustEntryRentChanges.back();

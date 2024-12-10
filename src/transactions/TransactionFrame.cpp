@@ -1653,7 +1653,7 @@ TransactionFrame::parallelApply(
                 auto prev = entryMap.find(lk);
                 releaseAssertOrThrow(prev != entryMap.end());
 
-                auto prevLe = prev->second.first;
+                auto prevLe = prev->second.mLedgerEntry;
 
                 if (prevLe)
                 {
