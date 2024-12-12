@@ -96,10 +96,11 @@ class TxGenerator
                            std::optional<uint32_t> maxGeneratedFeeRate);
 
     std::pair<TestAccountPtr, TransactionFrameBaseConstPtr>
-    createUploadWasmTransaction(uint32_t ledgerNum, uint64_t accountId,
-                                xdr::opaque_vec<> const& wasm,
-                                LedgerKey const& contractCodeLedgerKey,
-                                std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> resources = std::nullopt);
+    createUploadWasmTransaction(
+        uint32_t ledgerNum, uint64_t accountId, xdr::opaque_vec<> const& wasm,
+        LedgerKey const& contractCodeLedgerKey,
+        std::optional<uint32_t> maxGeneratedFeeRate,
+        std::optional<SorobanResources> resources = std::nullopt);
     std::pair<TestAccountPtr, TransactionFrameBaseConstPtr>
     createContractTransaction(uint32_t ledgerNum, uint64_t accountId,
                               LedgerKey const& codeKey,
@@ -116,7 +117,8 @@ class TxGenerator
     invokeSorobanCreateUpgradeTransaction(
         uint32_t ledgerNum, uint64_t accountId, SCBytes const& upgradeBytes,
         LedgerKey const& codeKey, LedgerKey const& instanceKey,
-        std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> resources = std::nullopt);
+        std::optional<uint32_t> maxGeneratedFeeRate,
+        std::optional<SorobanResources> resources = std::nullopt);
     std::pair<TestAccountPtr, TransactionFrameBaseConstPtr>
     sorobanRandomWasmTransaction(uint32_t ledgerNum, uint64_t accountId,
                                  uint32_t inclusionFee);

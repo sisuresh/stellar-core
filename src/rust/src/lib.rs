@@ -755,7 +755,7 @@ pub(crate) fn invoke_host_function(
         resources_buf,
         source_account_buf,
         auth_entries,
-        ledger_info,//TODO: testutils doesn't compile here due to the change to pass in &CxxLedgerInfo
+        ledger_info, //TODO: testutils doesn't compile here due to the change to pass in &CxxLedgerInfo
         ledger_entries,
         ttl_entries,
         base_prng_seed,

@@ -6,6 +6,7 @@
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "util/XDRCereal.h"
 #include "xdr/Stellar-transaction.h"
 
 #include <Tracy.hpp>
@@ -99,6 +100,7 @@ SorobanTxData::pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
         std::move(std::begin(args), std::end(args),
                   std::back_inserter(*ce.body.v0().data.vec()));
     }
+    std::cout << xdrToCerealString(ce, "ce") << std::endl;
     DiagnosticEvent evt(false, std::move(ce));
     pushDiagnosticEvent(evt);
 }

@@ -221,8 +221,9 @@ struct HostFunctionMetrics
         mMetrics.mHostFnOpMaxRwCodeByte.Mark(mMaxReadWriteCodeByte);
         mMetrics.mHostFnOpMaxEmitEventByte.Mark(mMaxEmitEventByte);
 
-        mMetrics.accumulateModelledCpuInsns(mCpuInsn, mCpuInsnExclVm,
-                                            mInvokeTimeNsecs);
+        // TODO::THIS IS NOT THREAD SAFE
+        // mMetrics.accumulateModelledCpuInsns(mCpuInsn, mCpuInsnExclVm,
+        //                                    mInvokeTimeNsecs);
 
         if (mSuccess)
         {
@@ -331,6 +332,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doApplyParallel", true);
 
+    // For testing
+    // auto threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // std::cout << threadID << std::endl;
+
     std::vector<LedgerEntryChange> changes;
 
     HostFunctionMetrics metrics(sorobanMetrics);
@@ -410,9 +415,9 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             if (!isSorobanEntry(lk) || sorobanEntryLive)
             {
                 auto entryIter = entryMap.find(lk);
-                if (entryIter != entryMap.end())
+                if (entryIter != entryMap.end() &&
+                    entryIter->second.mLedgerEntry)
                 {
-                    releaseAssertOrThrow(entryIter->second.mLedgerEntry);
                     auto leBuf = toCxxBuf(*(entryIter->second.mLedgerEntry));
                     entrySize = static_cast<uint32_t>(leBuf.data->size());
 

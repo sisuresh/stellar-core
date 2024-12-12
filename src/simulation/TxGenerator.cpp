@@ -268,11 +268,12 @@ std::pair<TxGenerator::TestAccountPtr, TransactionFrameBaseConstPtr>
 TxGenerator::createUploadWasmTransaction(
     uint32_t ledgerNum, uint64_t accountId, xdr::opaque_vec<> const& wasm,
     LedgerKey const& contractCodeLedgerKey,
-    std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> uploadResources)
+    std::optional<uint32_t> maxGeneratedFeeRate,
+    std::optional<SorobanResources> uploadResources)
 {
     auto account = findAccount(accountId, ledgerNum);
 
-    if(!uploadResources)
+    if (!uploadResources)
     {
         uploadResources = SorobanResources{};
         uploadResources->instructions = 2'500'000;
@@ -793,7 +794,8 @@ std::pair<TxGenerator::TestAccountPtr, TransactionFrameBasePtr>
 TxGenerator::invokeSorobanCreateUpgradeTransaction(
     uint32_t ledgerNum, uint64_t accountId, SCBytes const& upgradeBytes,
     LedgerKey const& codeKey, LedgerKey const& instanceKey,
-    std::optional<uint32_t> maxGeneratedFeeRate, std::optional<SorobanResources> resources)
+    std::optional<uint32_t> maxGeneratedFeeRate,
+    std::optional<SorobanResources> resources)
 {
     auto account = findAccount(accountId, ledgerNum);
     auto const& contractID = instanceKey.contractData().contract;
@@ -811,7 +813,7 @@ TxGenerator::invokeSorobanCreateUpgradeTransaction(
     upgradeSetKey.contentHash = upgradeHash;
     upgradeSetKey.contractID = contractID.contractId();
 
-    if(!resources)
+    if (!resources)
     {
         resources = SorobanResources{};
         resources->instructions = 2'500'000;

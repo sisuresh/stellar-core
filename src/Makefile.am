@@ -16,7 +16,7 @@ endif
 
 if BUILD_TESTS
 stellar_core_SOURCES = main/StellarCoreVersion.cpp main/XDRFilesSha256.cpp $(SRC_CXX_FILES) $(SRC_TEST_CXX_FILES)
-CARGO_FEATURE_TESTUTILS = --features testutils
+CARGO_FEATURE_TESTUTILS = 
 else # !BUILD_TESTS
 stellar_core_SOURCES = main/StellarCoreVersion.cpp main/XDRFilesSha256.cpp $(SRC_CXX_FILES)
 CARGO_FEATURE_TESTUTILS =

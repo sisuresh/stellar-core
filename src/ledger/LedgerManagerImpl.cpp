@@ -1520,7 +1520,12 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
             auto ltxe = ltx.loadWithoutRecord(lk);
             if (ltxe)
             {
-                entryMap.emplace(lk, ThreadEntry{ltxe.current(), false, true});
+                auto it = entryMap.emplace(
+                    lk, ThreadEntry{ltxe.current(), false, isReadOnly});
+                if (!it.second && !isReadOnly)
+                {
+                    it.first->second.isOnlyReadOnly = false;
+                }
                 if (isSorobanEntry(lk))
                 {
                     auto ttlKey = getTTLKey(lk);
@@ -1528,18 +1533,21 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
                     // TTL entry must exist
                     releaseAssertOrThrow(ttlLtxe);
 
-                    entryMap.emplace(
-                        ttlKey, ThreadEntry{ttlLtxe.current(), false, true});
+                    auto ttlIt = entryMap.emplace(
+                        ttlKey,
+                        ThreadEntry{ttlLtxe.current(), false, isReadOnly});
+                    if (!ttlIt.second && !isReadOnly)
+                    {
+                        ttlIt.first->second.isOnlyReadOnly = false;
+                    }
                 }
             }
             else
             {
                 auto it = entryMap.emplace(
-                    lk, ThreadEntry{std::nullopt, false, false});
-                if (!it.second)
+                    lk, ThreadEntry{std::nullopt, false, isReadOnly});
+                if (!it.second && !isReadOnly)
                 {
-                    // already in entryMap, but make sure to set readOnly to
-                    // false
                     it.first->second.isOnlyReadOnly = false;
                 }
                 if (isSorobanEntry(lk))
@@ -1549,8 +1557,8 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
                     // TTL entry must not exist
                     releaseAssertOrThrow(!ttlLtxe);
                     auto ttlIt = entryMap.emplace(
-                        ttlKey, ThreadEntry{std::nullopt, false, false});
-                    if (!ttlIt.second)
+                        ttlKey, ThreadEntry{std::nullopt, false, isReadOnly});
+                    if (!ttlIt.second && !isReadOnly)
                     {
                         ttlIt.first->second.isOnlyReadOnly = false;
                     }
@@ -1597,7 +1605,7 @@ LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
     return initialTTLs;
 }
 
-void
+UnorderedMap<LedgerKey, uint32_t>
 LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                                Config const& config,
                                SorobanNetworkConfig const& sorobanConfig,
@@ -1607,10 +1615,11 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                                uint32_t ledgerSeq, uint32_t ledgerVersion)
 {
     // TTL extensions for keys that don't appear in any RW set can't be
-    // observable between transactions, so we track them separately and update
-    // the entry map at the end of the thread.
+    // observable between transactions, so we track them separately and as a
+    // cost optimization, we add them up and apply the cumulative bump at the
+    // end.
 
-    UnorderedMap<LedgerKey, TTLEntry> readOnlyTtlExtensions;
+    UnorderedMap<LedgerKey, uint32_t> readOnlyTtlExtensions;
 
     for (auto const& txBundle : thread)
     {
@@ -1637,21 +1646,43 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                     it->second.mLedgerEntry && updatedLe &&
                     it->second.isOnlyReadOnly)
                 {
+                    // TODO: Can the ttl be unchanged here?
+                    releaseAssertOrThrow(
+                        updatedLe->data.ttl().liveUntilLedgerSeq >
+                        it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq);
+
+                    uint32_t delta =
+                        updatedLe->data.ttl().liveUntilLedgerSeq -
+                        it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
+
+                    // std::cout << "DELTA  " << delta << std::endl <<
+                    // std::endl;
+
                     auto ttlIt = readOnlyTtlExtensions.find(lk);
                     if (ttlIt != readOnlyTtlExtensions.end())
                     {
-                        ttlIt->second.liveUntilLedgerSeq =
-                            std::max(ttlIt->second.liveUntilLedgerSeq,
-                                     updatedLe->data.ttl().liveUntilLedgerSeq);
+                        std::cout << "add  " << ttlIt->second << "   " << delta
+                                  << "  "
+                                  << it->second.mLedgerEntry->data.ttl()
+                                         .liveUntilLedgerSeq
+                                  << std::endl
+                                  << std::endl;
+
+                        // We will cap the ttl bump to the max network setting
+                        // later when updating the ledger entry
+                        ttlIt->second = UINT32_MAX - ttlIt->second < delta
+                                            ? UINT32_MAX
+                                            : ttlIt->second + delta;
                     }
                     else
                     {
-                        releaseAssertOrThrow(
-                            updatedLe->data.ttl().liveUntilLedgerSeq >
-                            it->second.mLedgerEntry->data.ttl()
-                                .liveUntilLedgerSeq);
-                        readOnlyTtlExtensions.emplace(lk,
-                                                      updatedLe->data.ttl());
+                        std::cout << updatedLe->data.ttl().liveUntilLedgerSeq
+                                  << " - "
+                                  << it->second.mLedgerEntry->data.ttl()
+                                         .liveUntilLedgerSeq
+                                  << std::endl;
+
+                        readOnlyTtlExtensions.emplace(lk, delta);
                     }
                 }
                 else
@@ -1659,11 +1690,10 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                     // readOnlyTtlExtensions should only be used for keys that
                     // never appear in a RW set in this thread
                     releaseAssertOrThrow(readOnlyTtlExtensions.count(lk) == 0);
-                    releaseAssertOrThrow(it->second.isOnlyReadOnly);
 
                     // A entry deletion will be marked by a nullopt le.
                     // Set the dirty bit so it'll be written to ltx later.
-                    it->second = {updatedLe, true};
+                    it->second = {updatedLe, true, it->second.isOnlyReadOnly};
                 }
             }
         }
@@ -1675,17 +1705,8 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
         }
         txBundle.mDelta = res.mDelta;
     }
-    for (auto const& ttlExtension : ttlExtensions)
-    {
-        auto it = entryMap.find(ttlExtension.first);
-        releaseAssertOrThrow(it != entryMap.end());
 
-        LedgerEntry updatedTtl;
-        updatedTtl.data.type(TTL);
-        updatedTtl.data.ttl() = ttlExtension.second;
-
-        it->second = {updatedTtl, true};
-    }
+    return readOnlyTtlExtensions;
 }
 
 // This three methods are copies from InvokeHostFunctionOpFrame. Clean up.
@@ -1712,6 +1733,7 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
     info.base_reserve = hdr.baseReserve;
     info.protocol_version = hdr.ledgerVersion;
     info.sequence_number = hdr.ledgerSeq;
+    std::cout << "seq seq " << hdr.ledgerSeq << std::endl;
     info.timestamp = hdr.scpValue.closeTime;
     info.memory_limit = sorobanConfig.txMemoryLimit();
     info.min_persistent_entry_ttl =
@@ -1765,7 +1787,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         entryMapsByThread.emplace_back(collectEntries(ltx, thread));
     }
 
-    std::vector<std::thread> threads;
+    std::vector<std::future<UnorderedMap<LedgerKey, uint32_t>>> roTtlDeltas;
     for (size_t i = 0; i < stage.size(); ++i)
     {
         auto& entryMapByThread = entryMapsByThread.at(i);
@@ -1776,17 +1798,27 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         // sorobanBasePrngSeed!!!
         // TODO: entryMap should be moved in.
         // TODO: Use thread pool
-        threads.push_back(std::thread(
-            &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
-            std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
-            sorobanBasePrngSeed, std::ref(sorobanMetrics), ledgerSeq,
-            ledgerVersion));
+        roTtlDeltas.emplace_back(
+            std::async(&LedgerManagerImpl::applyThread, this,
+                       std::ref(entryMapByThread), std::ref(thread), config,
+                       sorobanConfig, std::ref(ledgerInfo), sorobanBasePrngSeed,
+                       std::ref(sorobanMetrics), ledgerSeq, ledgerVersion));
     }
 
-    // TODO: This will change when we use a thread pool.
-    for (auto& thread : threads)
+    UnorderedMap<LedgerKey, uint32_t> cumulativeRoTtlDeltas;
+    for (auto& roTtlDeltaFuture : roTtlDeltas)
     {
-        thread.join();
+        auto roDeltas = roTtlDeltaFuture.get();
+        for (auto const& delta : roDeltas)
+        {
+            auto it = cumulativeRoTtlDeltas.emplace(delta.first, delta.second);
+            if (!it.second)
+            {
+                it.first->second = UINT32_MAX - it.first->second < delta.second
+                                       ? UINT32_MAX
+                                       : it.first->second + delta.second;
+            }
+        }
     }
 
     LedgerTxn ltxInner(ltx);
@@ -1843,6 +1875,33 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
             // Only update if dirty bit is set
             if (!entry.second.isDirty)
             {
+                // The path for RO ttl extensions without a RW tx in the same
+                // stage is taken care of here
+                if (entry.first.type() == TTL && entry.second.mLedgerEntry)
+                {
+                    auto it = cumulativeRoTtlDeltas.find(entry.first);
+                    if (it != cumulativeRoTtlDeltas.end())
+                    {
+                        releaseAssertOrThrow(entry.second.isOnlyReadOnly);
+
+                        auto ltxe = ltxInner.load(entry.first);
+                        releaseAssertOrThrow(ltxe);
+
+                        auto currentTTL =
+                            ltxe.current().data.ttl().liveUntilLedgerSeq;
+                        auto cumulativeTTL =
+                            UINT32_MAX - currentTTL < it->second
+                                ? UINT32_MAX
+                                : currentTTL + it->second;
+
+                        auto maxEntryTTL = app.getLedgerManager()
+                                               .getSorobanNetworkConfig()
+                                               .stateArchivalSettings()
+                                               .maxEntryTTL;
+                        ltxe.current().data.ttl().liveUntilLedgerSeq =
+                            std::min(maxEntryTTL - 1, cumulativeTTL);
+                    }
+                }
                 continue;
             }
 
@@ -1952,7 +2011,8 @@ LedgerManagerImpl::applyTransactions(
 
                     for (auto const& tx : thread)
                     {
-                        //std::cout << xdrToCerealString(tx->getEnvelope(), "fsd") << std::endl;
+                        // std::cout << xdrToCerealString(tx->getEnvelope(),
+                        // "fsd") << std::endl;
                         /* std::cout << "THREAD SIZE " << thread.size()
                                   << "  stage " << i << " thread " << j
                                   << std::endl
