@@ -58,15 +58,15 @@ toCxxBuf(T const& t)
 }
 
 CxxLedgerInfo
-getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
-              SorobanNetworkConfig const& sorobanConfig)
+getLedgerInfo(SorobanNetworkConfig const& sorobanConfig, uint32_t ledgerVersion,
+              uint32_t ledgerSeq, uint32_t baseReserve, TimePoint closeTime,
+              Hash const& networkID)
 {
     CxxLedgerInfo info{};
-    auto const& hdr = ltx.loadHeader().current();
-    info.base_reserve = hdr.baseReserve;
-    info.protocol_version = hdr.ledgerVersion;
-    info.sequence_number = hdr.ledgerSeq;
-    info.timestamp = hdr.scpValue.closeTime;
+    info.base_reserve = baseReserve;
+    info.protocol_version = ledgerVersion;
+    info.sequence_number = ledgerSeq;
+    info.timestamp = closeTime;
     info.memory_limit = sorobanConfig.txMemoryLimit();
     info.min_persistent_entry_ttl =
         sorobanConfig.stateArchivalSettings().minPersistentTTL;
@@ -80,13 +80,22 @@ getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
     info.cpu_cost_params = toCxxBuf(cpu);
     info.mem_cost_params = toCxxBuf(mem);
 
-    auto& networkID = app.getNetworkID();
     info.network_id.reserve(networkID.size());
     for (auto c : networkID)
     {
         info.network_id.emplace_back(static_cast<unsigned char>(c));
     }
     return info;
+}
+
+CxxLedgerInfo
+getLedgerInfo(SorobanNetworkConfig const& sorobanConfig,
+              ParallelLedgerInfo const& parallelLedgerInfo)
+{
+    return getLedgerInfo(
+        sorobanConfig, parallelLedgerInfo.getLedgerVersion(),
+        parallelLedgerInfo.getLedgerSeq(), parallelLedgerInfo.getBaseReserve(),
+        parallelLedgerInfo.getCloseTime(), parallelLedgerInfo.getNetworkID());
 }
 
 DiagnosticEvent
@@ -324,10 +333,9 @@ ParallelOpReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-    Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+    Hash const& sorobanBasePrngSeed, ParallelLedgerInfo const& ledgerInfo,
     SorobanMetrics& sorobanMetrics, OperationResult& res,
-    SorobanTxData& sorobanData, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    SorobanTxData& sorobanData) const
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doApplyParallel", true);
 
@@ -350,7 +358,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
     auto addReads = [&ledgerEntryCxxBufs, &ttlEntryCxxBufs, &metrics, &entryMap,
                      &resources, &sorobanConfig, &appConfig, &sorobanData, &res,
-                     ledgerSeq, this](auto const& keys) -> bool {
+                     &ledgerInfo, this](auto const& keys) -> bool {
         for (auto const& lk : keys)
         {
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
@@ -365,7 +373,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                 auto ttlIter = entryMap.find(ttlKey);
                 if (ttlIter != entryMap.end() && ttlIter->second.mLedgerEntry)
                 {
-                    if (!isLive(*(ttlIter->second.mLedgerEntry), ledgerSeq))
+                    if (!isLive(*(ttlIter->second.mLedgerEntry),
+                                ledgerInfo.getLedgerSeq()))
                     {
                         // For temporary entries, treat the expired entry as
                         // if the key did not exist
@@ -492,7 +501,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             appConfig.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS, resources.instructions,
             toCxxBuf(mInvokeHostFunction.hostFunction), toCxxBuf(resources),
             toCxxBuf(getSourceID()), authEntryCxxBufs,
-            ledgerInfo /*This may not work*/, ledgerEntryCxxBufs,
+            getLedgerInfo(sorobanConfig, ledgerInfo), ledgerEntryCxxBufs,
             ttlEntryCxxBufs, basePrngSeedBuf,
             sorobanConfig.rustBridgeRentFeeConfiguration());
         metrics.mCpuInsn = out.cpu_insns;
@@ -679,8 +688,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     }
 
     if (!sorobanData.consumeRefundableSorobanResources(
-            metrics.mEmitEventByte, out.rent_fee, ledgerVersion, sorobanConfig,
-            appConfig, mParentTx))
+            metrics.mEmitEventByte, out.rent_fee, ledgerInfo.getLedgerVersion(),
+            sorobanConfig, appConfig, mParentTx))
     {
         innerResult(res).code(INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
         return {false, {}};
@@ -861,13 +870,16 @@ InvokeHostFunctionOpFrame::doApply(
         basePrngSeedBuf.data->assign(sorobanBasePrngSeed.begin(),
                                      sorobanBasePrngSeed.end());
 
+        auto const& lh = ltx.loadHeader().current();
         out = rust_bridge::invoke_host_function(
             appConfig.CURRENT_LEDGER_PROTOCOL_VERSION,
             appConfig.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS, resources.instructions,
             toCxxBuf(mInvokeHostFunction.hostFunction), toCxxBuf(resources),
             toCxxBuf(getSourceID()), authEntryCxxBufs,
-            getLedgerInfo(ltx, app, sorobanConfig), ledgerEntryCxxBufs,
-            ttlEntryCxxBufs, basePrngSeedBuf,
+            getLedgerInfo(sorobanConfig, lh.ledgerVersion, lh.ledgerSeq,
+                          lh.baseReserve, lh.scpValue.closeTime,
+                          app.getNetworkID()),
+            ledgerEntryCxxBufs, ttlEntryCxxBufs, basePrngSeedBuf,
             sorobanConfig.rustBridgeRentFeeConfiguration());
         metrics.mCpuInsn = out.cpu_insns;
         metrics.mMemByte = out.mem_bytes;
