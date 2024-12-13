@@ -94,13 +94,12 @@ class LedgerManagerImpl : public LedgerManager
     TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx,
                                   ApplyStage const& stage);
 
-    void applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
-                     Config const& config,
-                     SorobanNetworkConfig const& sorobanConfig,
-                     CxxLedgerInfo const& ledgerInfo,
-                     Hash const& sorobanBasePrngSeed,
-                     SorobanMetrics& sorobanMetrics, uint32_t ledgerSeq,
-                     uint32_t ledgerVersion);
+    UnorderedMap<LedgerKey, uint32_t>
+    applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
+                Config const& config, SorobanNetworkConfig const& sorobanConfig,
+                CxxLedgerInfo const& ledgerInfo,
+                Hash const& sorobanBasePrngSeed, SorobanMetrics& sorobanMetrics,
+                uint32_t ledgerSeq, uint32_t ledgerVersion);
 
     void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
                            ApplyStage const& stage,
