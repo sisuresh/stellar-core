@@ -410,9 +410,9 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             if (!isSorobanEntry(lk) || sorobanEntryLive)
             {
                 auto entryIter = entryMap.find(lk);
-                if (entryIter != entryMap.end())
+                if (entryIter != entryMap.end() &&
+                    entryIter->second.mLedgerEntry)
                 {
-                    releaseAssertOrThrow(entryIter->second.mLedgerEntry);
                     auto leBuf = toCxxBuf(*(entryIter->second.mLedgerEntry));
                     entrySize = static_cast<uint32_t>(leBuf.data->size());
 
