@@ -1584,10 +1584,9 @@ ParallelOpReturnVal
 TransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
+    ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
     SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-    TransactionMetaFrame& meta, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    TransactionMetaFrame& meta) const
 {
     ZoneScoped;
 
@@ -1598,7 +1597,7 @@ TransactionFrame::parallelApply(
         // older ledger versions. The minimum ledger version for which we
         // start internal-error counting is defined in the app config.
         reportInternalErrOnException =
-            ledgerVersion >=
+            ledgerInfo.getLedgerVersion() >=
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
 
         releaseAssertOrThrow(txResult);
@@ -1628,8 +1627,7 @@ TransactionFrame::parallelApply(
         {
             res = op->applyParallel(entryMap, config, sorobanConfig, ledgerInfo,
                                     sorobanMetrics, opResult, *sorobanData,
-                                    sorobanBasePrngSeed /*fix*/, ledgerSeq,
-                                    ledgerVersion);
+                                    sorobanBasePrngSeed /*fix*/);
         }
 
 #ifdef BUILD_TESTS
@@ -1693,7 +1691,7 @@ TransactionFrame::parallelApply(
                 {
                     auto deltaLe = *le;
                     // This is for the invariants check in LedgerManager
-                    deltaLe.lastModifiedLedgerSeq = ledgerSeq;
+                    deltaLe.lastModifiedLedgerSeq = ledgerInfo.getLedgerSeq();
 
                     entryDelta.current =
                         std::make_shared<InternalLedgerEntry>(deltaLe);
@@ -1722,7 +1720,7 @@ TransactionFrame::parallelApply(
             // If transaction fails, we don't charge for any
             // refundable resources.
             auto preApplyFee = computePreApplySorobanResourceFee(
-                ledgerVersion, sorobanConfig, config);
+                ledgerInfo.getLedgerVersion(), sorobanConfig, config);
 
             sorobanData->setSorobanFeeRefund(declaredSorobanResourceFee() -
                                              preApplyFee.non_refundable_fee);

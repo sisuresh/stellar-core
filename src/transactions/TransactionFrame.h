@@ -244,10 +244,9 @@ class TransactionFrame : public TransactionFrameBase
     ParallelOpReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
-        CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-        TransactionMetaFrame& meta, uint32_t ledgerSeq,
-        uint32_t ledgerVersion) const override;
+        TransactionMetaFrame& meta) const override;
 
     // apply this transaction to the current ledger
     // returns true if successfully applied

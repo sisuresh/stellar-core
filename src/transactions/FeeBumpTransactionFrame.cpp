@@ -105,10 +105,9 @@ ParallelOpReturnVal
 FeeBumpTransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
+    ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
     SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-    TransactionMetaFrame& meta, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    TransactionMetaFrame& meta) const
 {
     try
     {
@@ -119,8 +118,7 @@ FeeBumpTransactionFrame::parallelApply(
         // FeeBumpTransactionFrame::processPostApply is called.
         auto res = mInnerTx->parallelApply(entryMap, config, sorobanConfig,
                                            ledgerInfo, txResult, sorobanMetrics,
-                                           sorobanBasePrngSeed, meta, ledgerSeq,
-                                           ledgerVersion);
+                                           sorobanBasePrngSeed, meta);
         FeeBumpMutableTransactionResult::updateResult(mInnerTx, *txResult);
         return res;
     }

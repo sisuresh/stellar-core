@@ -41,10 +41,9 @@ class ExtendFootprintTTLOpFrame : public OperationFrame
     ParallelOpReturnVal doApplyParallel(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!
         Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-        Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+        Hash const& sorobanBasePrngSeed, ParallelLedgerInfo const& ledgerInfo,
         SorobanMetrics& sorobanMetrics, OperationResult& res,
-        SorobanTxData& sorobanData, uint32_t ledgerSeq,
-        uint32_t ledgerVersion) const override;
+        SorobanTxData& sorobanData) const override;
 
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
