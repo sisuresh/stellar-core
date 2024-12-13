@@ -1609,10 +1609,9 @@ UnorderedMap<LedgerKey, uint32_t>
 LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                                Config const& config,
                                SorobanNetworkConfig const& sorobanConfig,
-                               CxxLedgerInfo const& ledgerInfo,
+                               ParallelLedgerInfo const& ledgerInfo,
                                Hash const& sorobanBasePrngSeed,
-                               SorobanMetrics& sorobanMetrics,
-                               uint32_t ledgerSeq, uint32_t ledgerVersion)
+                               SorobanMetrics& sorobanMetrics)
 {
     // TTL extensions for keys that don't appear in any RW set can't be
     // observable between transactions, so we track them separately and as a
@@ -1626,8 +1625,7 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
         releaseAssertOrThrow(txBundle.resPayload);
         auto res = txBundle.tx->parallelApply(
             entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
-            sorobanMetrics, sorobanBasePrngSeed, txBundle.meta, ledgerSeq,
-            ledgerVersion);
+            sorobanMetrics, sorobanBasePrngSeed, txBundle.meta);
 
         if (res.mSuccess)
         {
@@ -1694,51 +1692,12 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
     return readOnlyTtlExtensions;
 }
 
-// This three methods are copies from InvokeHostFunctionOpFrame. Clean up.
-template <typename T>
-std::vector<uint8_t>
-toVec(T const& t)
+ParallelLedgerInfo
+getParallelLedgerInfo(Application& app, AbstractLedgerTxn& ltx)
 {
-    return std::vector<uint8_t>(xdr::xdr_to_opaque(t));
-}
-
-template <typename T>
-CxxBuf
-toCxxBuf(T const& t)
-{
-    return CxxBuf{std::make_unique<std::vector<uint8_t>>(toVec(t))};
-}
-
-CxxLedgerInfo
-getLedgerInfo(AbstractLedgerTxn& ltx, Application& app,
-              SorobanNetworkConfig const& sorobanConfig)
-{
-    CxxLedgerInfo info{};
-    auto const& hdr = ltx.loadHeader().current();
-    info.base_reserve = hdr.baseReserve;
-    info.protocol_version = hdr.ledgerVersion;
-    info.sequence_number = hdr.ledgerSeq;
-    info.timestamp = hdr.scpValue.closeTime;
-    info.memory_limit = sorobanConfig.txMemoryLimit();
-    info.min_persistent_entry_ttl =
-        sorobanConfig.stateArchivalSettings().minPersistentTTL;
-    info.min_temp_entry_ttl =
-        sorobanConfig.stateArchivalSettings().minTemporaryTTL;
-    info.max_entry_ttl = sorobanConfig.stateArchivalSettings().maxEntryTTL;
-
-    auto cpu = sorobanConfig.cpuCostParams();
-    auto mem = sorobanConfig.memCostParams();
-
-    info.cpu_cost_params = toCxxBuf(cpu);
-    info.mem_cost_params = toCxxBuf(mem);
-
-    auto& networkID = app.getNetworkID();
-    info.network_id.reserve(networkID.size());
-    for (auto c : networkID)
-    {
-        info.network_id.emplace_back(static_cast<unsigned char>(c));
-    }
-    return info;
+    auto const& lh = ltx.loadHeader().current();
+    return {lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve,
+            lh.scpValue.closeTime, app.getNetworkID()};
 }
 
 void
@@ -1760,11 +1719,6 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         app.getLedgerManager().getSorobanNetworkConfig();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
-    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-    uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
-
-    auto const& ledgerInfo = getLedgerInfo(ltx, app, sorobanConfig);
-
     std::vector<ThreadEntryMap> entryMapsByThread;
     for (auto const& thread : stage)
     {
@@ -1772,6 +1726,8 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
     }
 
     std::vector<std::future<UnorderedMap<LedgerKey, uint32_t>>> roTtlDeltas;
+
+    auto ledgerInfo = getParallelLedgerInfo(app, ltx);
     for (size_t i = 0; i < stage.size(); ++i)
     {
         auto& entryMapByThread = entryMapsByThread.at(i);
@@ -1782,11 +1738,10 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         // sorobanBasePrngSeed!!!
         // TODO: entryMap should be moved in.
         // TODO: Use thread pool
-        roTtlDeltas.emplace_back(
-            std::async(&LedgerManagerImpl::applyThread, this,
-                       std::ref(entryMapByThread), std::ref(thread), config,
-                       sorobanConfig, std::ref(ledgerInfo), sorobanBasePrngSeed,
-                       std::ref(sorobanMetrics), ledgerSeq, ledgerVersion));
+        roTtlDeltas.emplace_back(std::async(
+            &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
+            std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
+            sorobanBasePrngSeed, std::ref(sorobanMetrics)));
     }
 
     UnorderedMap<LedgerKey, uint32_t> cumulativeRoTtlDeltas;
@@ -1841,7 +1796,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
             // We only increase the internal-error metric count if the
             // ledger is a newer version.
             if (txBundle.resPayload->getResultCode() == txINTERNAL_ERROR &&
-                ledgerVersion >=
+                ledgerInfo.getLedgerVersion() >=
                     config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
             {
                 auto& internalErrorCounter = app.getMetrics().NewCounter(

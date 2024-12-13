@@ -159,28 +159,25 @@ ParallelOpReturnVal
 OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               Config const& config,
                               SorobanNetworkConfig const& sorobanConfig,
-                              CxxLedgerInfo const& ledgerInfo,
+                              ParallelLedgerInfo const& ledgerInfo,
                               SorobanMetrics& sorobanMetrics,
                               OperationResult& res, SorobanTxData& sorobanData,
-                              Hash const& sorobanBasePrngSeed,
-                              uint32_t ledgerSeq, uint32_t ledgerVersion) const
+                              Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
     // checkValid is called earlier in preParallelApply
 
     return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
-                           ledgerInfo, sorobanMetrics, res, sorobanData,
-                           ledgerSeq, ledgerVersion);
+                           ledgerInfo, sorobanMetrics, res, sorobanData);
 }
 
 ParallelOpReturnVal
 OperationFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, Config const& appConfig,
     SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
-    CxxLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
-    OperationResult& res, SorobanTxData& sorobanData, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    OperationResult& res, SorobanTxData& sorobanData) const
 {
     throw std::runtime_error(
         "Cannot call doApplyParallel on a non Soroban operation");

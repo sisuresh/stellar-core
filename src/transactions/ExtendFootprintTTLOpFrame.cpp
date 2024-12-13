@@ -53,10 +53,9 @@ ParallelOpReturnVal
 ExtendFootprintTTLOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-    Hash const& sorobanBasePrngSeed, CxxLedgerInfo const& ledgerInfo,
+    Hash const& sorobanBasePrngSeed, ParallelLedgerInfo const& ledgerInfo,
     SorobanMetrics& sorobanMetrics, OperationResult& res,
-    SorobanTxData& sorobanData, uint32_t ledgerSeq,
-    uint32_t ledgerVersion) const
+    SorobanTxData& sorobanData) const
 {
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame doApplyParallel", true);
 
@@ -74,14 +73,15 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
     // Extend for `extendTo` more ledgers since the current
     // ledger. Current ledger has to be payed for in order for entry
     // to be extendable, hence don't include it.
-    uint32_t newLiveUntilLedgerSeq = ledgerSeq + mExtendFootprintTTLOp.extendTo;
+    uint32_t newLiveUntilLedgerSeq =
+        ledgerInfo.getLedgerSeq() + mExtendFootprintTTLOp.extendTo;
     for (auto const& lk : footprint.readOnly)
     {
         auto ttlKey = getTTLKey(lk);
         auto ttlIter = entryMap.find(ttlKey);
 
         if (ttlIter == entryMap.end() || !ttlIter->second.mLedgerEntry ||
-            !isLive(*ttlIter->second.mLedgerEntry, ledgerSeq))
+            !isLive(*ttlIter->second.mLedgerEntry, ledgerInfo.getLedgerSeq()))
         {
             // Skip archived entries, as those must be restored.
             //
@@ -145,11 +145,13 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
 
     // This may throw, but only in case of the Core version misconfiguration.
     int64_t rentFee = rust_bridge::compute_rent_fee(
-        appConfig.CURRENT_LEDGER_PROTOCOL_VERSION, ledgerVersion,
-        rustEntryRentChanges, sorobanConfig.rustBridgeRentFeeConfiguration(),
-        ledgerSeq);
+        appConfig.CURRENT_LEDGER_PROTOCOL_VERSION,
+        ledgerInfo.getLedgerVersion(), rustEntryRentChanges,
+        sorobanConfig.rustBridgeRentFeeConfiguration(),
+        ledgerInfo.getLedgerSeq());
     if (!sorobanData.consumeRefundableSorobanResources(
-            0, rentFee, ledgerVersion, sorobanConfig, appConfig, mParentTx))
+            0, rentFee, ledgerInfo.getLedgerVersion(), sorobanConfig, appConfig,
+            mParentTx))
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_INSUFFICIENT_REFUNDABLE_FEE);
         return {false, {}};

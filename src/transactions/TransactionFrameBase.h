@@ -56,6 +56,54 @@ struct ParallelOpReturnVal
     std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
+class ParallelLedgerInfo
+{
+
+  public:
+    ParallelLedgerInfo(uint32_t version, uint32_t seq, uint32_t reserve,
+                       TimePoint time, Hash id)
+        : ledgerVersion(version)
+        , ledgerSeq(seq)
+        , baseReserve(reserve)
+        , closeTime(time)
+        , networkID(id)
+    {
+    }
+
+    uint32_t
+    getLedgerVersion() const
+    {
+        return ledgerVersion;
+    }
+    uint32_t
+    getLedgerSeq() const
+    {
+        return ledgerSeq;
+    }
+    uint32_t
+    getBaseReserve() const
+    {
+        return baseReserve;
+    }
+    TimePoint
+    getCloseTime() const
+    {
+        return closeTime;
+    }
+    Hash
+    getNetworkID() const
+    {
+        return networkID;
+    }
+
+  private:
+    uint32_t ledgerVersion;
+    uint32_t ledgerSeq;
+    uint32_t baseReserve;
+    TimePoint closeTime;
+    Hash networkID;
+};
+
 // temporary. Remove this
 class TxBundle
 {
@@ -96,10 +144,9 @@ class TransactionFrameBase
     virtual ParallelOpReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
-        CxxLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-        TransactionMetaFrame& meta, uint32_t ledgerSeq,
-        uint32_t ledgerVersion) const = 0;
+        TransactionMetaFrame& meta) const = 0;
 
     virtual MutableTxResultPtr
     checkValid(Application& app, LedgerSnapshot const& ls,
