@@ -339,6 +339,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doApplyParallel", true);
 
+    // For testing
+    // auto threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // std::cout << threadID << std::endl;
+
     std::vector<LedgerEntryChange> changes;
 
     HostFunctionMetrics metrics(sorobanMetrics);

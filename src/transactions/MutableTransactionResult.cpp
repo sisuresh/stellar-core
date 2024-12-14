@@ -6,6 +6,7 @@
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "util/XDRCereal.h"
 #include "xdr/Stellar-transaction.h"
 
 #include <Tracy.hpp>

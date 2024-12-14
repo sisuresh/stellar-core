@@ -1653,7 +1653,6 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                         updatedLe->data.ttl().liveUntilLedgerSeq -
                         it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
 
-                    // std::cout << "DELTA  " << delta << std::endl <<
                     auto ttlIt = readOnlyTtlExtensions.find(lk);
                     if (ttlIt != readOnlyTtlExtensions.end())
                     {
@@ -1662,9 +1661,13 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                         ttlIt->second = UINT32_MAX - ttlIt->second < delta
                                             ? UINT32_MAX
                                             : ttlIt->second + delta;
+
+                        //std::cout << "1ttl " << delta << std::endl;
+                        //std::cout << "sum " << ttlIt->second << std::endl;
                     }
                     else
                     {
+                        //std::cout << "2ttl " << delta << std::endl;
                         readOnlyTtlExtensions.emplace(lk, delta);
                     }
                 }
@@ -1941,7 +1944,8 @@ LedgerManagerImpl::applyTransactions(
 
                     for (auto const& tx : thread)
                     {
-                        //std::cout << xdrToCerealString(tx->getEnvelope(), "fsd") << std::endl;
+                        // std::cout << xdrToCerealString(tx->getEnvelope(),
+                        // "fsd") << std::endl;
                         /* std::cout << "THREAD SIZE " << thread.size()
                                   << "  stage " << i << " thread " << j
                                   << std::endl
