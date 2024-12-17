@@ -4438,3 +4438,54 @@ TEST_CASE("contract constructor support", "[tx][soroban]")
         REQUIRE(invocation.getReturnValue().u32() == 303);
     }
 }
+
+TEST_CASE("missing code and instance", "[tx][soroban][parallelapply]")
+{
+    auto cfg = getTestConfig();
+    cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
+
+    SorobanTest test(cfg);
+    ContractStorageTestClient client(test);
+
+    // Wasm and instance should not expire during test
+    test.invokeExtendOp(client.getContract().getKeys(), 10'000);
+
+    auto issuerKey = getAccount("issuer");
+    Asset idr = makeAsset(issuerKey, "IDR");
+    AssetContractTestClient assetClient(test, idr);
+
+    auto& app = test.getApp();
+    auto& lm = app.getLedgerManager();
+
+    const int64_t startingBalance = lm.getLastMinBalance(50);
+
+    auto& root = test.getRoot();
+    // This test case passes if we change loop condition to 15 or 17...
+    for(size_t i = 0; i < 16; i++)
+    {
+        root.create(std::to_string(i), startingBalance);
+    }
+    
+    // Verify that contract instance and contract code exists.
+    auto const& keys = client.getContract().getKeys();
+    for(auto const& k : keys)
+    {
+        auto snapshot = app.getBucketManager().getBucketSnapshotManager().copySearchableLiveBucketListSnapshot();
+        auto e = snapshot->load(k);
+        REQUIRE(e);
+    }
+
+    modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
+        cfg.mLedgerMaxInstructions = 200'000'000;
+    });
+
+    // Do the same check done before calling modifySorobanNetworkConfig
+    for(auto const& k : keys)
+    {
+        auto snapshot = app.getBucketManager().getBucketSnapshotManager().copySearchableLiveBucketListSnapshot();
+        auto e = snapshot->load(k);
+        
+        //This fails. The entries are now missing.
+        REQUIRE(e);
+    }
+}
