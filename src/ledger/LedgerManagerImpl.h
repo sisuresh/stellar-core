@@ -91,11 +91,8 @@ class LedgerManagerImpl : public LedgerManager
 
     ThreadEntryMap collectEntries(AbstractLedgerTxn& ltx, Thread const& txs);
 
-    TTLs collectInitialTTLEntries(AbstractLedgerTxn& ltx,
-                                  ApplyStage const& stage);
-
     UnorderedMap<LedgerKey, uint32_t>
-    applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
+    applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread, UnorderedMap<LedgerKey, bool> const& stageTtlFootprint,
                 Config const& config, SorobanNetworkConfig const& sorobanConfig,
                 ParallelLedgerInfo const& ledgerInfo,
                 Hash const& sorobanBasePrngSeed,

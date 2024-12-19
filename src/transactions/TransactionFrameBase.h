@@ -40,11 +40,10 @@ using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
 
 struct ThreadEntry
 {
+    // Will not be set if the entry doesn't exist, or if no tx was able to load
+    // it due to hitting read limits.
     std::optional<LedgerEntry> mLedgerEntry;
     bool isDirty;
-    // Should only be true if this entry does not exist in any RW footprint in
-    // this thread
-    bool isOnlyReadOnly;
 };
 
 using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
@@ -136,7 +135,7 @@ class TransactionFrameBase
                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
-    virtual bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+    virtual void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr resPayload,
                                   bool chargeFee) const = 0;

@@ -288,13 +288,13 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
     mTransactionFrame->insertKeysForTxApply(keys, lkMeter);
 }
 
-bool
+void
 TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta,
                                        MutableTxResultPtr resPayload,
                                        bool chargeFee) const
 {
-    return mTransactionFrame->preParallelApply(app, ltx, meta, resPayload,
+    mTransactionFrame->preParallelApply(app, ltx, meta, resPayload,
                                                chargeFee);
 }
 

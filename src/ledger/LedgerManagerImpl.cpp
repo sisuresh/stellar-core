@@ -1507,88 +1507,22 @@ LedgerManagerImpl::prefetchTransactionData(ApplicableTxSetFrame const& txSet)
     }
 }
 
-ThreadEntryMap
-LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
+UnorderedMap<LedgerKey, bool/*isTtlForReadOnlyEntry*/>
+getStageTtlFootprint(ApplyStage const& stage)
 {
-    // TODO: fast fail if read entry limit is exceeded.
-
-    ThreadEntryMap entryMap;
-    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys,
-                          bool isReadOnly) {
+    UnorderedMap<LedgerKey, bool> stageFootprint;
+    auto getFootprint = [&stageFootprint](xdr::xvector<LedgerKey> const& keys, bool isReadOnly){
         for (auto const& lk : keys)
         {
-            auto ltxe = ltx.loadWithoutRecord(lk);
-            if (ltxe)
+            if(!isSorobanEntry(lk))
             {
-                auto it = entryMap.emplace(
-                    lk, ThreadEntry{ltxe.current(), false, isReadOnly});
-                if (!it.second && !isReadOnly)
-                {
-                    it.first->second.isOnlyReadOnly = false;
-                }
-                if (isSorobanEntry(lk))
-                {
-                    auto ttlKey = getTTLKey(lk);
-                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
-                    // TTL entry must exist
-                    releaseAssertOrThrow(ttlLtxe);
-
-                    auto ttlIt = entryMap.emplace(
-                        ttlKey,
-                        ThreadEntry{ttlLtxe.current(), false, isReadOnly});
-                    if (!ttlIt.second && !isReadOnly)
-                    {
-                        ttlIt.first->second.isOnlyReadOnly = false;
-                    }
-                }
+                continue;
             }
-            else
+            auto it = stageFootprint.emplace(getTTLKey(lk), isReadOnly);
+            // If key already exists, overwrite isReadOnly if we see the key in a readWrite set
+            if(!it.second && !isReadOnly)
             {
-                auto it = entryMap.emplace(
-                    lk, ThreadEntry{std::nullopt, false, isReadOnly});
-                if (!it.second && !isReadOnly)
-                {
-                    it.first->second.isOnlyReadOnly = false;
-                }
-                if (isSorobanEntry(lk))
-                {
-                    auto ttlKey = getTTLKey(lk);
-                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
-                    // TTL entry must not exist
-                    releaseAssertOrThrow(!ttlLtxe);
-                    auto ttlIt = entryMap.emplace(
-                        ttlKey, ThreadEntry{std::nullopt, false, isReadOnly});
-                    if (!ttlIt.second && !isReadOnly)
-                    {
-                        ttlIt.first->second.isOnlyReadOnly = false;
-                    }
-                }
-            }
-        }
-    };
-
-    for (auto const& txBundle : txs)
-    {
-        getEntries(txBundle.tx->sorobanResources().footprint.readOnly, true);
-        getEntries(txBundle.tx->sorobanResources().footprint.readWrite, false);
-    }
-
-    return entryMap;
-}
-
-TTLs
-LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
-                                            ApplyStage const& stage)
-{
-    UnorderedMap<LedgerKey, TTLEntry> initialTTLs;
-    auto getTTLEntries = [&](xdr::xvector<LedgerKey> const& keys) {
-        for (auto const& lk : keys)
-        {
-            auto ttlKey = getTTLKey(lk);
-            auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
-            if (ttlLtxe)
-            {
-                initialTTLs.emplace(ttlKey, ttlLtxe.current().data.ttl());
+                it.first->second = false;
             }
         }
     };
@@ -1597,16 +1531,101 @@ LedgerManagerImpl::collectInitialTTLEntries(AbstractLedgerTxn& ltx,
     {
         for (auto const& txBundle : thread)
         {
-            getTTLEntries(txBundle.tx->sorobanResources().footprint.readOnly);
-            getTTLEntries(txBundle.tx->sorobanResources().footprint.readWrite);
+            getFootprint(txBundle.tx->sorobanResources().footprint.readOnly, true);
+            getFootprint(txBundle.tx->sorobanResources().footprint.readWrite, false);
         }
     }
 
-    return initialTTLs;
+    return stageFootprint;
+}
+
+ThreadEntryMap
+LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
+{
+    ThreadEntryMap entryMap;
+    auto getEntries = [&](TransactionFrameBasePtr tx, MutableTxResultPtr resPayload, xdr::xvector<LedgerKey> const& keys, uint32_t& readBytes) {
+        for (auto const& lk : keys)
+        {
+            if(!resPayload->isSuccess())
+            {
+                // This tx has already failed, so no need to load anything
+                break;
+            }
+            
+            auto ltxe = ltx.loadWithoutRecord(lk);
+            if (ltxe)
+            {
+                readBytes += static_cast<uint32_t>(xdr::xdr_size(ltxe.current()));
+                entryMap.emplace(
+                    lk, ThreadEntry{ltxe.current(), false});
+
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must exist
+                    releaseAssertOrThrow(ttlLtxe);
+
+                    entryMap.emplace(
+                        ttlKey,
+                        ThreadEntry{ttlLtxe.current(), false});
+                }
+            }
+            else
+            {
+                entryMap.emplace(
+                    lk, ThreadEntry{std::nullopt, false});
+
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must not exist
+                    releaseAssertOrThrow(!ttlLtxe);
+                    entryMap.emplace(
+                        ttlKey, ThreadEntry{std::nullopt, false});
+                }
+            }
+
+            if(tx->sorobanResources().readBytes < readBytes)
+            {
+                // fast fail this tx now that we know the readBytes limit has been exceeded.
+                resPayload->setInnermostResultCode(txFAILED);
+                
+                auto& sorobanOpResult = resPayload->getOpResultAt(0);
+                auto opType = tx->getRawOperations().at(0).body.type();
+                switch(opType)
+                {
+                    case INVOKE_HOST_FUNCTION:
+                        sorobanOpResult.tr().invokeHostFunctionResult().code(INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+                    break;
+                    case EXTEND_FOOTPRINT_TTL:
+                        sorobanOpResult.tr().extendFootprintTTLResult().code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+                    break;
+                    case RESTORE_FOOTPRINT:
+                        sorobanOpResult.tr().restoreFootprintResult().code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+                    break;
+                    default:
+                        throw std::runtime_error("unknown soroban op type type");
+                }
+                
+                break;
+            }
+        }
+    };
+
+    for (auto const& txBundle : txs)
+    {
+        uint32_t readBytes = 0;
+        getEntries(txBundle.tx, txBundle.resPayload, txBundle.tx->sorobanResources().footprint.readOnly, readBytes);
+        getEntries(txBundle.tx, txBundle.resPayload, txBundle.tx->sorobanResources().footprint.readWrite, readBytes);
+    }
+
+    return entryMap;
 }
 
 UnorderedMap<LedgerKey, uint32_t>
-LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
+LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread, UnorderedMap<LedgerKey, bool> const& stageTtlFootprint/*Make sure this is thread safe*/,
                                Config const& config,
                                SorobanNetworkConfig const& sorobanConfig,
                                ParallelLedgerInfo const& ledgerInfo,
@@ -1640,9 +1659,11 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
 
                 auto opType = txBundle.tx->getRawOperations().at(0).body.type();
 
+                auto footprintIt = stageTtlFootprint.find(lk);
+
                 if (opType != RESTORE_FOOTPRINT && lk.type() == TTL &&
-                    it->second.mLedgerEntry && updatedLe &&
-                    it->second.isOnlyReadOnly)
+                    it->second.mLedgerEntry && updatedLe && footprintIt != stageTtlFootprint.end() &&
+                    footprintIt->second/*isReadOnly*/)
                 {
                     // TODO: Can the ttl be unchanged here?
                     releaseAssertOrThrow(
@@ -1653,7 +1674,6 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                         updatedLe->data.ttl().liveUntilLedgerSeq -
                         it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
 
-                    // std::cout << "DELTA  " << delta << std::endl <<
                     auto ttlIt = readOnlyTtlExtensions.find(lk);
                     if (ttlIt != readOnlyTtlExtensions.end())
                     {
@@ -1676,7 +1696,7 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
 
                     // A entry deletion will be marked by a nullopt le.
                     // Set the dirty bit so it'll be written to ltx later.
-                    it->second = {updatedLe, true, it->second.isOnlyReadOnly};
+                    it->second = {updatedLe, true};
                 }
             }
         }
@@ -1719,6 +1739,8 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         app.getLedgerManager().getSorobanNetworkConfig();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
+    auto stageFootprint = getStageTtlFootprint(stage);
+
     std::vector<ThreadEntryMap> entryMapsByThread;
     for (auto const& thread : stage)
     {
@@ -1740,7 +1762,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         // TODO: Use thread pool
         roTtlDeltas.emplace_back(std::async(
             &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
-            std::ref(thread), config, sorobanConfig, std::ref(ledgerInfo),
+            std::ref(thread), std::ref(stageFootprint), config, sorobanConfig, std::ref(ledgerInfo),
             sorobanBasePrngSeed, std::ref(sorobanMetrics)));
     }
 

@@ -5005,13 +5005,6 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
     cfg.SOROBAN_PHASE_STAGE_COUNT = 2;
     cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
 
-    auto prefix = std::string("metatest-soroban-");
-    TmpDirManager tdm(prefix + binToHex(randomBytes(8)));
-    TmpDir td = tdm.tmpDir("meta-ok");
-    std::string metaPath = td.getName() + "/stream.xdr";
-
-    cfg.METADATA_OUTPUT_STREAM = metaPath;
-
     SorobanTest test(cfg);
     ContractStorageTestClient client(test);
 
@@ -5207,4 +5200,69 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
 
     REQUIRE(a7.getTrustlineBalance(idr) == 75);
     REQUIRE(a8.getTrustlineBalance(idr) == 150);
+}
+
+TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
+{
+    auto cfg = getTestConfig();
+    cfg.LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
+        static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
+    cfg.SOROBAN_PHASE_STAGE_COUNT = 1;
+    cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
+
+    SorobanTest test(cfg);
+    ContractStorageTestClient client(test);
+
+    auto& app = test.getApp();
+    modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
+        cfg.mLedgerMaxInstructions = 5'000'000;
+        cfg.mLedgerMaxParallelThreads = 2;
+    });
+
+    // Wasm and instance should not expire during test
+    test.invokeExtendOp(client.getContract().getKeys(), 10'000);
+
+    auto& lm = app.getLedgerManager();
+
+    const int64_t startingBalance = lm.getLastMinBalance(50);
+
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", startingBalance);
+    auto a2 = root.create("a2", startingBalance);
+
+    REQUIRE(client.put("key2", ContractDataDurability::TEMPORARY, 0) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
+
+    // tx1 will fast fail due to hitting the readBytes limit
+    auto i1Spec =
+        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY).setReadBytes(5);
+    auto i1 = client.getContract().prepareInvocation(
+        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+        i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
+    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+
+    // extend key2
+    auto i2 = client.getContract().prepareInvocation(
+        "extend_temporary",
+        {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
+        client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
+            .setInclusionFee(i1Spec.getInclusionFee() + 2));
+    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+
+    std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+    sorobanTxs.emplace_back(tx1);
+    sorobanTxs.emplace_back(tx2);
+
+    auto r = closeLedger(test.getApp(), sorobanTxs);
+    REQUIRE(r.results.size() == sorobanTxs.size());
+
+    checkTx(0, r, txSUCCESS);
+
+    REQUIRE(r.results[1]
+                .result.result.results()[0]
+                .tr()
+                .invokeHostFunctionResult()
+                .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
 }

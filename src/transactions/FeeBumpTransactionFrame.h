@@ -68,7 +68,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     virtual ~FeeBumpTransactionFrame(){};
 
-    bool preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+    void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload,
                           bool chargeFee) const override;

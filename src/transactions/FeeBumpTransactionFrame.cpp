@@ -72,7 +72,7 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 }
 #endif
 
-bool
+void
 FeeBumpTransactionFrame::preParallelApply(Application& app,
                                           AbstractLedgerTxn& ltx,
                                           TransactionMetaFrame& meta,
@@ -85,11 +85,8 @@ FeeBumpTransactionFrame::preParallelApply(Application& app,
         removeOneTimeSignerKeyFromFeeSource(ltxTx);
         meta.pushTxChangesBefore(ltxTx.getChanges());
 
-        FeeBumpMutableTransactionResult::updateResult(mInnerTx, *txResult);
-        auto res =
-            mInnerTx->preParallelApply(app, ltxTx, meta, txResult, chargeFee);
+        mInnerTx->preParallelApply(app, ltxTx, meta, txResult, chargeFee);
         ltxTx.commit();
-        return res;
     }
     catch (std::exception& e)
     {

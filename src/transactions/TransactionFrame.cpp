@@ -1611,6 +1611,10 @@ TransactionFrame::parallelApply(
             return {false, {}};
         }
 
+        // TODO
+        //auto& opTimer =
+        //    app.getMetrics().NewTimer({"ledger", "operation", "apply"});
+
         releaseAssertOrThrow(mOperations.size() == 1);
 
         auto sorobanData = txResult->getSorobanData();
@@ -1981,7 +1985,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 }
 
 // TODO:Do we need the chargeFee parameter in v22?
-bool
+void
 TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                    TransactionMetaFrame& meta,
                                    MutableTxResultPtr txResult,
@@ -2038,8 +2042,15 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
 
             auto& opResult = txResult->getOpResultAt(0);
 
-            return mOperations.front()->checkValid(app, signatureChecker, ltx,
+            // Pre parallel soroban, OperationFrame::checkValid is called right
+            // before OperationFrame::doApply, but we do it here instead to avoid
+            // making OperationFrame::checkValid thread safe.
+            ok = mOperations.front()->checkValid(app, signatureChecker, ltx,
                                                    true, opResult, sorobanData);
+            if(!ok)
+            {
+                txResult->setInnermostResultCode(txFAILED);
+            }
         }
 
         // If validation fails, we check the result code in the parallel step to
@@ -2049,7 +2060,6 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
         // soroban transaction should not be able to fail in this method, but we
         // can still be more defensive.
         releaseAssertOrThrow(ok == (txResult->getResultCode() == txSUCCESS));
-        return ok;
     }
     catch (std::exception& e)
     {
