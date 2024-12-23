@@ -118,6 +118,7 @@ class TransactionTestFrame : public TransactionFrameBase
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
                               LedgerKeyMeter* lkMeter) const override;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload,
@@ -129,6 +130,7 @@ class TransactionTestFrame : public TransactionFrameBase
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
         TransactionMetaFrame& meta) const override;
+#endif
 
     MutableTxResultPtr
     processFeeSeqNum(AbstractLedgerTxn& ltx,

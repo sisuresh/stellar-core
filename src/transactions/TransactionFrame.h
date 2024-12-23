@@ -236,6 +236,7 @@ class TransactionFrame : public TransactionFrameBase
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload,
@@ -247,6 +248,7 @@ class TransactionFrame : public TransactionFrameBase
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
         TransactionMetaFrame& meta) const override;
+#endif
 
     // apply this transaction to the current ledger
     // returns true if successfully applied

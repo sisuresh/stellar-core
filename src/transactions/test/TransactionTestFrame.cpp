@@ -288,6 +288,7 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
     mTransactionFrame->insertKeysForTxApply(keys, lkMeter);
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
 TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta,
@@ -310,6 +311,7 @@ TransactionTestFrame::parallelApply(
         entryMap, config, sorobanConfig, ledgerInfo, resPayload, sorobanMetrics,
         txPrngSeed, meta);
 }
+#endif
 
 MutableTxResultPtr
 TransactionTestFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,

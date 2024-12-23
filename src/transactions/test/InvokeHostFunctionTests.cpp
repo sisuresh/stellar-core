@@ -4995,6 +4995,7 @@ TEST_CASE("parallel", "[tx][soroban][parallelapply]")
     REQUIRE(a6.getTrustlineBalance(idr) == 75);
 }
 */
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
 {
     auto cfg = getTestConfig();
@@ -5165,7 +5166,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
     auto r = closeLedger(test.getApp(), sorobanTxs);
     REQUIRE(r.results.size() == sorobanTxs.size());
 
-    std::cout << xdrToCerealString(r, "r") << std::endl;
+    //std::cout << xdrToCerealString(r, "r") << std::endl;
 
     REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
             sorobanTxs.size() - 1);
@@ -5266,3 +5267,4 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
                 .invokeHostFunctionResult()
                 .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
 }
+#endif

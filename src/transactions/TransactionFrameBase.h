@@ -36,6 +36,8 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+
 using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
 
 struct ThreadEntry
@@ -125,6 +127,8 @@ typedef std::vector<TxBundle> Thread;
 typedef std::vector<Thread> ApplyStage;
 typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
 
+#endif
+
 class TransactionFrameBase
 {
   public:
@@ -136,6 +140,7 @@ class TransactionFrameBase
                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     virtual void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr resPayload,
@@ -147,6 +152,7 @@ class TransactionFrameBase
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
         TransactionMetaFrame& meta) const = 0;
+#endif
 
     virtual MutableTxResultPtr
     checkValid(Application& app, LedgerSnapshot const& ls,

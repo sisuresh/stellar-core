@@ -88,6 +88,7 @@ getLedgerInfo(SorobanNetworkConfig const& sorobanConfig, uint32_t ledgerVersion,
     return info;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 CxxLedgerInfo
 getLedgerInfo(SorobanNetworkConfig const& sorobanConfig,
               ParallelLedgerInfo const& parallelLedgerInfo)
@@ -97,6 +98,7 @@ getLedgerInfo(SorobanNetworkConfig const& sorobanConfig,
         parallelLedgerInfo.getLedgerSeq(), parallelLedgerInfo.getBaseReserve(),
         parallelLedgerInfo.getCloseTime(), parallelLedgerInfo.getNetworkID());
 }
+#endif
 
 DiagnosticEvent
 metricsEvent(bool success, std::string&& topic, uint64_t value)
@@ -329,6 +331,7 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     }
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 ParallelOpReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
@@ -709,6 +712,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
     return {true, opEntryMap};
 }
+#endif
 
 bool
 InvokeHostFunctionOpFrame::doApply(

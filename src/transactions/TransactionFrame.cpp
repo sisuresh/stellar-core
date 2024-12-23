@@ -1580,6 +1580,97 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 }
 #endif
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+// TODO:Do we need the chargeFee parameter in v22?
+void
+TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                   TransactionMetaFrame& meta,
+                                   MutableTxResultPtr txResult,
+                                   bool chargeFee) const
+{
+    ZoneScoped;
+    try
+    {
+        // TODO:A failure here will result in a crash
+        releaseAssertOrThrow(isSoroban());
+
+        auto sorobanData = txResult->getSorobanData();
+
+        mCachedAccountPreProtocol8.reset();
+        uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+        SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
+                                          getSignatures(mEnvelope)};
+
+        //  when applying, a failure during tx validation means that
+        //  we'll skip trying to apply operations but we'll still
+        //  process the sequence number if needed
+        std::optional<FeePair> sorobanResourceFee;
+        if (protocolVersionStartsFrom(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
+        {
+            sorobanResourceFee = computePreApplySorobanResourceFee(
+                ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
+                app.getConfig());
+
+            sorobanData->setSorobanConsumedNonRefundableFee(
+                sorobanResourceFee->non_refundable_fee);
+            sorobanData->setSorobanFeeRefund(
+                declaredSorobanResourceFee() -
+                sorobanResourceFee->non_refundable_fee);
+        }
+        LedgerTxn ltxTx(ltx);
+        auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
+                              0, 0, sorobanResourceFee, txResult);
+        if (cv >= ValidationType::kInvalidUpdateSeqNum)
+        {
+            processSeqNum(ltxTx);
+        }
+
+        bool signaturesValid =
+            processSignatures(cv, signatureChecker, ltxTx, *txResult);
+
+        meta.pushTxChangesBefore(ltxTx.getChanges());
+
+        ltxTx.commit();
+
+        bool ok = signaturesValid && cv == ValidationType::kMaybeValid;
+        if (ok)
+        {
+            updateSorobanMetrics(app);
+
+            auto& opResult = txResult->getOpResultAt(0);
+
+            // Pre parallel soroban, OperationFrame::checkValid is called right
+            // before OperationFrame::doApply, but we do it here instead to avoid
+            // making OperationFrame::checkValid thread safe.
+            ok = mOperations.front()->checkValid(app, signatureChecker, ltx,
+                                                   true, opResult, sorobanData);
+            if(!ok)
+            {
+                txResult->setInnermostResultCode(txFAILED);
+            }
+        }
+
+        // If validation fails, we check the result code in the parallel step to
+        // make sure we don't apply the transaction.
+        // TODO: The point above is somewhat of a footgun if the result code
+        // somehow changes after this but before we apply the transaction. A
+        // soroban transaction should not be able to fail in this method, but we
+        // can still be more defensive.
+        releaseAssertOrThrow(ok == (txResult->getResultCode() == txSUCCESS));
+    }
+    catch (std::exception& e)
+    {
+        printErrorAndAbort("Exception after processing fees but before "
+                           "processing sequence number: ",
+                           e.what());
+    }
+    catch (...)
+    {
+        printErrorAndAbort("Unknown exception after processing fees but before "
+                           "processing sequence number");
+    }
+}
+
 ParallelOpReturnVal
 TransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
@@ -1763,6 +1854,7 @@ TransactionFrame::parallelApply(
     meta.clearTxChangesAfter();
     return {false, {}};
 }
+#endif
 
 bool
 TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
@@ -1974,96 +2066,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
     outerMeta.clearOperationMetas();
     outerMeta.clearTxChangesAfter();
     return false;
-}
-
-// TODO:Do we need the chargeFee parameter in v22?
-void
-TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
-                                   TransactionMetaFrame& meta,
-                                   MutableTxResultPtr txResult,
-                                   bool chargeFee) const
-{
-    ZoneScoped;
-    try
-    {
-        // TODO:A failure here will result in a crash
-        releaseAssertOrThrow(isSoroban());
-
-        auto sorobanData = txResult->getSorobanData();
-
-        mCachedAccountPreProtocol8.reset();
-        uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
-        SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
-                                          getSignatures(mEnvelope)};
-
-        //  when applying, a failure during tx validation means that
-        //  we'll skip trying to apply operations but we'll still
-        //  process the sequence number if needed
-        std::optional<FeePair> sorobanResourceFee;
-        if (protocolVersionStartsFrom(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
-        {
-            sorobanResourceFee = computePreApplySorobanResourceFee(
-                ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
-                app.getConfig());
-
-            sorobanData->setSorobanConsumedNonRefundableFee(
-                sorobanResourceFee->non_refundable_fee);
-            sorobanData->setSorobanFeeRefund(
-                declaredSorobanResourceFee() -
-                sorobanResourceFee->non_refundable_fee);
-        }
-        LedgerTxn ltxTx(ltx);
-        auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
-                              0, 0, sorobanResourceFee, txResult);
-        if (cv >= ValidationType::kInvalidUpdateSeqNum)
-        {
-            processSeqNum(ltxTx);
-        }
-
-        bool signaturesValid =
-            processSignatures(cv, signatureChecker, ltxTx, *txResult);
-
-        meta.pushTxChangesBefore(ltxTx.getChanges());
-
-        ltxTx.commit();
-
-        bool ok = signaturesValid && cv == ValidationType::kMaybeValid;
-        if (ok)
-        {
-            updateSorobanMetrics(app);
-
-            auto& opResult = txResult->getOpResultAt(0);
-
-            // Pre parallel soroban, OperationFrame::checkValid is called right
-            // before OperationFrame::doApply, but we do it here instead to avoid
-            // making OperationFrame::checkValid thread safe.
-            ok = mOperations.front()->checkValid(app, signatureChecker, ltx,
-                                                   true, opResult, sorobanData);
-            if(!ok)
-            {
-                txResult->setInnermostResultCode(txFAILED);
-            }
-        }
-
-        // If validation fails, we check the result code in the parallel step to
-        // make sure we don't apply the transaction.
-        // TODO: The point above is somewhat of a footgun if the result code
-        // somehow changes after this but before we apply the transaction. A
-        // soroban transaction should not be able to fail in this method, but we
-        // can still be more defensive.
-        releaseAssertOrThrow(ok == (txResult->getResultCode() == txSUCCESS));
-    }
-    catch (std::exception& e)
-    {
-        printErrorAndAbort("Exception after processing fees but before "
-                           "processing sequence number: ",
-                           e.what());
-    }
-    catch (...)
-    {
-        printErrorAndAbort("Unknown exception after processing fees but before "
-                           "processing sequence number");
-    }
 }
 
 bool

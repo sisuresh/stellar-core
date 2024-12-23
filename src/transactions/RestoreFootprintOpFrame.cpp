@@ -50,6 +50,7 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 ParallelOpReturnVal
 RestoreFootprintOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
@@ -163,6 +164,7 @@ RestoreFootprintOpFrame::doApplyParallel(
     innerResult(res).code(RESTORE_FOOTPRINT_SUCCESS);
     return {true, opEntryMap};
 }
+#endif
 
 bool
 RestoreFootprintOpFrame::doApply(

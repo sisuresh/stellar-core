@@ -72,6 +72,7 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 }
 #endif
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
 FeeBumpTransactionFrame::preParallelApply(Application& app,
                                           AbstractLedgerTxn& ltx,
@@ -130,6 +131,7 @@ FeeBumpTransactionFrame::parallelApply(
             "Unknown exception while applying inner transaction");
     }
 }
+#endif
 
 bool
 FeeBumpTransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,

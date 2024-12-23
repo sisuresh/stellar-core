@@ -49,6 +49,7 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 ParallelOpReturnVal
 ExtendFootprintTTLOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
@@ -159,6 +160,7 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
     innerResult(res).code(EXTEND_FOOTPRINT_TTL_SUCCESS);
     return {true, opEntryMap};
 }
+#endif
 
 bool
 ExtendFootprintTTLOpFrame::doApply(

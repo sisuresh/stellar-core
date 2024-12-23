@@ -1507,6 +1507,7 @@ LedgerManagerImpl::prefetchTransactionData(ApplicableTxSetFrame const& txSet)
     }
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 UnorderedMap<LedgerKey, bool/*isTtlForReadOnlyEntry*/>
 getStageTtlFootprint(ApplyStage const& stage)
 {
@@ -1762,9 +1763,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 
         auto const& thread = stage.at(i);
 
-        // TODO: We need unique prng seeds per tx instead of
-        // sorobanBasePrngSeed!!!
-        // TODO: entryMap should be moved in.
+        // TODO: Should entry map be copied in and returned instead for safety?
         // TODO: Use thread pool
         roTtlDeltas.emplace_back(std::async(
             &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
@@ -1910,6 +1909,7 @@ LedgerManagerImpl::applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
         applySorobanStage(app, ltx, stage, sorobanBasePrngSeed);
     }
 }
+#endif
 
 TransactionResultSet
 LedgerManagerImpl::applyTransactions(
@@ -1951,6 +1951,7 @@ LedgerManagerImpl::applyTransactions(
     {
         if (phase.isParallel())
         {
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
             auto txSetStages = phase.getParallelStages();
 
             std::vector<ApplyStage> applyStages;
@@ -1969,11 +1970,6 @@ LedgerManagerImpl::applyTransactions(
 
                     for (auto const& tx : thread)
                     {
-                        //std::cout << xdrToCerealString(tx->getEnvelope(), "fsd") << std::endl;
-                        /* std::cout << "THREAD SIZE " << thread.size()
-                                  << "  stage " << i << " thread " << j
-                                  << std::endl
-                                  << std::endl; */
                         TransactionMetaFrame tm(
                             ltx.loadHeader().current().ledgerVersion);
                         auto num = txNum++;
@@ -2040,6 +2036,9 @@ LedgerManagerImpl::applyTransactions(
                     }
                 }
             }
+#else
+    releaseAssert(false);
+#endif
         }
         else
         {

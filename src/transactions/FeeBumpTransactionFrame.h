@@ -68,6 +68,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     virtual ~FeeBumpTransactionFrame(){};
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload,
@@ -79,6 +80,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
         TransactionMetaFrame& meta) const override;
+#endif
 
     bool apply(Application& app, AbstractLedgerTxn& ltx,
                TransactionMetaFrame& meta, MutableTxResultPtr txResult,

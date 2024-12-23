@@ -155,6 +155,7 @@ OperationFrame::apply(Application& app, SignatureChecker& signatureChecker,
     return applyRes;
 }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 ParallelOpReturnVal
 OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               Config const& config,
@@ -182,6 +183,7 @@ OperationFrame::doApplyParallel(
     throw std::runtime_error(
         "Cannot call doApplyParallel on a non Soroban operation");
 }
+#endif
 
 ThresholdLevel
 OperationFrame::getThresholdLevel() const
