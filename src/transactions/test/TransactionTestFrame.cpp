@@ -303,12 +303,12 @@ TransactionTestFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
-    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
     TransactionMetaFrame& meta) const
 {
     return mTransactionFrame->parallelApply(
         entryMap, config, sorobanConfig, ledgerInfo, resPayload, sorobanMetrics,
-        sorobanBasePrngSeed, meta);
+        txPrngSeed, meta);
 }
 
 MutableTxResultPtr

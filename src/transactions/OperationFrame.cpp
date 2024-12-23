@@ -162,20 +162,20 @@ OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               ParallelLedgerInfo const& ledgerInfo,
                               SorobanMetrics& sorobanMetrics,
                               OperationResult& res, SorobanTxData& sorobanData,
-                              Hash const& sorobanBasePrngSeed) const
+                              Hash const& txPrngSeed) const
 {
     ZoneScoped;
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
     // checkValid is called earlier in preParallelApply
 
-    return doApplyParallel(entryMap, config, sorobanConfig, sorobanBasePrngSeed,
+    return doApplyParallel(entryMap, config, sorobanConfig, txPrngSeed,
                            ledgerInfo, sorobanMetrics, res, sorobanData);
 }
 
 ParallelOpReturnVal
 OperationFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, Config const& appConfig,
-    SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
+    SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
     ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
     OperationResult& res, SorobanTxData& sorobanData) const
 {

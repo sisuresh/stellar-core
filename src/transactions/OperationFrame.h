@@ -50,7 +50,7 @@ class OperationFrame
     virtual ParallelOpReturnVal doApplyParallel(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!
         Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-        Hash const& sorobanBasePrngSeed, ParallelLedgerInfo const& ledgerInfo,
+        Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
         SorobanMetrics& sorobanMetrics, OperationResult& res,
         SorobanTxData& sorobanData) const;
 

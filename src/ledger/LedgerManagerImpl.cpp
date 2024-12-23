@@ -1642,9 +1642,15 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread, U
     for (auto const& txBundle : thread)
     {
         releaseAssertOrThrow(txBundle.resPayload);
+
+        SHA256 txSubSeedSha;
+        txSubSeedSha.add(sorobanBasePrngSeed);
+        txSubSeedSha.add(xdr::xdr_to_opaque(txBundle.txNum));
+        Hash txSubSeed = txSubSeedSha.finish();
+
         auto res = txBundle.tx->parallelApply(
             entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
-            sorobanMetrics, sorobanBasePrngSeed, txBundle.meta);
+            sorobanMetrics, txSubSeed, txBundle.meta);
 
         if (res.mSuccess)
         {
@@ -1970,15 +1976,15 @@ LedgerManagerImpl::applyTransactions(
                                   << std::endl; */
                         TransactionMetaFrame tm(
                             ltx.loadHeader().current().ledgerVersion);
+                        auto num = txNum++;
                         auto mutableTxResult =
-                            mutableTxResults.at(resultIndex++);
-                        applyThread.emplace_back(tx, mutableTxResult, tm);
+                            mutableTxResults.at(num);
+                        applyThread.emplace_back(tx, mutableTxResult, tm, num);
                     }
                 }
             }
 
-            applySorobanStages(mApp, ltx, applyStages,
-                               sorobanBasePrngSeed /*TODO:FIX SEED*/);
+            applySorobanStages(mApp, ltx, applyStages, sorobanBasePrngSeed);
 
             for (auto const& stage : applyStages)
             {
@@ -2020,9 +2026,8 @@ LedgerManagerImpl::applyTransactions(
                         {
                             ledgerCloseMeta->setTxProcessingMetaAndResultPair(
                                 txBundle.meta.getXDR(), std::move(results),
-                                index);
+                                txBundle.txNum);
                         }
-                        ++index;
                         if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
                         {
                             auto ledgerSeq =

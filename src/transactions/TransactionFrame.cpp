@@ -1585,7 +1585,7 @@ TransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
-    SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
     TransactionMetaFrame& meta) const
 {
     ZoneScoped;
@@ -1602,9 +1602,8 @@ TransactionFrame::parallelApply(
 
         releaseAssertOrThrow(txResult);
 
-        // TODO: This shouldn't be possible. If it was, the refund would be
-        // incorrect. This tx failed validation earlier, do not apply it
-        // Make sure this check and opResult one below isn't a footgun for
+        // This tx failed validation earlier, do not apply it
+        // TODO: Make sure this check and opResult one below isn't a footgun for
         // dealing with checkValid validation.
         if (!txResult->isSuccess())
         {
@@ -1623,22 +1622,15 @@ TransactionFrame::parallelApply(
         auto op = mOperations.front();
         auto& opResult = txResult->getOpResultAt(0);
 
-        // TODO: This closely mimics the non-parallel behavior, but look into if
-        // this is necessary.
-        bool fastFail = opResult.code() != opINNER;
-        ParallelOpReturnVal res;
-        if (!fastFail)
-        {
-            res = op->applyParallel(entryMap, config, sorobanConfig, ledgerInfo,
+        auto res = op->applyParallel(entryMap, config, sorobanConfig, ledgerInfo,
                                     sorobanMetrics, opResult, *sorobanData,
-                                    sorobanBasePrngSeed /*fix*/);
-        }
+                                    txPrngSeed);
 
 #ifdef BUILD_TESTS
         maybeTriggerTestInternalError(mEnvelope);
 #endif
 
-        if (!fastFail && res.mSuccess)
+        if (res.mSuccess)
         {
             res.mDelta = std::make_shared<LedgerTxnDelta>();
             auto& delta = *res.mDelta;

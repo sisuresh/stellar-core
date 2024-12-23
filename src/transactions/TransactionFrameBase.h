@@ -103,17 +103,18 @@ class ParallelLedgerInfo
     Hash networkID;
 };
 
-// temporary. Remove this
+// TODO: Clean up
 class TxBundle
 {
   public:
     TxBundle(TransactionFrameBasePtr tx, MutableTxResultPtr resPayload,
-             TransactionMetaFrame const& meta)
-        : tx(tx), resPayload(resPayload), meta(meta)
+             TransactionMetaFrame const& meta, uint64_t txNum)
+        : tx(tx), resPayload(resPayload), txNum(txNum), meta(meta)
     {
     }
     TransactionFrameBasePtr tx;
     MutableTxResultPtr resPayload;
+    uint64_t txNum;
 
     // TODO: Stop using mutable
     mutable TransactionMetaFrame meta;
