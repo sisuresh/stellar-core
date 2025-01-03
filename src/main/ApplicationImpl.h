@@ -81,6 +81,13 @@ class ApplicationImpl : public Application
     virtual asio::io_context& getEvictionIOContext() override;
     virtual asio::io_context& getOverlayIOContext() override;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    virtual asio::io_context& getSorobanApplyIOContext() override;
+    virtual void maybeResizeSorobanApplyThreads(uint32_t threads) override;
+    virtual void postOnSorobanApplyThread(std::function<void()>&& f,
+                                          std::string jobName) override;
+#endif
+
     virtual void postOnMainThread(std::function<void()>&& f, std::string&& name,
                                   Scheduler::ActionType type) override;
     virtual void postOnBackgroundThread(std::function<void()>&& f,
@@ -90,6 +97,7 @@ class ApplicationImpl : public Application
 
     virtual void postOnOverlayThread(std::function<void()>&& f,
                                      std::string jobName) override;
+
     virtual void start() override;
     void startServices();
 
@@ -156,6 +164,11 @@ class ApplicationImpl : public Application
     std::unique_ptr<asio::io_context> mOverlayIOContext;
     std::unique_ptr<asio::io_context::work> mOverlayWork;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    std::unique_ptr<asio::io_context> mSorobanApplyIOContext;
+    std::unique_ptr<asio::io_context::work> mSorobanApplyWork;
+#endif
+
     std::unique_ptr<BucketManager> mBucketManager;
     std::unique_ptr<Database> mDatabase;
     std::unique_ptr<OverlayManager> mOverlayManager;
@@ -219,6 +232,11 @@ class ApplicationImpl : public Application
     medida::Timer& mPostOnMainThreadDelay;
     medida::Timer& mPostOnBackgroundThreadDelay;
     medida::Timer& mPostOnOverlayThreadDelay;
+    
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    std::vector<std::thread> mSorobanApplyThreads;
+    medida::Timer& mPostOnSorobanApplyThreadDelay;
+#endif
 
     VirtualClock::system_time_point mStartedOn;
 

@@ -229,6 +229,14 @@ class Application
     virtual asio::io_context& getEvictionIOContext() = 0;
     virtual asio::io_context& getOverlayIOContext() = 0;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    virtual asio::io_context& getSorobanApplyIOContext() = 0;
+    virtual void maybeResizeSorobanApplyThreads(uint32_t threads) = 0;
+
+    virtual void postOnSorobanApplyThread(std::function<void()>&& f,
+                                          std::string jobName) = 0;
+#endif
+
     virtual void postOnMainThread(
         std::function<void()>&& f, std::string&& name,
         Scheduler::ActionType type = Scheduler::ActionType::NORMAL_ACTION) = 0;

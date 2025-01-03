@@ -101,6 +101,11 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
     , mOverlayWork(mOverlayIOContext ? std::make_unique<asio::io_context::work>(
                                            *mOverlayIOContext)
                                      : nullptr)
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    , mSorobanApplyIOContext(std::make_unique<asio::io_context>())
+    , mSorobanApplyWork(
+          std::make_unique<asio::io_context::work>(*mSorobanApplyIOContext))
+#endif
     , mWorkerThreads()
     , mEvictionThread()
     , mStopSignals(clock.getIOContext(), SIGINT)
@@ -116,6 +121,10 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
           mMetrics->NewTimer({"app", "post-on-background-thread", "delay"}))
     , mPostOnOverlayThreadDelay(
           mMetrics->NewTimer({"app", "post-on-overlay-thread", "delay"}))
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    , mPostOnSorobanApplyThreadDelay(
+          mMetrics->NewTimer({"app", "post-on-soroban-apply-thread", "delay"}))
+#endif
     , mStartedOn(clock.system_now())
 {
 #ifdef SIGQUIT
@@ -1049,6 +1058,20 @@ ApplicationImpl::joinAllThreads()
         mOverlayThread->join();
     }
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    if (mSorobanApplyWork)
+    {
+        mSorobanApplyWork.reset();
+    }
+
+    LOG_INFO(DEFAULT_LOG, "Joining {} soroban apply threads",
+             mSorobanApplyThreads.size());
+    for (auto& t : mSorobanApplyThreads)
+    {
+        t.join();
+    }
+#endif
+
     LOG_INFO(DEFAULT_LOG, "Joined all {} threads", (mWorkerThreads.size() + 1));
 }
 
@@ -1531,6 +1554,49 @@ ApplicationImpl::getOverlayIOContext()
     releaseAssert(mOverlayIOContext);
     return *mOverlayIOContext;
 }
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+asio::io_context&
+ApplicationImpl::getSorobanApplyIOContext()
+{
+    releaseAssert(mSorobanApplyIOContext);
+    return *mSorobanApplyIOContext;
+}
+
+void
+ApplicationImpl::maybeResizeSorobanApplyThreads(uint32_t threads)
+{
+    if (mSorobanApplyThreads.size() > threads)
+    {
+        // TODO: Make sure this is safe
+        mSorobanApplyThreads.resize(threads);
+    }
+    else
+    {
+        while (mSorobanApplyThreads.size() < threads)
+        {
+            auto thread = std::thread{[this]() {
+                releaseAssert(mSorobanApplyIOContext);
+                mSorobanApplyIOContext->run();
+            }};
+            mSorobanApplyThreads.emplace_back(std::move(thread));
+        }
+    }
+}
+
+void
+ApplicationImpl::postOnSorobanApplyThread(std::function<void()>&& f,
+                                          std::string jobName)
+{
+    releaseAssert(mSorobanApplyIOContext);
+    LogSlowExecution isSlow{std::move(jobName), LogSlowExecution::Mode::MANUAL,
+                            "executed after"};
+    asio::post(*mSorobanApplyIOContext, [this, f = std::move(f), isSlow]() {
+        mPostOnSorobanApplyThreadDelay.Update(isSlow.checkElapsedTime());
+        f();
+    });
+}
+#endif
 
 void
 ApplicationImpl::postOnMainThread(std::function<void()>&& f, std::string&& name,
