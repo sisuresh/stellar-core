@@ -1378,6 +1378,11 @@ LedgerManagerImpl::updateNetworkConfig(AbstractLedgerTxn& ltx)
             ltx, mApp.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION,
             ledgerVersion);
         publishSorobanMetrics();
+
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+        mApp.maybeResizeSorobanApplyThreads(
+            mSorobanNetworkConfig->ledgerMaxParallelThreads());
+#endif
     }
     else
     {
@@ -1833,7 +1838,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         app.getLedgerManager().getSorobanNetworkConfig();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
-    auto stageFootprint = getStageTtlFootprint(stage);
+    auto stageTtlFootprint = getStageTtlFootprint(stage);
 
     std::vector<ThreadEntryMap> entryMapsByThread;
     for (auto const& thread : stage)
@@ -1850,13 +1855,24 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 
         auto const& thread = stage.at(i);
 
+        using task_t = std::packaged_task<UnorderedMap<LedgerKey, uint32_t>()>;
+
         // TODO: Should entry map be copied in and returned instead for safety?
-        // TODO: Use thread pool
-        roTtlDeltas.emplace_back(std::async(
-            &LedgerManagerImpl::applyThread, this, std::ref(entryMapByThread),
-            std::ref(thread), std::ref(stageFootprint), config, sorobanConfig,
-            std::ref(ledgerInfo), sorobanBasePrngSeed,
-            std::ref(sorobanMetrics)));
+        auto task = std::make_shared<task_t>(
+            [&lm = *this, &entryMapByThread = entryMapByThread,
+             &thread = thread, &stageTtlFootprint = stageTtlFootprint, config,
+             sorobanConfig, &ledgerInfo = ledgerInfo, sorobanBasePrngSeed,
+             &sorobanMetrics = sorobanMetrics] {
+                return lm.applyThread(entryMapByThread, thread,
+                                      stageTtlFootprint, config, sorobanConfig,
+                                      ledgerInfo, sorobanBasePrngSeed,
+                                      sorobanMetrics);
+            });
+
+        mApp.postOnSorobanApplyThread(bind(&task_t::operator(), task),
+                                      "Apply Soroban Stage");
+
+        roTtlDeltas.emplace_back(task->get_future());
     }
 
     UnorderedMap<LedgerKey, uint32_t> cumulativeRoTtlDeltas;

@@ -84,6 +84,13 @@ class ApplicationImpl : public Application
     virtual asio::io_context& getOverlayIOContext() override;
     virtual asio::io_context& getLedgerCloseIOContext() override;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    virtual asio::io_context& getSorobanApplyIOContext() override;
+    virtual void maybeResizeSorobanApplyThreads(uint32_t threads) override;
+    virtual void postOnSorobanApplyThread(std::function<void()>&& f,
+                                          std::string jobName) override;
+#endif
+
     virtual void postOnMainThread(std::function<void()>&& f, std::string&& name,
                                   Scheduler::ActionType type) override;
     virtual void postOnBackgroundThread(std::function<void()>&& f,
@@ -164,6 +171,11 @@ class ApplicationImpl : public Application
     std::unique_ptr<asio::io_context> mLedgerCloseIOContext;
     std::unique_ptr<asio::io_context::work> mLedgerCloseWork;
 
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    std::unique_ptr<asio::io_context> mSorobanApplyIOContext;
+    std::unique_ptr<asio::io_context::work> mSorobanApplyWork;
+#endif
+
     std::unique_ptr<BucketManager> mBucketManager;
     std::unique_ptr<Database> mDatabase;
     std::unique_ptr<OverlayManager> mOverlayManager;
@@ -234,6 +246,11 @@ class ApplicationImpl : public Application
     medida::Timer& mPostOnBackgroundThreadDelay;
     medida::Timer& mPostOnOverlayThreadDelay;
     medida::Timer& mPostOnLedgerCloseThreadDelay;
+    
+#ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
+    std::vector<std::thread> mSorobanApplyThreads;
+    medida::Timer& mPostOnSorobanApplyThreadDelay;
+#endif
 
     VirtualClock::system_time_point mStartedOn;
 
