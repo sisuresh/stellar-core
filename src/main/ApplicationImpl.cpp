@@ -1423,21 +1423,51 @@ ApplicationImpl::getSorobanApplyIOContext()
 void
 ApplicationImpl::maybeResizeSorobanApplyThreads(uint32_t threads)
 {
+    // TODO: We can allow more physical threads to be used. We can add a config
+    // override, but it won't be usefull. Without adding logic to partition the
+    // clusters even further.
     if (mSorobanApplyThreads.size() > threads)
     {
-        // TODO: Make sure this is safe
-        mSorobanApplyThreads.resize(threads);
-    }
-    else
-    {
-        while (mSorobanApplyThreads.size() < threads)
+        // TODO: There should be a better way to reduce the number of threads.
+        // Make sure this is safe.
+        while (mSorobanApplyThreads.size() > threads)
         {
-            auto thread = std::thread{[this]() {
-                releaseAssert(mSorobanApplyIOContext);
-                mSorobanApplyIOContext->run();
-            }};
-            mSorobanApplyThreads.emplace_back(std::move(thread));
+            if (mSorobanApplyWork)
+            {
+                mSorobanApplyWork.reset();
+            }
+
+            LOG_INFO(
+                DEFAULT_LOG,
+                "Joining {} soroban apply threads for thread count reduction",
+                mSorobanApplyThreads.size());
+            for (auto& t : mSorobanApplyThreads)
+            {
+                t.join();
+            }
+
+            mSorobanApplyThreads.clear();
+
+            mSorobanApplyIOContext->stop();
+
+            mSorobanApplyWork = std::make_unique<asio::io_context::work>(
+                *mSorobanApplyIOContext);
         }
+    }
+
+    while (mSorobanApplyThreads.size() < threads)
+    {
+        auto thread = std::thread{[this]() {
+            releaseAssert(mSorobanApplyIOContext);
+            mSorobanApplyIOContext->run();
+        }};
+
+        mSorobanApplyThreads.emplace_back(std::move(thread));
+    }
+
+    if (mSorobanApplyIOContext->stopped())
+    {
+        mSorobanApplyIOContext->restart();
     }
 }
 
