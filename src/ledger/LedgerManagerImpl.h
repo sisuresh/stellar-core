@@ -122,7 +122,6 @@ class LedgerManagerImpl : public LedgerManager
 
     UnorderedMap<LedgerKey, uint32_t>
     applyThread(ThreadEntryMap& entryMapByCluster, Thread const& thread,
-                UnorderedMap<LedgerKey, bool> const& stageTtlFootprint,
                 Config const& config, SorobanNetworkConfig const& sorobanConfig,
                 ParallelLedgerInfo const& ledgerInfo,
                 Hash const& sorobanBasePrngSeed,

@@ -1716,19 +1716,13 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
 }
 
 UnorderedMap<LedgerKey, uint32_t>
-LedgerManagerImpl::applyThread(
-    ThreadEntryMap& entryMap, Thread const& thread,
-    UnorderedMap<LedgerKey, bool> const&
-        stageTtlFootprint /*Make sure this is thread safe*/,
-    Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    ParallelLedgerInfo const& ledgerInfo, Hash const& sorobanBasePrngSeed,
-    SorobanMetrics& sorobanMetrics)
+LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
+                               Config const& config,
+                               SorobanNetworkConfig const& sorobanConfig,
+                               ParallelLedgerInfo const& ledgerInfo,
+                               Hash const& sorobanBasePrngSeed,
+                               SorobanMetrics& sorobanMetrics)
 {
-    // TTL extensions for keys that don't appear in any RW set can't be
-    // observable between transactions, so we track them separately and as a
-    // cost optimization, we add them up and apply the cumulative bump at the
-    // end.
-
     UnorderedMap<LedgerKey, uint32_t> readOnlyTtlExtensions;
 
     for (auto const& txBundle : thread)
@@ -1740,12 +1734,68 @@ LedgerManagerImpl::applyThread(
         txSubSeedSha.add(xdr::xdr_to_opaque(txBundle.txNum));
         Hash txSubSeed = txSubSeedSha.finish();
 
+        auto const& readWrite =
+            txBundle.tx->sorobanResources().footprint.readWrite;
+        for (auto const& lk : readWrite)
+        {
+            if (!isSorobanEntry(lk))
+            {
+                continue;
+            }
+
+            auto const& ttlKey = getTTLKey(lk);
+            auto extIt = readOnlyTtlExtensions.find(ttlKey);
+            if (extIt != readOnlyTtlExtensions.end() && extIt->second != 0)
+            {
+                // "Commit" all RO cumulative bumps now that the key is in a
+                // readWrite set
+                auto it = entryMap.find(ttlKey);
+                if (it != entryMap.end() &&
+                    it->second.mLedgerEntry /*TODO: Should we assert on this?*/)
+                {
+                    it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
+                        std::min(
+                            sorobanConfig.stateArchivalSettings().maxEntryTTL,
+                            add_sat(it->second.mLedgerEntry->data.ttl()
+                                        .liveUntilLedgerSeq,
+                                    extIt->second));
+
+                    // Mark as dirty so this entry gets written.
+                    it->second.isDirty = true;
+                }
+                extIt->second = 0;
+            }
+        }
+
         auto res = txBundle.tx->parallelApply(
             entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
             sorobanMetrics, txSubSeed, txBundle.meta);
 
         if (res.mSuccess)
         {
+            // TODO: We could create these maps for all txs in collectEntries
+            // and pass them in to avoid iterating over footprints again.
+            // TODO: Cleanup
+            UnorderedMap<LedgerKey, bool> isReadOnlyTTLMap;
+            for (auto const& ro :
+                 txBundle.tx->sorobanResources().footprint.readOnly)
+            {
+                if (!isSorobanEntry(ro))
+                {
+                    continue;
+                }
+                isReadOnlyTTLMap.emplace(getTTLKey(ro), true);
+            }
+            for (auto const& rw :
+                 txBundle.tx->sorobanResources().footprint.readWrite)
+            {
+                if (!isSorobanEntry(rw))
+                {
+                    continue;
+                }
+                isReadOnlyTTLMap.emplace(getTTLKey(rw), false);
+            }
+
             // now apply the entry changes to entryMap
             for (auto const& entry : res.mModifiedEntryMap)
             {
@@ -1757,12 +1807,12 @@ LedgerManagerImpl::applyThread(
 
                 auto opType = txBundle.tx->getRawOperations().at(0).body.type();
 
-                auto footprintIt = stageTtlFootprint.find(lk);
+                auto isReadOnlyTTLIt = isReadOnlyTTLMap.find(lk);
 
                 if (opType != RESTORE_FOOTPRINT && lk.type() == TTL &&
                     it->second.mLedgerEntry && updatedLe &&
-                    footprintIt != stageTtlFootprint.end() &&
-                    footprintIt->second /*isReadOnly*/)
+                    isReadOnlyTTLIt != isReadOnlyTTLMap.end() &&
+                    isReadOnlyTTLIt->second /*isReadOnly*/)
                 {
                     // TODO: Can the ttl be unchanged here?
                     releaseAssertOrThrow(
@@ -1778,9 +1828,7 @@ LedgerManagerImpl::applyThread(
                     {
                         // We will cap the ttl bump to the max network setting
                         // later when updating the ledger entry
-                        ttlIt->second = UINT32_MAX - ttlIt->second < delta
-                                            ? UINT32_MAX
-                                            : ttlIt->second + delta;
+                        ttlIt->second = add_sat(ttlIt->second, delta);
                     }
                     else
                     {
@@ -1789,10 +1837,6 @@ LedgerManagerImpl::applyThread(
                 }
                 else
                 {
-                    // readOnlyTtlExtensions should only be used for keys that
-                    // never appear in a RW set in this thread
-                    releaseAssertOrThrow(readOnlyTtlExtensions.count(lk) == 0);
-
                     // A entry deletion will be marked by a nullopt le.
                     // Set the dirty bit so it'll be written to ltx later.
                     it->second = {updatedLe, true};
@@ -1838,8 +1882,6 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         app.getLedgerManager().getSorobanNetworkConfig();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
-    auto stageTtlFootprint = getStageTtlFootprint(stage);
-
     std::vector<ThreadEntryMap> entryMapsByThread;
     for (auto const& thread : stage)
     {
@@ -1860,13 +1902,11 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         // TODO: Should entry map be copied in and returned instead for safety?
         auto task = std::make_shared<task_t>(
             [&lm = *this, &entryMapByThread = entryMapByThread,
-             &thread = thread, &stageTtlFootprint = stageTtlFootprint, config,
-             sorobanConfig, &ledgerInfo = ledgerInfo, sorobanBasePrngSeed,
-             &sorobanMetrics = sorobanMetrics] {
-                return lm.applyThread(entryMapByThread, thread,
-                                      stageTtlFootprint, config, sorobanConfig,
-                                      ledgerInfo, sorobanBasePrngSeed,
-                                      sorobanMetrics);
+             &thread = thread, config, sorobanConfig, &ledgerInfo = ledgerInfo,
+             sorobanBasePrngSeed, &sorobanMetrics = sorobanMetrics] {
+                return lm.applyThread(entryMapByThread, thread, config,
+                                      sorobanConfig, ledgerInfo,
+                                      sorobanBasePrngSeed, sorobanMetrics);
             });
 
         mApp.postOnSorobanApplyThread(bind(&task_t::operator(), task),
@@ -1884,9 +1924,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
             auto it = cumulativeRoTtlDeltas.emplace(delta.first, delta.second);
             if (!it.second)
             {
-                it.first->second = UINT32_MAX - it.first->second < delta.second
-                                       ? UINT32_MAX
-                                       : it.first->second + delta.second;
+                it.first->second = add_sat(it.first->second, delta.second);
             }
         }
     }
@@ -1958,6 +1996,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
                     {
                         auto currLiveUntil =
                             ltxe.current().data.ttl().liveUntilLedgerSeq;
+
                         releaseAssertOrThrow(
                             updatedEntry.data.ttl().liveUntilLedgerSeq >=
                             currLiveUntil);
@@ -1980,18 +2019,21 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         }
     }
 
-    // Do RO ttl extensions without a RW tx in the same
-    // stage here
     for (auto const& kvp : cumulativeRoTtlDeltas)
     {
         auto ltxe = ltxInner.load(kvp.first);
+
+        // The entry was deleted
+        if (!ltxe)
+        {
+            continue;
+        }
         // The entry has to exist because this key doesn't exist in any RW set.
         releaseAssertOrThrow(ltxe);
 
         auto currentTTL = ltxe.current().data.ttl().liveUntilLedgerSeq;
-        auto cumulativeTTL = UINT32_MAX - currentTTL < kvp.second
-                                 ? UINT32_MAX
-                                 : currentTTL + kvp.second;
+
+        auto cumulativeTTL = add_sat(currentTTL, kvp.second);
 
         auto maxEntryTTL = app.getLedgerManager()
                                .getSorobanNetworkConfig()
