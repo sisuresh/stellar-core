@@ -23,6 +23,8 @@ VirtualClock::duration exponentialBackoff(uint64_t n);
 
 bool rand_flip();
 
+template <typename T> T add_sat(T a, T b);
+
 typedef std::minstd_rand stellar_default_random_engine;
 
 extern stellar_default_random_engine gRandomEngine;

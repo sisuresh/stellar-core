@@ -33,6 +33,16 @@ rand_flip()
     return (gRandomEngine() & 1);
 }
 
+template <typename T>
+T
+add_sat(T a, T b)
+{
+    return std::numeric_limits<T>::max() - a < b ? std::numeric_limits<T>::max()
+                                                 : a + b;
+}
+
+template uint32_t add_sat(uint32_t a, uint32_t b);
+
 double
 closest_cluster(double p, std::set<double> const& centers)
 {
