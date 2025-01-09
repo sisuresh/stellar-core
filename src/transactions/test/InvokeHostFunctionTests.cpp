@@ -5015,18 +5015,20 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
         cfg.mLedgerMaxParallelThreads = 2;
     });
 
-    // Wasm and instance should not expire during test
-    test.invokeExtendOp(client.getContract().getKeys(), 10'000);
-
     auto issuerKey = getAccount("issuer");
     Asset idr = makeAsset(issuerKey, "IDR");
     AssetContractTestClient assetClient(test, idr);
+
+    // Wasm and instance should not expire during test
+    test.invokeExtendOp(client.getContract().getKeys(), 10'000);
+    test.invokeExtendOp(assetClient.getContract().getKeys(), 10'000);
 
     auto& lm = app.getLedgerManager();
 
     const int64_t startingBalance = lm.getLastMinBalance(50);
 
     auto& root = test.getRoot();
+    auto a0 = root.create("a0", startingBalance);
     auto a1 = root.create("a1", startingBalance);
     auto a2 = root.create("a2", startingBalance);
     auto a3 = root.create("a3", startingBalance);
@@ -5049,6 +5051,11 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
     REQUIRE(client.put("key2", ContractDataDurability::TEMPORARY, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 
+    REQUIRE(test.getTTL(client.getContract().getDataKey(
+                makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY)) ==
+            41);
+    REQUIRE(test.getLCLSeq() == 26);
+
     REQUIRE(client.put("key4", ContractDataDurability::PERSISTENT, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 
@@ -5064,143 +5071,250 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
 
     auto successesBefore = hostFnSuccessMeter.count();
 
-    // All of these put_temporary txs will have the same fee, resulting in some
-    // non-determinism when building tx set. To avoid that, use the i1Spec fee
-    // to offet the other txs inclusion fees.
-    auto i1Spec =
-        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY);
-    auto i1 = client.getContract().prepareInvocation(
-        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
-        i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
-    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+    SECTION("basic test")
+    {
+        // All of these put_temporary txs will have the same fee, resulting in
+        // some non-determinism when building tx set. To avoid that, use the
+        // i1Spec fee to offet the other txs inclusion fees.
+        auto i1Spec =
+            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY);
+        auto i1 = client.getContract().prepareInvocation(
+            "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+            i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
+        auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
 
-    // extend key2
-    auto i2 = client.getContract().prepareInvocation(
-        "extend_temporary",
-        {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
-        client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 2));
-    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+        // extend key2
+        auto i2 = client.getContract().prepareInvocation(
+            "extend_temporary",
+            {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
+            client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 2));
+        auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
 
-    // Rewrite key1 value
-    auto i3 = client.getContract().prepareInvocation(
-        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(8)},
-        client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 3));
-    auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
+        // Rewrite key1 value
+        auto i3 = client.getContract().prepareInvocation(
+            "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(8)},
+            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 3));
+        auto tx3 = i3.withExactNonRefundableResourceFee().createTx(&a3);
 
-    // Tx4 should fail due to low refundable fee.
-    auto i4Spec = client.writeKeySpec("key3", ContractDataDurability::TEMPORARY)
-                      .setRefundableResourceFee(1)
-                      .setInclusionFee(i1Spec.getInclusionFee() + 4);
-    auto i4 = client.getContract().prepareInvocation(
-        "put_temporary", {makeSymbolSCVal("key3"), makeU64SCVal(1)}, i4Spec);
-    auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
+        // Tx4 should fail due to low refundable fee.
+        auto i4Spec =
+            client.writeKeySpec("key3", ContractDataDurability::TEMPORARY)
+                .setRefundableResourceFee(1)
+                .setInclusionFee(i1Spec.getInclusionFee() + 4);
+        auto i4 = client.getContract().prepareInvocation(
+            "put_temporary", {makeSymbolSCVal("key3"), makeU64SCVal(1)},
+            i4Spec);
+        auto tx4 = i4.withExactNonRefundableResourceFee().createTx(&a4);
 
-    // Key4 is going to be extended twice and we'll accumulate the bumps because
-    // the key will only exist in RO sets.
-    auto preExtendTTL = test.getTTL(client.getContract().getDataKey(
-        makeSymbolSCVal("key4"), ContractDataDurability::PERSISTENT));
-    auto key4Spec =
-        client.readKeySpec("key4", ContractDataDurability::PERSISTENT);
+        // Key4 is going to be extended twice and we'll accumulate the bumps
+        // because the key will only exist in RO sets.
+        auto preExtendTTL = test.getTTL(client.getContract().getDataKey(
+            makeSymbolSCVal("key4"), ContractDataDurability::PERSISTENT));
+        auto key4Spec =
+            client.readKeySpec("key4", ContractDataDurability::PERSISTENT);
 
-    auto i5 = client.getContract().prepareInvocation(
-        "extend_persistent",
-        {makeSymbolSCVal("key4"), makeU32SCVal(1000), makeU32SCVal(1000)},
-        key4Spec.setInclusionFee(i1Spec.getInclusionFee() + 5));
-    auto tx5 = i5.withExactNonRefundableResourceFee().createTx(&a5);
+        auto i5 = client.getContract().prepareInvocation(
+            "extend_persistent",
+            {makeSymbolSCVal("key4"), makeU32SCVal(1000), makeU32SCVal(1000)},
+            key4Spec.setInclusionFee(i1Spec.getInclusionFee() + 5));
+        auto tx5 = i5.withExactNonRefundableResourceFee().createTx(&a5);
 
-    auto i6 = client.getContract().prepareInvocation(
-        "extend_persistent",
-        {makeSymbolSCVal("key4"), makeU32SCVal(1000), makeU32SCVal(1000)},
-        key4Spec.setInclusionFee(i1Spec.getInclusionFee() + 6));
-    auto tx6 = i6.withExactNonRefundableResourceFee().createTx(&a6);
+        auto i6 = client.getContract().prepareInvocation(
+            "extend_persistent",
+            {makeSymbolSCVal("key4"), makeU32SCVal(1000), makeU32SCVal(1000)},
+            key4Spec.setInclusionFee(i1Spec.getInclusionFee() + 6));
+        auto tx6 = i6.withExactNonRefundableResourceFee().createTx(&a6);
 
-    // key2 is already in a readWrite set, so make sure this
-    // extension is serialized.
-    auto i7 = client.getContract().prepareInvocation(
-        "extend_temporary",
-        {makeSymbolSCVal("key2"), makeU32SCVal(200), makeU32SCVal(200)},
-        client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 7));
-    auto tx7 = i7.withExactNonRefundableResourceFee().createTx(&a9);
+        auto i7 = client.getContract().prepareInvocation(
+            "extend_temporary",
+            {makeSymbolSCVal("key2"), makeU32SCVal(200), makeU32SCVal(200)},
+            client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 7));
+        auto tx7 = i7.withExactNonRefundableResourceFee().createTx(&a9);
 
-    // If this executes before tx9, it's is expected to fail
-    auto i8 = client.getContract().prepareInvocation(
-        "extend_temporary",
-        {makeSymbolSCVal("extendDelete"), makeU32SCVal(1000),
-         makeU32SCVal(1000)},
-        client.readKeySpec("extendDelete", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 8));
-    auto tx8 = i8.withExactNonRefundableResourceFee().createTx(&a10);
+        // If this executes before tx9, it's is expected to fail
+        auto i8 = client.getContract().prepareInvocation(
+            "extend_temporary",
+            {makeSymbolSCVal("extendDelete"), makeU32SCVal(1000),
+             makeU32SCVal(1000)},
+            client
+                .readKeySpec("extendDelete", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 8));
+        auto tx8 = i8.withExactNonRefundableResourceFee().createTx(&a10);
 
-    auto i9 = client.getContract().prepareInvocation(
-        "del_temporary", {makeSymbolSCVal("extendDelete")},
-        client.writeKeySpec("extendDelete", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 9));
-    auto tx9 = i9.withExactNonRefundableResourceFee().createTx(&a11);
+        auto i9 = client.getContract().prepareInvocation(
+            "del_temporary", {makeSymbolSCVal("extendDelete")},
+            client
+                .writeKeySpec("extendDelete", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 9));
+        auto tx9 = i9.withExactNonRefundableResourceFee().createTx(&a11);
 
-    auto a7Addr = makeAccountAddress(a7.getPublicKey());
-    auto transferTx1 = assetClient.getTransferTx(a8, a7Addr, 50);
+        auto a7Addr = makeAccountAddress(a7.getPublicKey());
+        auto transferTx1 = assetClient.getTransferTx(a8, a7Addr, 50);
 
-    auto issuerAddr = makeAccountAddress(issuer.getPublicKey());
-    auto transferTx2 = assetClient.getTransferTx(issuer, a7Addr, 25);
+        auto issuerAddr = makeAccountAddress(issuer.getPublicKey());
+        auto transferTx2 = assetClient.getTransferTx(issuer, a7Addr, 25);
 
-    std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
-    sorobanTxs.emplace_back(tx1);
-    sorobanTxs.emplace_back(tx2);
-    sorobanTxs.emplace_back(tx3);
-    sorobanTxs.emplace_back(tx4);
-    sorobanTxs.emplace_back(tx5);
-    sorobanTxs.emplace_back(tx6);
-    sorobanTxs.emplace_back(tx7);
-    sorobanTxs.emplace_back(tx8);
-    sorobanTxs.emplace_back(tx9);
+        std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+        sorobanTxs.emplace_back(tx1);
+        sorobanTxs.emplace_back(tx2);
+        sorobanTxs.emplace_back(tx3);
+        sorobanTxs.emplace_back(tx4);
+        sorobanTxs.emplace_back(tx5);
+        sorobanTxs.emplace_back(tx6);
+        sorobanTxs.emplace_back(tx7);
+        sorobanTxs.emplace_back(tx8);
+        sorobanTxs.emplace_back(tx9);
 
-    // These two transactions have the same fee, so surge pricing will
-    // non-deterministically order them. This doesn't matter for our test though
-    // because we just check trustlines balances at the end.
-    sorobanTxs.emplace_back(transferTx1);
-    sorobanTxs.emplace_back(transferTx2);
+        // These two transactions have the same fee, so surge pricing will
+        // non-deterministically order them. This doesn't matter for our test
+        // though because we just check trustlines balances at the end.
+        sorobanTxs.emplace_back(transferTx1);
+        sorobanTxs.emplace_back(transferTx2);
 
-    auto r = closeLedger(test.getApp(), sorobanTxs);
-    REQUIRE(r.results.size() == sorobanTxs.size());
+        auto r = closeLedger(test.getApp(), sorobanTxs);
+        REQUIRE(r.results.size() == sorobanTxs.size());
 
-    // std::cout << xdrToCerealString(r, "r") << std::endl;
+        REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
+                sorobanTxs.size() - 1);
+        REQUIRE(hostFnFailureMeter.count() == 1);
 
-    REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
-            sorobanTxs.size() - 1);
-    REQUIRE(hostFnFailureMeter.count() == 1);
+        // One tx will fail
+        checkResults(r, sorobanTxs.size() - 1, 1);
 
-    // One tx will fail
-    checkResults(r, sorobanTxs.size() - 1, 1);
+        REQUIRE(r.results[0]
+                    .result.result.results()[0]
+                    .tr()
+                    .invokeHostFunctionResult()
+                    .code() ==
+                INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
 
-    REQUIRE(r.results[8]
-                .result.result.results()[0]
-                .tr()
-                .invokeHostFunctionResult()
-                .code() == INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
-
-    // Make sure key4's bumps were accumulated
-    REQUIRE(test.getTTL(client.getContract().getDataKey(
+        // Make sure key4's bumps were accumulated
+        REQUIRE(
+            test.getTTL(client.getContract().getDataKey(
                 makeSymbolSCVal("key4"), ContractDataDurability::PERSISTENT)) ==
             (1'000 + test.getLCLSeq() - preExtendTTL) * 2 + preExtendTTL);
 
-    REQUIRE(test.getTTL(client.getContract().getDataKey(
+        REQUIRE(
+            test.getTTL(client.getContract().getDataKey(
                 makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY)) ==
             400 + test.getLCLSeq());
 
-    REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 123) ==
-            INVOKE_HOST_FUNCTION_SUCCESS);
-    REQUIRE(client.get("key2", ContractDataDurability::TEMPORARY, 0) ==
-            INVOKE_HOST_FUNCTION_SUCCESS);
-    REQUIRE(client.has("key3", ContractDataDurability::TEMPORARY, false) ==
-            INVOKE_HOST_FUNCTION_SUCCESS);
-    REQUIRE(client.has("extendDelete", ContractDataDurability::TEMPORARY,
-                       false) == INVOKE_HOST_FUNCTION_SUCCESS);
+        REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 123) ==
+                INVOKE_HOST_FUNCTION_SUCCESS);
+        REQUIRE(client.get("key2", ContractDataDurability::TEMPORARY, 0) ==
+                INVOKE_HOST_FUNCTION_SUCCESS);
+        REQUIRE(client.has("key3", ContractDataDurability::TEMPORARY, false) ==
+                INVOKE_HOST_FUNCTION_SUCCESS);
+        REQUIRE(client.has("extendDelete", ContractDataDurability::TEMPORARY,
+                           false) == INVOKE_HOST_FUNCTION_SUCCESS);
 
-    REQUIRE(a7.getTrustlineBalance(idr) == 75);
-    REQUIRE(a8.getTrustlineBalance(idr) == 150);
+        REQUIRE(a7.getTrustlineBalance(idr) == 75);
+        REQUIRE(a8.getTrustlineBalance(idr) == 150);
+    }
+
+    auto singleRWMultiROExtensionTest = [&]() {
+        // Test increase and then decrease of clusters
+        modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
+            cfg.mLedgerMaxInstructions = 100'000'000;
+            cfg.mLedgerMaxParallelThreads = 4;
+        });
+
+        modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
+            cfg.mLedgerMaxInstructions = 100'000'000;
+            cfg.mLedgerMaxParallelThreads = 1;
+        });
+
+        stellar::uniform_int_distribution<uint32_t> dist(50, 1000);
+        std::vector<uint32_t> extendTos;
+
+        std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
+
+        auto inclusionFee =
+            client.writeKeySpec("key2", ContractDataDurability::TEMPORARY)
+                .getInclusionFee();
+        for (size_t i = 0; i < 6; i++)
+        {
+            auto extendTo = dist(gRandomEngine);
+            extendTos.emplace_back(extendTo);
+
+            // The first tx will be a rw, the rest are ro
+            auto spec = i == 0 ? client.writeKeySpec(
+                                     "key2", ContractDataDurability::TEMPORARY)
+                               : client.readKeySpec(
+                                     "key2", ContractDataDurability::TEMPORARY);
+            spec = spec.setInclusionFee(inclusionFee++);
+
+            auto invocation = client.getContract().prepareInvocation(
+                "extend_temporary",
+                {makeSymbolSCVal("key2"), makeU32SCVal(extendTo),
+                 makeU32SCVal(extendTo)},
+                spec);
+
+            auto account =
+                TestAccount(app, getAccount(("a" + std::to_string(i)).c_str()));
+            auto tx = invocation.withExactNonRefundableResourceFee().createTx(
+                &account);
+            sorobanTxs.emplace_back(tx);
+        }
+
+        // Save a map of tx hashs to extensions so we can do a lookup against
+        // the ordering of tx results to determine where the readWrite
+        // transaction was applied.
+        UnorderedMap<Hash, uint32_t> txHashToExtendTO;
+        for (size_t i = 0; i < sorobanTxs.size(); ++i)
+        {
+            txHashToExtendTO.emplace(sorobanTxs.at(i)->getContentsHash(),
+                                     extendTos.at(i));
+        }
+
+        successesBefore = hostFnSuccessMeter.count();
+        auto r = closeLedger(test.getApp(), sorobanTxs);
+
+        REQUIRE(r.results.size() == sorobanTxs.size());
+
+        uint32_t ttl = test.getTTL(client.getContract().getDataKey(
+            makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY));
+        uint32_t cumulativeExtensions = 0;
+        for (auto const& res : r.results)
+        {
+            // The first tx in sorobanTxs is the readWrite tx
+            if (res.transactionHash == sorobanTxs.at(0)->getContentsHash())
+            {
+                ttl += cumulativeExtensions;
+                cumulativeExtensions = 0;
+            }
+            else
+            {
+                cumulativeExtensions +=
+                    txHashToExtendTO[res.transactionHash] > ttl
+                        ? txHashToExtendTO[res.transactionHash] - ttl
+                        : 0;
+            }
+        }
+
+        REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
+                sorobanTxs.size());
+        REQUIRE(hostFnFailureMeter.count() == 0);
+
+        checkResults(r, sorobanTxs.size(), 0);
+
+        REQUIRE(test.getTTL(client.getContract().getDataKey(
+                    makeSymbolSCVal("key2"),
+                    ContractDataDurability::TEMPORARY)) == ttl);
+    };
+
+    for (size_t i = 0; i < 10; ++i)
+    {
+        SECTION("multi RO extensions with a single RW extension in a single "
+                "stage and cluster. Run " +
+                std::to_string(i))
+        {
+            singleRWMultiROExtensionTest();
+        }
+    }
 }
 
 TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
