@@ -294,10 +294,9 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
 void
 TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta,
-                                       MutableTxResultPtr resPayload,
-                                       bool chargeFee) const
+                                       MutableTxResultPtr resPayload) const
 {
-    mTransactionFrame->preParallelApply(app, ltx, meta, resPayload, chargeFee);
+    mTransactionFrame->preParallelApply(app, ltx, meta, resPayload);
 }
 
 ParallelOpReturnVal

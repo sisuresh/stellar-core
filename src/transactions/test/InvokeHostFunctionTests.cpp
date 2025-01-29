@@ -57,8 +57,10 @@ checkResults(TransactionResultSet& r, int expectedSuccess, int expectedFailed)
     int failedCounter = 0;
     for (size_t i = 0; i < r.results.size(); ++i)
     {
-        r.results[i].result.result.code() == txSUCCESS ? ++successCounter
-                                                       : ++failedCounter;
+        r.results[i].result.result.code() == txSUCCESS ||
+                r.results[i].result.result.code() == txFEE_BUMP_INNER_SUCCESS
+            ? ++successCounter
+            : ++failedCounter;
     }
 
     REQUIRE(successCounter == expectedSuccess);
@@ -5392,6 +5394,20 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
             i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
         auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
 
+        TransactionEnvelope fbTx1(ENVELOPE_TYPE_TX_FEE_BUMP);
+        fbTx1.feeBump().tx.feeSource = toMuxedAccount(a1);
+        fbTx1.feeBump().tx.fee = tx1->getEnvelope().v1().tx.fee * 5;
+
+        fbTx1.feeBump().tx.innerTx.type(ENVELOPE_TYPE_TX);
+        fbTx1.feeBump().tx.innerTx.v1() = tx1->getEnvelope().v1();
+
+        fbTx1.feeBump().signatures.emplace_back(SignatureUtils::sign(
+            a1, sha256(xdr::xdr_to_opaque(test.getApp().getNetworkID(),
+                                          ENVELOPE_TYPE_TX_FEE_BUMP,
+                                          fbTx1.feeBump().tx))));
+        auto feeBumpTx1Frame = TransactionFrameBase::makeTransactionFromWire(
+            test.getApp().getNetworkID(), fbTx1);
+
         // extend key2
         auto i2 = client.getContract().prepareInvocation(
             "extend_temporary",
@@ -5467,7 +5483,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
         auto transferTx2 = assetClient.getTransferTx(issuer, a7Addr, 25);
 
         std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
-        sorobanTxs.emplace_back(tx1);
+        sorobanTxs.emplace_back(feeBumpTx1Frame);
         sorobanTxs.emplace_back(tx2);
         sorobanTxs.emplace_back(tx3);
         sorobanTxs.emplace_back(tx4);
