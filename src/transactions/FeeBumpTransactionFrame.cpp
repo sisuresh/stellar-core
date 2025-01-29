@@ -77,16 +77,13 @@ void
 FeeBumpTransactionFrame::preParallelApply(Application& app,
                                           AbstractLedgerTxn& ltx,
                                           TransactionMetaFrame& meta,
-                                          MutableTxResultPtr txResult,
-                                          bool chargeFee) const
+                                          MutableTxResultPtr txResult) const
 {
     try
     {
         LedgerTxn ltxTx(ltx);
         removeOneTimeSignerKeyFromFeeSource(ltxTx);
         meta.pushTxChangesBefore(ltxTx.getChanges());
-
-        mInnerTx->preParallelApply(app, ltxTx, meta, txResult, chargeFee);
         ltxTx.commit();
     }
     catch (std::exception& e)
@@ -96,6 +93,19 @@ FeeBumpTransactionFrame::preParallelApply(Application& app,
     catch (...)
     {
         printErrorAndAbort("Unknown exception in preParallelApply");
+    }
+
+    try
+    {
+        mInnerTx->preParallelApply(app, ltx, meta, txResult, false);
+    }
+    catch (std::exception& e)
+    {
+        printErrorAndAbort("Exception during preParallelApply: ", e.what());
+    }
+    catch (...)
+    {
+        printErrorAndAbort("Unknown exception during preParallelApply");
     }
 }
 

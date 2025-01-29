@@ -239,8 +239,11 @@ class TransactionFrame : public TransactionFrameBase
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
-                          MutableTxResultPtr resPayload,
-                          bool chargeFee) const override;
+                          MutableTxResultPtr resPayload, bool chargeFee) const;
+
+    void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          MutableTxResultPtr resPayload) const override;
 
     ParallelOpReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,

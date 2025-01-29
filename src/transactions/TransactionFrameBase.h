@@ -143,8 +143,7 @@ class TransactionFrameBase
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     virtual void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
-                                  MutableTxResultPtr resPayload,
-                                  bool chargeFee) const = 0;
+                                  MutableTxResultPtr resPayload) const = 0;
 
     virtual ParallelOpReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,

@@ -1804,7 +1804,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
         for (auto const& txBundle : thread)
         {
             txBundle.tx->preParallelApply(app, ltx, txBundle.meta,
-                                          txBundle.resPayload, true);
+                                          txBundle.resPayload);
         }
     }
 

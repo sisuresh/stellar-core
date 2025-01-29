@@ -1581,7 +1581,15 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 #endif
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-// TODO:Do we need the chargeFee parameter in v22?
+
+void
+TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+                                   TransactionMetaFrame& meta,
+                                   MutableTxResultPtr resPayload) const
+{
+    preParallelApply(app, ltx, meta, resPayload, true);
+}
+
 void
 TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                                    TransactionMetaFrame& meta,
@@ -1617,6 +1625,7 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
                 declaredSorobanResourceFee() -
                 sorobanResourceFee->non_refundable_fee);
         }
+
         LedgerTxn ltxTx(ltx);
         auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
                               0, 0, sorobanResourceFee, txResult);
@@ -1656,7 +1665,7 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
         // somehow changes after this but before we apply the transaction. A
         // soroban transaction should not be able to fail in this method, but we
         // can still be more defensive.
-        releaseAssertOrThrow(ok == (txResult->getResultCode() == txSUCCESS));
+        releaseAssertOrThrow(ok == txResult->isSuccess());
     }
     catch (std::exception& e)
     {
@@ -1700,10 +1709,6 @@ TransactionFrame::parallelApply(
         {
             return {false, {}};
         }
-
-        // TODO
-        // auto& opTimer =
-        //    app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         releaseAssertOrThrow(mOperations.size() == 1);
 
