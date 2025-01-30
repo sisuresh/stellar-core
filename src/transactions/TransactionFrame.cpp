@@ -1701,7 +1701,7 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 
 void
-TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                    TransactionMetaFrame& meta,
                                    MutableTxResultPtr resPayload) const
 {
@@ -1709,7 +1709,7 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
 }
 
 void
-TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                    TransactionMetaFrame& meta,
                                    MutableTxResultPtr txResult,
                                    bool chargeFee) const
@@ -1727,26 +1727,21 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
         SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
                                           getSignatures(mEnvelope)};
 
+        auto const& sorobanCfg = app.getSorobanNetworkConfigForApply();
         //  when applying, a failure during tx validation means that
         //  we'll skip trying to apply operations but we'll still
         //  process the sequence number if needed
-        std::optional<FeePair> sorobanResourceFee;
-        if (protocolVersionStartsFrom(ledgerVersion, SOROBAN_PROTOCOL_VERSION))
-        {
-            sorobanResourceFee = computePreApplySorobanResourceFee(
-                ledgerVersion, app.getLedgerManager().getSorobanNetworkConfig(),
-                app.getConfig());
+        auto sorobanResourceFee = computePreApplySorobanResourceFee(
+            ledgerVersion, sorobanCfg, app.getConfig());
 
-            sorobanData->setSorobanConsumedNonRefundableFee(
-                sorobanResourceFee->non_refundable_fee);
-            sorobanData->setSorobanFeeRefund(
-                declaredSorobanResourceFee() -
-                sorobanResourceFee->non_refundable_fee);
-        }
+        sorobanData->setSorobanConsumedNonRefundableFee(
+            sorobanResourceFee.non_refundable_fee);
+        sorobanData->setSorobanFeeRefund(declaredSorobanResourceFee() -
+                                         sorobanResourceFee.non_refundable_fee);
 
         LedgerTxn ltxTx(ltx);
-        auto cv = commonValid(app, signatureChecker, ltxTx, 0, true, chargeFee,
-                              0, 0, sorobanResourceFee, txResult);
+        auto cv = commonValid(app, sorobanCfg, signatureChecker, ltxTx, 0, true,
+                              chargeFee, 0, 0, sorobanResourceFee, txResult);
         if (cv >= ValidationType::kInvalidUpdateSeqNum)
         {
             processSeqNum(ltxTx);
@@ -1769,8 +1764,9 @@ TransactionFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
             // Pre parallel soroban, OperationFrame::checkValid is called right
             // before OperationFrame::doApply, but we do it here instead to
             // avoid making OperationFrame::checkValid thread safe.
-            ok = mOperations.front()->checkValid(app, signatureChecker, ltx,
-                                                 true, opResult, sorobanData);
+            ok = mOperations.front()->checkValid(app, signatureChecker,
+                                                 sorobanCfg, ltx, true,
+                                                 opResult, sorobanData);
             if (!ok)
             {
                 txResult->setInnermostResultCode(txFAILED);

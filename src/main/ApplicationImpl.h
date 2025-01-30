@@ -246,7 +246,7 @@ class ApplicationImpl : public Application
     medida::Timer& mPostOnBackgroundThreadDelay;
     medida::Timer& mPostOnOverlayThreadDelay;
     medida::Timer& mPostOnLedgerCloseThreadDelay;
-    
+
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     std::vector<std::thread> mSorobanApplyThreads;
     medida::Timer& mPostOnSorobanApplyThreadDelay;

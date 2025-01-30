@@ -292,7 +292,8 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
-TransactionTestFrame::preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+TransactionTestFrame::preParallelApply(AppConnector& app,
+                                       AbstractLedgerTxn& ltx,
                                        TransactionMetaFrame& meta,
                                        MutableTxResultPtr resPayload) const
 {

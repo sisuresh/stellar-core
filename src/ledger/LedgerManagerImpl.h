@@ -127,11 +127,11 @@ class LedgerManagerImpl : public LedgerManager
                 Hash const& sorobanBasePrngSeed,
                 SorobanMetrics& sorobanMetrics);
 
-    void applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+    void applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                            ApplyStage const& stage,
                            Hash const& sorobanBasePrngSeed);
 
-    void applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+    void applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,
                             std::vector<ApplyStage> const& stages,
                             Hash const& sorobanBasePrngSeed);
 #endif

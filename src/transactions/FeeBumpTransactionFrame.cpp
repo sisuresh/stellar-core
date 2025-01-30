@@ -74,7 +74,7 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
 void
-FeeBumpTransactionFrame::preParallelApply(Application& app,
+FeeBumpTransactionFrame::preParallelApply(AppConnector& app,
                                           AbstractLedgerTxn& ltx,
                                           TransactionMetaFrame& meta,
                                           MutableTxResultPtr txResult) const

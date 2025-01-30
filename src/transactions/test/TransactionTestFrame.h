@@ -120,11 +120,11 @@ class TransactionTestFrame : public TransactionFrameBase
                               LedgerKeyMeter* lkMeter) const override;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+    void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload, bool chargeFee) const;
 
-    void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+    void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload) const override;
 

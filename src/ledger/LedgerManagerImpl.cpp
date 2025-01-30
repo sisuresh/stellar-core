@@ -1381,7 +1381,7 @@ LedgerManagerImpl::updateNetworkConfig(AbstractLedgerTxn& ltx)
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
         mApp.maybeResizeSorobanApplyThreads(
-            mSorobanNetworkConfig->ledgerMaxParallelThreads());
+            mSorobanNetworkConfigForApply->ledgerMaxDependentTxClusters());
 #endif
     }
     else
@@ -1855,8 +1855,9 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
     return readOnlyTtlExtensions;
 }
 
+// TODO: Use snapshot for header?
 ParallelLedgerInfo
-getParallelLedgerInfo(Application& app, AbstractLedgerTxn& ltx)
+getParallelLedgerInfo(AppConnector& app, AbstractLedgerTxn& ltx)
 {
     auto const& lh = ltx.loadHeader().current();
     return {lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve,
@@ -1864,7 +1865,7 @@ getParallelLedgerInfo(Application& app, AbstractLedgerTxn& ltx)
 }
 
 void
-LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
+LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                                      ApplyStage const& stage,
                                      Hash const& sorobanBasePrngSeed)
 {
@@ -1878,8 +1879,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
     }
 
     auto const& config = app.getConfig();
-    auto const& sorobanConfig =
-        app.getLedgerManager().getSorobanNetworkConfig();
+    auto const& sorobanConfig = app.getSorobanNetworkConfigForApply();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
     std::vector<ThreadEntryMap> entryMapsByThread;
@@ -1946,7 +1946,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
                         ltxInner.loadHeader().current();
                     txBundle.mDelta->header.previous =
                         ltxInner.loadHeader().current();
-                    app.getInvariantManager().checkOnOperationApply(
+                    app.checkOnOperationApply(
                         txBundle.tx->getRawOperations().at(0),
                         txBundle.resPayload->getOpResultAt(0),
                         *txBundle.mDelta);
@@ -1959,8 +1959,8 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
                 }
             }
 
-            txBundle.tx->processPostApply(mApp, ltxInner, txBundle.meta,
-                                          txBundle.resPayload);
+            txBundle.tx->processPostApply(mApp.getAppConnector(), ltxInner,
+                                          txBundle.meta, txBundle.resPayload);
 
             // We only increase the internal-error metric count if the
             // ledger is a newer version.
@@ -2035,10 +2035,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 
         auto cumulativeTTL = add_sat(currentTTL, kvp.second);
 
-        auto maxEntryTTL = app.getLedgerManager()
-                               .getSorobanNetworkConfig()
-                               .stateArchivalSettings()
-                               .maxEntryTTL;
+        auto maxEntryTTL = sorobanConfig.stateArchivalSettings().maxEntryTTL;
         ltxe.current().data.ttl().liveUntilLedgerSeq =
             std::min(maxEntryTTL - 1, cumulativeTTL);
     }
@@ -2046,7 +2043,7 @@ LedgerManagerImpl::applySorobanStage(Application& app, AbstractLedgerTxn& ltx,
 }
 
 void
-LedgerManagerImpl::applySorobanStages(Application& app, AbstractLedgerTxn& ltx,
+LedgerManagerImpl::applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,
                                       std::vector<ApplyStage> const& stages,
                                       Hash const& sorobanBasePrngSeed)
 {
@@ -2126,7 +2123,8 @@ LedgerManagerImpl::applyTransactions(
                 }
             }
 
-            applySorobanStages(mApp, ltx, applyStages, sorobanBasePrngSeed);
+            applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
+                               sorobanBasePrngSeed);
 
             for (auto const& stage : applyStages)
             {
@@ -2170,15 +2168,6 @@ LedgerManagerImpl::applyTransactions(
                                 txBundle.meta.getXDR(), std::move(results),
                                 txBundle.txNum);
                         }
-                        if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
-                        {
-                            auto ledgerSeq =
-                                ltx.loadHeader().current().ledgerSeq;
-                            storeTransaction(mApp.getDatabase(), ledgerSeq,
-                                             txBundle.tx,
-                                             txBundle.meta.getXDR(),
-                                             txResultSet, mApp.getConfig());
-                        }
                     }
                 }
             }
@@ -2212,8 +2201,10 @@ LedgerManagerImpl::applyTransactions(
                 }
                 ++txNum;
 
-                tx->apply(mApp, ltx, tm, mutableTxResult, subSeed);
-                tx->processPostApply(mApp, ltx, tm, mutableTxResult);
+                tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
+                          subSeed);
+                tx->processPostApply(mApp.getAppConnector(), ltx, tm,
+                                     mutableTxResult);
                 TransactionResultPair results;
                 results.transactionHash = tx->getContentsHash();
                 results.result = mutableTxResult->getResult();
@@ -2250,23 +2241,7 @@ LedgerManagerImpl::applyTransactions(
                         tm.getXDR(), std::move(results), index);
                 }
 
-                // Then finally store the results and meta into the txhistory
-                // table. if we're running in a mode that has one.
-                //
-                // Note to future: when we eliminate the txhistory for
-                // archiving, the next step can be removed.
-                //
-                // Also note: for historical reasons the history tables number
-                // txs counting from 1, not 0. We preserve this for the time
-                // being in case anyone depends on it.
                 ++index;
-                if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
-                {
-                    auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-                    storeTransaction(mApp.getDatabase(), ledgerSeq, tx,
-                                     tm.getXDR(), txResultSet,
-                                     mApp.getConfig());
-                }
             }
         }
     }

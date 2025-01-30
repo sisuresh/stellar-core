@@ -5323,7 +5323,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
     auto& app = test.getApp();
     modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
         cfg.mLedgerMaxInstructions = 25'000'000;
-        cfg.mLedgerMaxParallelThreads = 2;
+        cfg.mLedgerMaxDependentTxClusters = 2;
     });
 
     auto issuerKey = getAccount("issuer");
@@ -5364,8 +5364,8 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
 
     REQUIRE(test.getTTL(client.getContract().getDataKey(
                 makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY)) ==
-            41);
-    REQUIRE(test.getLCLSeq() == 26);
+            42);
+    REQUIRE(test.getLCLSeq() == 27);
 
     REQUIRE(client.put("key4", ContractDataDurability::PERSISTENT, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
@@ -5509,7 +5509,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
         // One tx will fail
         checkResults(r, sorobanTxs.size() - 1, 1);
 
-        REQUIRE(r.results[0]
+        REQUIRE(r.results[7]
                     .result.result.results()[0]
                     .tr()
                     .invokeHostFunctionResult()
@@ -5527,7 +5527,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
                 makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY)) ==
             400 + test.getLCLSeq());
 
-        REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 123) ==
+        REQUIRE(client.get("key1", ContractDataDurability::TEMPORARY, 8) ==
                 INVOKE_HOST_FUNCTION_SUCCESS);
         REQUIRE(client.get("key2", ContractDataDurability::TEMPORARY, 0) ==
                 INVOKE_HOST_FUNCTION_SUCCESS);
@@ -5544,12 +5544,12 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
         // Test increase and then decrease of clusters
         modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
             cfg.mLedgerMaxInstructions = 100'000'000;
-            cfg.mLedgerMaxParallelThreads = 4;
+            cfg.mLedgerMaxDependentTxClusters = 4;
         });
 
         modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
             cfg.mLedgerMaxInstructions = 100'000'000;
-            cfg.mLedgerMaxParallelThreads = 1;
+            cfg.mLedgerMaxDependentTxClusters = 1;
         });
 
         stellar::uniform_int_distribution<uint32_t> dist(50, 1000);
@@ -5602,6 +5602,7 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
 
         uint32_t ttl = test.getTTL(client.getContract().getDataKey(
             makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY));
+
         uint32_t cumulativeExtensions = 0;
         for (auto const& res : r.results)
         {
@@ -5631,6 +5632,8 @@ TEST_CASE("parallel txs through ledgerClose", "[tx][soroban][parallelapply]")
                     ContractDataDurability::TEMPORARY)) == ttl);
     };
 
+    REQUIRE(client.has("key2", ContractDataDurability::TEMPORARY, true) ==
+            INVOKE_HOST_FUNCTION_SUCCESS);
     for (size_t i = 0; i < 10; ++i)
     {
         SECTION("multi RO extensions with a single RW extension in a single "
@@ -5658,7 +5661,7 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     auto& app = test.getApp();
     modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
         cfg.mLedgerMaxInstructions = 5'000'000;
-        cfg.mLedgerMaxParallelThreads = 2;
+        cfg.mLedgerMaxDependentTxClusters = 2;
     });
 
     // Wasm and instance should not expire during test

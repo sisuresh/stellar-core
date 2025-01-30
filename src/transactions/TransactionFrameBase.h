@@ -142,7 +142,7 @@ class TransactionFrameBase
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    virtual void preParallelApply(Application& app, AbstractLedgerTxn& ltx,
+    virtual void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr resPayload) const = 0;
 
