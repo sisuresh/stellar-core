@@ -159,6 +159,116 @@ OperationFrame::apply(AppConnector& app, SignatureChecker& signatureChecker,
     return applyRes;
 }
 
+bool
+OperationFrame::preloadEntryHelper(
+    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
+    std::function<bool(LedgerKey const&, uint32_t /*entrySize*/)>
+        readEntryCallback) const
+{
+    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) -> bool {
+        for (auto const& lk : keys)
+        {
+            uint32_t entrySize = 0u;
+
+            auto ltxe = ltx.loadWithoutRecord(lk);
+            if (ltxe)
+            {
+                entrySize =
+                    static_cast<uint32_t>(xdr::xdr_size(ltxe.current()));
+
+                entryMap.emplace(lk, ThreadEntry{ltxe.current(), false});
+
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must exist
+                    releaseAssertOrThrow(ttlLtxe);
+
+                    entryMap.emplace(ttlKey,
+                                     ThreadEntry{ttlLtxe.current(), false});
+                }
+            }
+            else
+            {
+                entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+
+                if (isSorobanEntry(lk))
+                {
+                    auto ttlKey = getTTLKey(lk);
+                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                    // TTL entry must not exist
+                    releaseAssertOrThrow(!ttlLtxe);
+                    entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
+                }
+            }
+
+            if (!readEntryCallback(lk, entrySize))
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool success = getEntries(mParentTx.sorobanResources().footprint.readOnly);
+    if (success)
+    {
+        success = getEntries(mParentTx.sorobanResources().footprint.readWrite);
+    }
+    return success;
+}
+
+bool
+OperationFrame::preloadEntriesForParallelApply(Config const& config,
+                                               SorobanMetrics& sorobanMetrics,
+                                               AbstractLedgerTxn& ltx,
+                                               ThreadEntryMap& entryMap,
+                                               OperationResult& res,
+                                               SorobanTxData& sorobanData) const
+{
+    return doPreloadEntriesForParallelApply(config, sorobanMetrics, ltx,
+                                            entryMap, res, sorobanData);
+}
+
+bool
+OperationFrame::doPreloadEntriesForParallelApply(
+    Config const& config, SorobanMetrics& sorobanMetrics,
+    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+    SorobanTxData& sorobanData) const
+{
+    throw std::runtime_error("Cannot call preloadEntriesForParallelApply on a "
+                             "non Soroban operation");
+}
+
+ParallelTxReturnVal
+OperationFrame::applyParallel(AppConnector& app, ThreadEntryMap const& entryMap,
+                              Config const& config,
+                              SorobanNetworkConfig const& sorobanConfig,
+                              ParallelLedgerInfo const& ledgerInfo,
+                              SorobanMetrics& sorobanMetrics,
+                              OperationResult& res, SorobanTxData& sorobanData,
+                              Hash const& txPrngSeed) const
+{
+    ZoneScoped;
+    CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
+    // checkValid is called earlier in preParallelApply
+
+    return doApplyParallel(app, entryMap, config, sorobanConfig, txPrngSeed,
+                           ledgerInfo, sorobanMetrics, res, sorobanData);
+}
+
+ParallelTxReturnVal
+OperationFrame::doApplyParallel(
+    AppConnector& app, ThreadEntryMap const& entryMap, Config const& appConfig,
+    SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
+    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    OperationResult& res, SorobanTxData& sorobanData) const
+{
+    throw std::runtime_error(
+        "Cannot call doApplyParallel on a non Soroban operation");
+}
+
 ThresholdLevel
 OperationFrame::getThresholdLevel() const
 {
