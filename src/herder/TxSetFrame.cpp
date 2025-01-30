@@ -631,6 +631,7 @@ applySurgePricing(TxSetPhase phase, TxFrameList const& txs, Application& app)
             auto perOpFee = computePerOpFee(*tx, lclHeader.ledgerVersion);
             lowestLaneFee[lane] = std::min(lowestLaneFee[lane], perOpFee);
         });
+
     auto laneBaseFee =
         computeLaneBaseFee(phase, lclHeader, *surgePricingLaneConfig,
                            lowestLaneFee, hadTxNotFittingLane);
