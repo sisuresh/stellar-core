@@ -53,9 +53,250 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
+RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, OperationResult& res,
+    SorobanTxData& sorobanData) const
+{
+    uint32_t ledgerReadByte = 0;
+
+    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+
+    for (auto const& lk : mParentTx.sorobanResources().footprint.readWrite)
+    {
+        auto ttlKey = getTTLKey(lk);
+        auto constTTLLtxe = ltx.loadWithoutRecord(ttlKey);
+        if (constTTLLtxe)
+        {
+            entryMap.emplace(ttlKey,
+                             ThreadEntry{constTTLLtxe.current(), false});
+
+            if (!isLive(constTTLLtxe.current(), ledgerSeq))
+            {
+                auto constEntryLtxe = ltx.loadWithoutRecord(lk);
+
+                entryMap.emplace(lk,
+                                 ThreadEntry{constEntryLtxe.current(), false});
+
+                // We checked for TTLEntry existence above
+                releaseAssertOrThrow(constEntryLtxe);
+
+                ledgerReadByte += static_cast<uint32>(
+                    xdr::xdr_size(constEntryLtxe.current()));
+            }
+            // We aren't adding the entry key if it's live. This means we will
+            // not try to access the entry after this point for this
+            // transaction.
+        }
+        else
+        {
+            entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
+            entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+        }
+        // If the entry exists in the hot archive, we'll load those during
+        // parallel apply and also validate the read bytes limit then
+    }
+
+    auto const& resources = mParentTx.sorobanResources();
+    if (resources.readBytes < ledgerReadByte)
+    {
+        res.tr().restoreFootprintResult().code(
+            RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+
+        sorobanData.pushApplyTimeDiagnosticError(
+            app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+            "operation byte-read mresources exceeds amount specified",
+            {makeU64SCVal(ledgerReadByte), makeU64SCVal(resources.readBytes)});
+
+        // Only mark on failure because we'll also count read bytes during apply
+        // to also count anything read from the hot archive.
+        sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
+        return false;
+    }
+
+    return true;
+}
+
+ParallelTxReturnVal
+RestoreFootprintOpFrame::doParallelApply(
+    AppConnector& app,
+    ThreadEntryMap const& entryMap, // Must not be shared between threads
+    Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
+    Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
+    SorobanMetrics& sorobanMetrics, OperationResult& res,
+    SorobanTxData& sorobanData) const
+{
+    ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
+
+    RestoreFootprintMetrics metrics(sorobanMetrics);
+    auto timeScope = metrics.getExecTimer();
+
+    auto const& resources = mParentTx.sorobanResources();
+    auto const& footprint = resources.footprint;
+    auto ledgerSeq = ledgerInfo.getLedgerSeq();
+    auto hotArchive = app.copySearchableHotArchiveBucketListSnapshot();
+
+    // Keep track of LedgerEntry updates we need to make
+    ModifiedEntryMap opEntryMap;
+
+    RestoredKeys restoredKeys;
+
+    auto const& archivalSettings = sorobanConfig.stateArchivalSettings();
+    rust::Vec<CxxLedgerEntryRentChange> rustEntryRentChanges;
+    // Extend the TTL on the restored entry to minimum TTL, including
+    // the current ledger.
+    uint32_t restoredLiveUntilLedger =
+        ledgerSeq + archivalSettings.minPersistentTTL - 1;
+    rustEntryRentChanges.reserve(footprint.readWrite.size());
+    for (auto const& lk : footprint.readWrite)
+    {
+        std::shared_ptr<HotArchiveBucketEntry> hotArchiveEntry{nullptr};
+        auto ttlKey = getTTLKey(lk);
+        {
+            // First check the live BucketList
+            auto ttlLtxe = entryMap.find(ttlKey);
+            if (ttlLtxe == entryMap.end() || !ttlLtxe->second.mLedgerEntry)
+            {
+                // Next check the hot archive if protocol >= 23
+                if (protocolVersionStartsFrom(
+                        ledgerInfo.getLedgerVersion(),
+                        HotArchiveBucket::
+                            FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
+                {
+                    hotArchiveEntry = hotArchive->load(lk);
+                    if (!hotArchiveEntry)
+                    {
+                        // Entry doesn't exist, skip
+                        continue;
+                    }
+                }
+                else
+                {
+                    // Entry doesn't exist, skip
+                    continue;
+                }
+            }
+            // Skip entry if it's already live.
+            else if (isLive(*ttlLtxe->second.mLedgerEntry, ledgerSeq))
+            {
+                continue;
+            }
+        }
+
+        // We must load the ContractCode/ContractData entry for fee purposes, as
+        // restore is considered a write
+        uint32_t entrySize = 0;
+        if (hotArchiveEntry)
+        {
+            entrySize = static_cast<uint32>(
+                xdr::xdr_size(hotArchiveEntry->archivedEntry()));
+        }
+        else
+        {
+            auto entryLtxe = entryMap.find(lk);
+
+            // We checked for TTLEntry existence above
+            releaseAssertOrThrow(entryLtxe != entryMap.end() &&
+                                 entryLtxe->second.mLedgerEntry);
+
+            entrySize = static_cast<uint32>(
+                xdr::xdr_size(*entryLtxe->second.mLedgerEntry));
+        }
+
+        metrics.mLedgerReadByte += entrySize;
+        if (resources.readBytes < metrics.mLedgerReadByte)
+        {
+            sorobanData.pushApplyTimeDiagnosticError(
+                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                "operation byte-read resources exceeds amount specified",
+                {makeU64SCVal(metrics.mLedgerReadByte),
+                 makeU64SCVal(resources.readBytes)});
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
+        }
+
+        // To maintain consistency with InvokeHostFunction, TTLEntry
+        // writes come out of refundable fee, so only add entrySize
+        metrics.mLedgerWriteByte += entrySize;
+        if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
+                                         appConfig, mParentTx, sorobanData))
+        {
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
+        }
+
+        if (resources.writeBytes < metrics.mLedgerWriteByte)
+        {
+            sorobanData.pushApplyTimeDiagnosticError(
+                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                "operation byte-write resources exceeds amount specified",
+                {makeU64SCVal(metrics.mLedgerWriteByte),
+                 makeU64SCVal(resources.writeBytes)});
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
+        }
+
+        rustEntryRentChanges.emplace_back();
+        auto& rustChange = rustEntryRentChanges.back();
+        rustChange.is_persistent = true;
+        // Treat the entry as if it hasn't existed before restoration
+        // for the rent fee purposes.
+        rustChange.old_size_bytes = 0;
+        rustChange.old_live_until_ledger = 0;
+        rustChange.new_size_bytes = entrySize;
+        rustChange.new_live_until_ledger = restoredLiveUntilLedger;
+
+        if (hotArchiveEntry)
+        {
+            opEntryMap.emplace(lk, hotArchiveEntry->archivedEntry());
+
+            LedgerEntry ttlEntry;
+            ttlEntry.data.type(TTL);
+            ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
+            ttlEntry.data.ttl().keyHash = ttlKey.ttl().keyHash;
+
+            opEntryMap.emplace(ttlKey, ttlEntry);
+
+            restoredKeys.hotArchive.emplace(lk);
+            restoredKeys.hotArchive.emplace(ttlKey);
+        }
+        else
+        {
+            // Entry exists in the live BucketList if we get this this point due
+            // to the constTTLLtxe loadWithoutRecord logic above.
+
+            auto ttlLtxe = entryMap.find(ttlKey);
+            releaseAssertOrThrow(ttlLtxe != entryMap.end() &&
+                                 ttlLtxe->second.mLedgerEntry);
+
+            LedgerEntry ttlEntry = *ttlLtxe->second.mLedgerEntry;
+            ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
+            opEntryMap.emplace(ttlKey, ttlEntry);
+
+            restoredKeys.liveBucketList.emplace(lk);
+            restoredKeys.liveBucketList.emplace(ttlKey);
+        }
+    }
+    int64_t rentFee = rust_bridge::compute_rent_fee(
+        app.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION,
+        ledgerInfo.getLedgerVersion(), rustEntryRentChanges,
+        sorobanConfig.rustBridgeRentFeeConfiguration(), ledgerSeq);
+    if (!sorobanData.consumeRefundableSorobanResources(
+            0, rentFee, ledgerInfo.getLedgerVersion(), sorobanConfig,
+            app.getConfig(), mParentTx))
+    {
+        innerResult(res).code(RESTORE_FOOTPRINT_INSUFFICIENT_REFUNDABLE_FEE);
+        return {false, {}};
+    }
+    innerResult(res).code(RESTORE_FOOTPRINT_SUCCESS);
+    return {true, std::move(opEntryMap), std::move(restoredKeys)};
+}
+
+bool
 RestoreFootprintOpFrame::doApply(
     AppConnector& app, AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
     OperationResult& res, std::shared_ptr<SorobanTxData> sorobanData) const
+
 {
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
 
