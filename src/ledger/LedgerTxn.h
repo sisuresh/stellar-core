@@ -597,6 +597,7 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
                                                  uint32_t ttl) = 0;
     virtual LedgerTxnEntry restoreFromLiveBucketList(LedgerEntry const& entry,
                                                      uint32_t ttl) = 0;
+    virtual void addRestoredFromHotArchive(LedgerEntry const& ledgerEntry, LedgerEntry const& ttlEntry) = 0;
     virtual LedgerTxnEntry load(InternalLedgerKey const& key) = 0;
     virtual ConstLedgerTxnEntry
     loadWithoutRecord(InternalLedgerKey const& key) = 0;
@@ -742,10 +743,12 @@ class LedgerTxn : public AbstractLedgerTxn
     LedgerTxnEntry create(InternalLedgerEntry const& entry) override;
 
     void erase(InternalLedgerKey const& key) override;
+    //TODO: Remove these two methods
     LedgerTxnEntry restoreFromHotArchive(LedgerEntry const& entry,
                                          uint32_t ttl) override;
     LedgerTxnEntry restoreFromLiveBucketList(LedgerEntry const& entry,
                                              uint32_t ttl) override;
+    void addRestoredFromHotArchive(LedgerEntry const& ledgerEntry, LedgerEntry const& ttlEntry) override;
 
     UnorderedMap<LedgerKey, LedgerEntry> getAllOffers() override;
 
