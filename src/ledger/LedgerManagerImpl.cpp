@@ -19,12 +19,15 @@
 #include "herder/TxSetFrame.h"
 #include "herder/Upgrades.h"
 #include "history/HistoryManager.h"
+#include "invariant/InvariantDoesNotHold.h"
+#include "invariant/InvariantManager.h"
 #include "ledger/FlushAndRotateMetaDebugWork.h"
 #include "ledger/LedgerHeaderUtils.h"
 #include "ledger/LedgerManager.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
+#include "ledger/LedgerTypeUtils.h"
 #include "ledger/SharedModuleCacheCompiler.h"
 #include "main/Application.h"
 #include "main/Config.h"
@@ -1759,6 +1762,425 @@ LedgerManagerImpl::prefetchTransactionData(AbstractLedgerTxnParent& ltx,
     }
 }
 
+UnorderedSet<LedgerKey>
+LedgerManagerImpl::getReadWriteKeysForStage(ApplyStage const& stage)
+{
+    UnorderedSet<LedgerKey> res;
+
+    for (auto const& txs : stage)
+    {
+        for (auto const& txBundle : txs)
+        {
+            for (auto const& lk :
+                 txBundle.getTx()->sorobanResources().footprint.readWrite)
+            {
+                res.emplace(lk);
+                if (isSorobanEntry(lk))
+                {
+                    res.emplace(getTTLKey(lk));
+                }
+            }
+        }
+    }
+    return res;
+}
+
+std::unique_ptr<ThreadEntryMap>
+LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
+                                  Thread const& txs)
+{
+    std::unique_ptr<ThreadEntryMap> entryMap =
+        std::make_unique<ThreadEntryMap>();
+    for (auto const& txBundle : txs)
+    {
+        if (txBundle.getResPayload()->isSuccess())
+        {
+            txBundle.getTx()->preloadEntriesForParallelApply(
+                app, getSorobanMetrics(), ltx, *entryMap,
+                txBundle.getResPayload(),
+                txBundle.getEffects()
+                    .getTxEventManager()
+                    .getDiagnosticEventsBuffer());
+        }
+    }
+
+    return entryMap;
+}
+
+std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
+LedgerManagerImpl::applyThread(AppConnector& app,
+                               std::unique_ptr<ThreadEntryMap> entryMap,
+                               Thread const& thread, Config const& config,
+                               SorobanNetworkConfig const& sorobanConfig,
+                               ParallelLedgerInfo const& ledgerInfo,
+                               Hash const& sorobanBasePrngSeed,
+                               SorobanMetrics& sorobanMetrics)
+{
+    // RO extensions should only be observed when the entry is modified, so
+    // we accumulate the RO extensions until we need to apply them.
+    UnorderedMap<LedgerKey, uint32_t> readOnlyTtlExtensions;
+
+    RestoredKeys threadRestoredKeys;
+    for (auto const& txBundle : thread)
+    {
+        // Apply timer
+        auto txTime = mApplyState.mMetrics.mTransactionApply.TimeScope();
+
+        releaseAssert(txBundle.getResPayload());
+
+        SHA256 txSubSeedSha;
+        txSubSeedSha.add(sorobanBasePrngSeed);
+        txSubSeedSha.add(xdr::xdr_to_opaque(txBundle.getTxNum()));
+        Hash txSubSeed = txSubSeedSha.finish();
+
+        auto const& readWrite =
+            txBundle.getTx()->sorobanResources().footprint.readWrite;
+        for (auto const& lk : readWrite)
+        {
+            if (!isSorobanEntry(lk))
+            {
+                continue;
+            }
+
+            auto const& ttlKey = getTTLKey(lk);
+            auto extIt = readOnlyTtlExtensions.find(ttlKey);
+            if (extIt != readOnlyTtlExtensions.end())
+            {
+                // "Commit" max RO bump now that the key is in a
+                // readWrite set
+                auto it = entryMap->find(ttlKey);
+                if (it != entryMap->end())
+                {
+                    releaseAssertOrThrow(it->second.mLedgerEntry);
+                    releaseAssertOrThrow(it->second.mLedgerEntry->data.ttl()
+                                             .liveUntilLedgerSeq <=
+                                         extIt->second);
+
+                    it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
+                        extIt->second;
+
+                    // Mark as dirty so this entry gets written.
+                    it->second.isDirty = true;
+                }
+                readOnlyTtlExtensions.erase(extIt);
+            }
+        }
+
+        auto res = txBundle.getTx()->parallelApply(
+            app, *entryMap, config, sorobanConfig, ledgerInfo,
+            txBundle.getResPayload(), sorobanMetrics, txSubSeed,
+            txBundle.getEffects());
+
+        if (res.getSuccess())
+        {
+            UnorderedMap<LedgerKey, bool> isReadOnlyTTLMap;
+            for (auto const& ro :
+                 txBundle.getTx()->sorobanResources().footprint.readOnly)
+            {
+                if (!isSorobanEntry(ro))
+                {
+                    continue;
+                }
+                isReadOnlyTTLMap.emplace(getTTLKey(ro), true);
+            }
+            for (auto const& rw :
+                 txBundle.getTx()->sorobanResources().footprint.readWrite)
+            {
+                if (!isSorobanEntry(rw))
+                {
+                    continue;
+                }
+                isReadOnlyTTLMap.emplace(getTTLKey(rw), false);
+            }
+
+            // now apply the entry changes to entryMap
+            for (auto const& entry : res.getModifiedEntryMap())
+            {
+                auto const& lk = entry.first;
+                auto const& updatedLe = entry.second;
+
+                auto it = entryMap->find(lk);
+                releaseAssert(it != entryMap->end());
+
+                auto isReadOnlyTTLIt = isReadOnlyTTLMap.find(lk);
+                releaseAssertOrThrow(lk.type() != TTL ||
+                                     isReadOnlyTTLIt != isReadOnlyTTLMap.end());
+
+                if (lk.type() == TTL && it->second.mLedgerEntry && updatedLe &&
+                    isReadOnlyTTLIt->second /*isReadOnly*/)
+                {
+                    releaseAssertOrThrow(
+                        updatedLe->data.ttl().liveUntilLedgerSeq >
+                        it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq);
+
+                    auto ttlIt = readOnlyTtlExtensions.find(lk);
+                    if (ttlIt != readOnlyTtlExtensions.end())
+                    {
+                        ttlIt->second =
+                            std::max(ttlIt->second,
+                                     updatedLe->data.ttl().liveUntilLedgerSeq);
+                    }
+                    else
+                    {
+                        readOnlyTtlExtensions.emplace(
+                            lk, updatedLe->data.ttl().liveUntilLedgerSeq);
+                    }
+                }
+                else
+                {
+                    // A entry deletion will be marked by a nullopt le.
+                    // Set the dirty bit so it'll be written to ltx later.
+                    it->second = {updatedLe, true};
+                }
+            }
+
+            for (auto const& key : res.getRestoredKeys().hotArchive)
+            {
+                auto [_, inserted] = threadRestoredKeys.hotArchive.emplace(key);
+                releaseAssertOrThrow(inserted);
+            }
+            for (auto const& key : res.getRestoredKeys().liveBucketList)
+            {
+                auto [_, inserted] =
+                    threadRestoredKeys.liveBucketList.emplace(key);
+                releaseAssertOrThrow(inserted);
+            }
+        }
+        else
+        {
+            releaseAssertOrThrow(!txBundle.getResPayload()->isSuccess());
+        }
+    }
+
+    for (auto const& kvp : readOnlyTtlExtensions)
+    {
+        auto const& lk = kvp.first;
+        auto const& ttlExtension = kvp.second;
+
+        auto it = entryMap->find(lk);
+        // The entry in entryMap should always exist. If the entry was deleted,
+        // then we would've erased the TTL key from readOnlyTtlExtensions.
+        releaseAssert(it != entryMap->end() && it->second.mLedgerEntry);
+        if (it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq <
+            ttlExtension)
+        {
+            it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
+                ttlExtension;
+            it->second.isDirty = true;
+        }
+    }
+
+    return {threadRestoredKeys, std::move(entryMap)};
+}
+
+ParallelLedgerInfo
+getParallelLedgerInfo(AppConnector& app, AbstractLedgerTxn& ltx)
+{
+    auto const& lh = ltx.loadHeader().current();
+    return {lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve,
+            lh.scpValue.closeTime, app.getNetworkID()};
+}
+
+void
+LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
+                                     ApplyStage const& stage,
+                                     Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            // This can mark a tx as failed due to validation.
+            // Make sure results are checked.
+            txBundle.getTx()->preParallelApply(
+                app, ltx, txBundle.getEffects().getMeta(),
+                txBundle.getResPayload(),
+                txBundle.getEffects().getTxEventManager());
+        }
+    }
+
+    auto const& config = app.getConfig();
+    auto const& sorobanConfig = getSorobanNetworkConfigForApply();
+
+    std::vector<
+        std::future<std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>>>
+        threadFutures;
+
+    auto ledgerInfo = getParallelLedgerInfo(app, ltx);
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < stage.size(); ++i)
+    {
+        auto const& thread = stage.at(i);
+
+        auto entryMapPtr = collectEntries(app, ltx, thread);
+
+        threadFutures.emplace_back(std::async(
+            std::launch::async, &LedgerManagerImpl::applyThread, this,
+            std::ref(app), std::move(entryMapPtr), std::ref(thread), config,
+            sorobanConfig, std::ref(ledgerInfo), sorobanBasePrngSeed,
+            std::ref(getSorobanMetrics())));
+    }
+
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
+    std::vector<RestoredKeys> threadRestoredKeys;
+    std::vector<std::unique_ptr<ThreadEntryMap>> entryMapsByThread;
+    for (auto& restoredKeysFutures : threadFutures)
+    {
+        auto futureResult = restoredKeysFutures.get();
+        threadRestoredKeys.emplace_back(futureResult.first);
+        entryMapsByThread.emplace_back(std::move(futureResult.second));
+    }
+
+    LedgerTxn ltxInner(ltx);
+    for (auto const& restoredKeys : threadRestoredKeys)
+    {
+        // We filter out the TTL keys here because LedgerTxn will add the ttl
+        // key
+        for (auto const& key : restoredKeys.hotArchive)
+        {
+            if (key.type() != TTL)
+            {
+                ltxInner.addRestoredFromHotArchiveKey(key);
+            }
+        }
+        for (auto const& key : restoredKeys.liveBucketList)
+        {
+            if (key.type() != TTL)
+            {
+                ltxInner.addRestoredFromLiveBucketListKey(key);
+            }
+        }
+    }
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            // First check the invariants
+            if (txBundle.getResPayload()->isSuccess())
+            {
+                try
+                {
+                    // Soroban transactions don't have access to the ledger
+                    // header, so they can't modify it. Pass in the current
+                    // header as both current and previous.
+                    txBundle.getEffects().getDelta().header.current =
+                        ltxInner.loadHeader().current();
+                    txBundle.getEffects().getDelta().header.previous =
+                        ltxInner.loadHeader().current();
+                    app.checkOnOperationApply(
+                        txBundle.getTx()->getRawOperations().at(0),
+                        txBundle.getResPayload()->getOpResultAt(0),
+                        txBundle.getEffects().getDelta(),
+                        txBundle.getEffects().getMeta().getOpEventsAtOp(0));
+                }
+                catch (InvariantDoesNotHold& e)
+                {
+                    printErrorAndAbort(
+                        "Invariant failure while applying operations: ",
+                        e.what());
+                }
+            }
+
+            // We only increase the internal-error metric count if the
+            // ledger is a newer version.
+            if (txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR &&
+                ledgerInfo.getLedgerVersion() >=
+                    config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
+            {
+                auto& internalErrorCounter = app.getMetrics().NewCounter(
+                    {"ledger", "transaction", "internal-error"});
+                internalErrorCounter.inc();
+            }
+        }
+    }
+
+    auto isInReadWriteSet = getReadWriteKeysForStage(stage);
+
+    for (auto const& threadEntryMap : entryMapsByThread)
+    {
+        for (auto const& entry : *threadEntryMap)
+        {
+            // Only update if dirty bit is set
+            if (!entry.second.isDirty)
+            {
+                continue;
+            }
+
+            if (entry.second.mLedgerEntry)
+            {
+                auto const& updatedEntry = *entry.second.mLedgerEntry;
+                auto ltxe = ltxInner.load(entry.first);
+                if (ltxe)
+                {
+                    if (ltxe.current().data.type() == TTL)
+                    {
+                        auto currLiveUntil =
+                            ltxe.current().data.ttl().liveUntilLedgerSeq;
+                        auto newLiveUntil =
+                            updatedEntry.data.ttl().liveUntilLedgerSeq;
+
+                        // The only scenario where we accept a reduction in TTL
+                        // is one where an entry was deleted, and then
+                        // recreated. This can only happen if the key was in the
+                        // readWrite set, so if it's not then this is just a
+                        // parallel readOnly bump that we can ignore here.
+                        if (newLiveUntil <= currLiveUntil &&
+                            isInReadWriteSet.count(entry.first) == 0)
+                        {
+                            continue;
+                        }
+                    }
+                    ltxe.current() = updatedEntry;
+                }
+                else
+                {
+                    ltxInner.create(updatedEntry);
+                }
+            }
+            else
+            {
+                auto ltxe = ltxInner.load(entry.first);
+                if (ltxe)
+                {
+                    ltxInner.erase(entry.first);
+                }
+            }
+        }
+    }
+
+    // Need to processPostApply after entries are updated because the refund can
+    // update an account entry that was updated during apply.
+
+    // TODO: Change this so the refund is observable after a transaction.
+    for (auto const& thread : stage)
+    {
+        for (auto const& txBundle : thread)
+        {
+            txBundle.getTx()->processPostApply(
+                mApp.getAppConnector(), ltxInner,
+                txBundle.getEffects().getMeta(), txBundle.getResPayload(),
+                txBundle.getEffects().getTxEventManager());
+        }
+    }
+
+    ltxInner.commit();
+}
+
+void
+LedgerManagerImpl::applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,
+                                      std::vector<ApplyStage> const& stages,
+                                      Hash const& sorobanBasePrngSeed)
+{
+    for (auto const& stage : stages)
+    {
+        applySorobanStage(app, ltx, stage, sorobanBasePrngSeed);
+    }
+}
+
 TransactionResultSet
 LedgerManagerImpl::applyTransactions(
     ApplicableTxSetFrame const& txSet,
@@ -1800,82 +2222,172 @@ LedgerManagerImpl::applyTransactions(
     size_t resultIndex = 0;
     for (auto const& phase : phases)
     {
-        for (auto const& tx : phase)
+        if (phase.isParallel())
         {
-            ZoneNamedN(txZone, "applyTransaction", true);
-            auto mutableTxResult = mutableTxResults.at(resultIndex++);
+            auto txSetStages = phase.getParallelStages();
 
-            auto txTime = mApplyState.mMetrics.mTransactionApply.TimeScope();
-            TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion,
-                                    mApp.getConfig());
+            std::vector<ApplyStage> applyStages;
+            applyStages.resize(txSetStages.size());
 
-            CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
-                       hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
-                       tx->getSeqNum(),
-                       mApp.getConfig().toShortString(tx->getSourceID()));
-
-            Hash subSeed = sorobanBasePrngSeed;
-            // If tx can use the seed, we need to compute a sub-seed for it.
-            if (tx->isSoroban())
+            for (size_t i = 0; i < txSetStages.size(); ++i)
             {
-                SHA256 subSeedSha;
-                subSeedSha.add(sorobanBasePrngSeed);
-                subSeedSha.add(xdr::xdr_to_opaque(txNum));
-                subSeed = subSeedSha.finish();
-            }
-            ++txNum;
+                auto const& stage = txSetStages[i];
+                auto& applyStage = applyStages[i];
+                applyStage.resize(stage.size());
 
-            TransactionResultPair results;
-            results.transactionHash = tx->getContentsHash();
-
-            TxEventManager txEventManager(
-                ltx.loadHeader().current().ledgerVersion, mApp.getNetworkID(),
-                mApp.getConfig());
-            tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
-                      txEventManager, subSeed);
-            tx->processPostApply(mApp.getAppConnector(), ltx, tm,
-                                 mutableTxResult, txEventManager);
-            // Push the fee event meta
-            xdr::xvector<ContractEvent> feeEvents;
-            txEventManager.flushTxEvents(feeEvents);
-            tm.pushTxContractEvents(std::move(feeEvents));
-
-            results.result = mutableTxResult->getResult();
-            if (results.result.result.code() ==
-                TransactionResultCode::txSUCCESS)
-            {
-                if (tx->isSoroban())
+                for (size_t j = 0; j < stage.size(); ++j)
                 {
-                    ++sorobanTxSucceeded;
+                    auto const& thread = stage[j];
+                    auto& applyThread = applyStage[j];
+
+                    for (auto const& tx : thread)
+                    {
+                        auto num = txNum++;
+                        auto mutableTxResult = mutableTxResults.at(num);
+                        applyThread.emplace_back(
+                            tx, mutableTxResult, mApp.getConfig(),
+                            mApp.getNetworkID(),
+                            ltx.loadHeader().current().ledgerVersion, num);
+                    }
                 }
-                ++txSucceeded;
-            }
-            else
-            {
-                if (tx->isSoroban())
-                {
-                    ++sorobanTxFailed;
-                }
-                ++txFailed;
             }
 
-            // First gather the TransactionResultPair into the TxResultSet for
-            // hashing into the ledger header.
-            txResultSet.results.emplace_back(results);
+            applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
+                               sorobanBasePrngSeed);
+
+            for (auto const& stage : applyStages)
+            {
+                for (auto const& thread : stage)
+                {
+                    for (auto const& txBundle : thread)
+                    {
+                        // Push the fee event meta
+                        xdr::xvector<ContractEvent> feeEvents;
+                        txBundle.getEffects().getTxEventManager().flushTxEvents(
+                            feeEvents);
+                        txBundle.getEffects().getMeta().pushTxContractEvents(
+                            std::move(feeEvents));
+
+                        TransactionResultPair results;
+                        results.transactionHash =
+                            txBundle.getTx()->getContentsHash();
+                        results.result = txBundle.getResPayload()->getResult();
+                        if (results.result.result.code() ==
+                            TransactionResultCode::txSUCCESS)
+                        {
+                            if (txBundle.getTx()->isSoroban())
+                            {
+                                ++sorobanTxSucceeded;
+                            }
+                            ++txSucceeded;
+                        }
+                        else
+                        {
+                            if (txBundle.getTx()->isSoroban())
+                            {
+                                ++sorobanTxFailed;
+                            }
+                            ++txFailed;
+                        }
+
+                        txResultSet.results.emplace_back(results);
+
 #ifdef BUILD_TESTS
-            mLastLedgerTxMeta.push_back(tm);
+                        mLastLedgerTxMeta.push_back(
+                            txBundle.getEffects().getMeta());
 #endif
 
-            // Then potentially add that TRP and its associated
-            // TransactionMeta into the associated slot of any
-            // LedgerCloseMeta we're collecting.
-            if (ledgerCloseMeta)
-            {
-                ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                    tm.getXDR(), std::move(results), index);
+                        if (ledgerCloseMeta)
+                        {
+                            ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+                                txBundle.getEffects().getMeta().getXDR(),
+                                std::move(results), txBundle.getTxNum());
+                        }
+                    }
+                }
             }
+        }
+        else
+        {
+            for (auto const& tx : phase)
+            {
+                ZoneNamedN(txZone, "applyTransaction", true);
+                auto mutableTxResult = mutableTxResults.at(resultIndex++);
 
-            ++index;
+                auto txTime =
+                    mApplyState.mMetrics.mTransactionApply.TimeScope();
+                TransactionMetaFrame tm(
+                    ltx.loadHeader().current().ledgerVersion, mApp.getConfig());
+
+                CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
+                           hexAbbrev(tx->getContentsHash()),
+                           tx->getNumOperations(), tx->getSeqNum(),
+                           mApp.getConfig().toShortString(tx->getSourceID()));
+
+                Hash subSeed = sorobanBasePrngSeed;
+                // If tx can use the seed, we need to compute a sub-seed for it.
+                if (tx->isSoroban())
+                {
+                    SHA256 subSeedSha;
+                    subSeedSha.add(sorobanBasePrngSeed);
+                    subSeedSha.add(xdr::xdr_to_opaque(txNum));
+                    subSeed = subSeedSha.finish();
+                }
+                ++txNum;
+
+                TransactionResultPair results;
+                results.transactionHash = tx->getContentsHash();
+
+                TxEventManager txEventManager(
+                    ltx.loadHeader().current().ledgerVersion,
+                    mApp.getNetworkID(), mApp.getConfig());
+
+                tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
+                          txEventManager, subSeed);
+                tx->processPostApply(mApp.getAppConnector(), ltx, tm,
+                                     mutableTxResult, txEventManager);
+
+                // Push the fee event meta
+                xdr::xvector<ContractEvent> feeEvents;
+                txEventManager.flushTxEvents(feeEvents);
+                tm.pushTxContractEvents(std::move(feeEvents));
+
+                results.result = mutableTxResult->getResult();
+                if (results.result.result.code() ==
+                    TransactionResultCode::txSUCCESS)
+                {
+                    if (tx->isSoroban())
+                    {
+                        ++sorobanTxSucceeded;
+                    }
+                    ++txSucceeded;
+                }
+                else
+                {
+                    if (tx->isSoroban())
+                    {
+                        ++sorobanTxFailed;
+                    }
+                    ++txFailed;
+                }
+
+                // First gather the TransactionResultPair into the TxResultSet
+                // for hashing into the ledger header.
+                txResultSet.results.emplace_back(results);
+#ifdef BUILD_TESTS
+                mLastLedgerTxMeta.push_back(tm);
+#endif
+                // Then potentially add that TRP and its associated
+                // TransactionMeta into the associated slot of any
+                // LedgerCloseMeta we're collecting.
+                if (ledgerCloseMeta)
+                {
+                    ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+                        tm.getXDR(), std::move(results), index);
+                }
+
+                ++index;
+            }
         }
     }
 
