@@ -73,12 +73,12 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr resPayload) const override;
 
-    ParallelOpReturnVal parallelApply(
+    ParallelTxReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-        TransactionMetaFrame& meta) const override;
+        TxEffects& effects) const override;
 #endif
 
     bool apply(AppConnector& app, AbstractLedgerTxn& ltx,

@@ -336,7 +336,7 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
 }
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-ParallelOpReturnVal
+ParallelTxReturnVal
 InvokeHostFunctionOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
@@ -609,8 +609,6 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             }
         }
 
-        // TODO: Make sure we can't have duplicate entries in
-        // modified_ledger_entries
         opEntryMap.emplace(lk, le);
         auto iter = entryMap.find(lk);
         if (iter == entryMap.end())

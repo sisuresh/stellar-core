@@ -53,7 +53,7 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-ParallelOpReturnVal
+ParallelTxReturnVal
 RestoreFootprintOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,

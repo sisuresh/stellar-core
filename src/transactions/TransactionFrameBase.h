@@ -51,11 +51,11 @@ struct ThreadEntry
 
 using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
 
-struct ParallelOpReturnVal
+struct ParallelTxReturnVal
 {
     bool mSuccess{false};
+    // This will contain a key for every entry modified by a transaction
     ModifiedEntryMap mModifiedEntryMap;
-    std::shared_ptr<LedgerTxnDelta> mDelta;
 };
 
 class ParallelLedgerInfo
@@ -106,22 +106,67 @@ class ParallelLedgerInfo
     Hash networkID;
 };
 
-// TODO: Clean up
+class TxEffects
+{
+  public:
+    TxEffects(uint32_t ledgerVersion) : mMeta(ledgerVersion)
+    {
+    }
+
+    TransactionMetaFrame&
+    getMeta()
+    {
+        return mMeta;
+    }
+    LedgerTxnDelta&
+    getDelta()
+    {
+        return mDelta;
+    }
+
+  private:
+    TransactionMetaFrame mMeta;
+    LedgerTxnDelta mDelta;
+};
+
 class TxBundle
 {
   public:
     TxBundle(TransactionFrameBasePtr tx, MutableTxResultPtr resPayload,
-             TransactionMetaFrame const& meta, uint64_t txNum)
-        : tx(tx), resPayload(resPayload), txNum(txNum), meta(meta)
+             uint32_t ledgerVersion, uint64_t txNum)
+        : tx(tx)
+        , resPayload(resPayload)
+        , txNum(txNum)
+        , mEffects(new TxEffects(ledgerVersion))
     {
     }
+
+    TransactionFrameBasePtr
+    getTx() const
+    {
+        return tx;
+    }
+    MutableTxResultPtr
+    getResPayload() const
+    {
+        return resPayload;
+    }
+    uint64_t
+    getTxNum() const
+    {
+        return txNum;
+    }
+    TxEffects&
+    getEffects() const
+    {
+        return *mEffects;
+    }
+
+  private:
     TransactionFrameBasePtr tx;
     MutableTxResultPtr resPayload;
     uint64_t txNum;
-
-    // TODO: Stop using mutable
-    mutable TransactionMetaFrame meta;
-    mutable std::shared_ptr<LedgerTxnDelta> mDelta;
+    std::unique_ptr<TxEffects> mEffects;
 };
 
 typedef std::vector<TxBundle> Thread;
@@ -146,12 +191,12 @@ class TransactionFrameBase
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr resPayload) const = 0;
 
-    virtual ParallelOpReturnVal parallelApply(
+    virtual ParallelTxReturnVal parallelApply(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
-        TransactionMetaFrame& meta) const = 0;
+        TxEffects& effects) const = 0;
 #endif
 
     virtual MutableTxResultPtr

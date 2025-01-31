@@ -109,13 +109,13 @@ FeeBumpTransactionFrame::preParallelApply(AppConnector& app,
     }
 }
 
-ParallelOpReturnVal
+ParallelTxReturnVal
 FeeBumpTransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
     SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
-    TransactionMetaFrame& meta) const
+    TxEffects& effects) const
 {
     try
     {
@@ -124,9 +124,9 @@ FeeBumpTransactionFrame::parallelApply(
         // Note that even after updateResult is called here, feeCharged will not
         // be accurate for Soroban transactions until
         // FeeBumpTransactionFrame::processPostApply is called.
-        auto res =
-            mInnerTx->parallelApply(entryMap, config, sorobanConfig, ledgerInfo,
-                                    txResult, sorobanMetrics, txPrngSeed, meta);
+        auto res = mInnerTx->parallelApply(entryMap, config, sorobanConfig,
+                                           ledgerInfo, txResult, sorobanMetrics,
+                                           txPrngSeed, effects);
         FeeBumpMutableTransactionResult::updateResult(mInnerTx, *txResult);
         return res;
     }

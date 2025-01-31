@@ -49,12 +49,11 @@ class OperationFrame
                          std::shared_ptr<SorobanTxData> sorobanData) const = 0;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    virtual ParallelOpReturnVal doApplyParallel(
-        ThreadEntryMap const& entryMap, // Must not be shared between threads!
-        Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
-        Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
-        SorobanMetrics& sorobanMetrics, OperationResult& res,
-        SorobanTxData& sorobanData) const;
+    virtual ParallelTxReturnVal doApplyParallel(
+        ThreadEntryMap const& entryMap, Config const& appConfig,
+        SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
+        ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+        OperationResult& res, SorobanTxData& sorobanData) const;
 #endif
 
     // returns the threshold this operation requires
@@ -94,7 +93,7 @@ class OperationFrame
                std::shared_ptr<SorobanTxData> sorobanData) const;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    ParallelOpReturnVal applyParallel(
+    ParallelTxReturnVal applyParallel(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,

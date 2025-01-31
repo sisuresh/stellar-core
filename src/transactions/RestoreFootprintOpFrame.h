@@ -39,7 +39,7 @@ class RestoreFootprintOpFrame : public OperationFrame
                       OperationResult& res) const override;
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-    ParallelOpReturnVal doApplyParallel(
+    ParallelTxReturnVal doApplyParallel(
         ThreadEntryMap const& entryMap, // Must not be shared between threads!
         Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
         Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,

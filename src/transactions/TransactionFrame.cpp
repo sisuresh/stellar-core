@@ -1794,13 +1794,13 @@ TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
     }
 }
 
-ParallelOpReturnVal
+ParallelTxReturnVal
 TransactionFrame::parallelApply(
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
     ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr txResult,
     SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
-    TransactionMetaFrame& meta) const
+    TxEffects& effects) const
 {
     ZoneScoped;
 
@@ -1842,8 +1842,6 @@ TransactionFrame::parallelApply(
 
         if (res.mSuccess)
         {
-            res.mDelta = std::make_shared<LedgerTxnDelta>();
-            auto& delta = *res.mDelta;
             // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.mModifiedEntryMap)
@@ -1903,7 +1901,7 @@ TransactionFrame::parallelApply(
                         std::make_shared<InternalLedgerEntry>(deltaLe);
                 }
 
-                delta.entry[lk] = entryDelta;
+                effects.getDelta().entry[lk] = entryDelta;
                 // Note that we don't set delta.header here because Soroban
                 // transactions don't modify the header. The header will be set
                 // right before we cal into the invariants.
@@ -1911,9 +1909,10 @@ TransactionFrame::parallelApply(
 
             xdr::xvector<OperationMeta> operationMetas;
             operationMetas.emplace_back(changes);
-            meta.pushOperationMetas(std::move(operationMetas));
+            effects.getMeta().pushOperationMetas(std::move(operationMetas));
 
-            sorobanData->publishSuccessDiagnosticsToMeta(meta, config);
+            sorobanData->publishSuccessDiagnosticsToMeta(effects.getMeta(),
+                                                         config);
         }
         else
         {
@@ -1931,7 +1930,8 @@ TransactionFrame::parallelApply(
             sorobanData->setSorobanFeeRefund(declaredSorobanResourceFee() -
                                              preApplyFee.non_refundable_fee);
 
-            sorobanData->publishFailureDiagnosticsToMeta(meta, config);
+            sorobanData->publishFailureDiagnosticsToMeta(effects.getMeta(),
+                                                         config);
         }
 
         return res;
@@ -1969,8 +1969,8 @@ TransactionFrame::parallelApply(
     txResult->setInnermostResultCode(txINTERNAL_ERROR);
 
     // operations and txChangesAfter should already be empty at this point
-    meta.clearOperationMetas();
-    meta.clearTxChangesAfter();
+    effects.getMeta().clearOperationMetas();
+    effects.getMeta().clearTxChangesAfter();
     return {false, {}};
 }
 #endif

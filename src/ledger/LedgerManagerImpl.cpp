@@ -1608,10 +1608,11 @@ getStageTtlFootprint(ApplyStage const& stage)
     {
         for (auto const& txBundle : thread)
         {
-            getFootprint(txBundle.tx->sorobanResources().footprint.readOnly,
-                         true);
-            getFootprint(txBundle.tx->sorobanResources().footprint.readWrite,
-                         false);
+            getFootprint(
+                txBundle.getTx()->sorobanResources().footprint.readOnly, true);
+            getFootprint(
+                txBundle.getTx()->sorobanResources().footprint.readWrite,
+                false);
         }
     }
 
@@ -1704,11 +1705,11 @@ LedgerManagerImpl::collectEntries(AbstractLedgerTxn& ltx, Thread const& txs)
     for (auto const& txBundle : txs)
     {
         uint32_t readBytes = 0;
-        getEntries(txBundle.tx, txBundle.resPayload,
-                   txBundle.tx->sorobanResources().footprint.readOnly,
+        getEntries(txBundle.getTx(), txBundle.getResPayload(),
+                   txBundle.getTx()->sorobanResources().footprint.readOnly,
                    readBytes);
-        getEntries(txBundle.tx, txBundle.resPayload,
-                   txBundle.tx->sorobanResources().footprint.readWrite,
+        getEntries(txBundle.getTx(), txBundle.getResPayload(),
+                   txBundle.getTx()->sorobanResources().footprint.readWrite,
                    readBytes);
     }
 
@@ -1727,15 +1728,15 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
 
     for (auto const& txBundle : thread)
     {
-        releaseAssertOrThrow(txBundle.resPayload);
+        releaseAssertOrThrow(txBundle.getResPayload());
 
         SHA256 txSubSeedSha;
         txSubSeedSha.add(sorobanBasePrngSeed);
-        txSubSeedSha.add(xdr::xdr_to_opaque(txBundle.txNum));
+        txSubSeedSha.add(xdr::xdr_to_opaque(txBundle.getTxNum()));
         Hash txSubSeed = txSubSeedSha.finish();
 
         auto const& readWrite =
-            txBundle.tx->sorobanResources().footprint.readWrite;
+            txBundle.getTx()->sorobanResources().footprint.readWrite;
         for (auto const& lk : readWrite)
         {
             if (!isSorobanEntry(lk))
@@ -1767,9 +1768,10 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
             }
         }
 
-        auto res = txBundle.tx->parallelApply(
-            entryMap, config, sorobanConfig, ledgerInfo, txBundle.resPayload,
-            sorobanMetrics, txSubSeed, txBundle.meta);
+        auto res = txBundle.getTx()->parallelApply(
+            entryMap, config, sorobanConfig, ledgerInfo,
+            txBundle.getResPayload(), sorobanMetrics, txSubSeed,
+            txBundle.getEffects());
 
         if (res.mSuccess)
         {
@@ -1778,7 +1780,7 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
             // TODO: Cleanup
             UnorderedMap<LedgerKey, bool> isReadOnlyTTLMap;
             for (auto const& ro :
-                 txBundle.tx->sorobanResources().footprint.readOnly)
+                 txBundle.getTx()->sorobanResources().footprint.readOnly)
             {
                 if (!isSorobanEntry(ro))
                 {
@@ -1787,7 +1789,7 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                 isReadOnlyTTLMap.emplace(getTTLKey(ro), true);
             }
             for (auto const& rw :
-                 txBundle.tx->sorobanResources().footprint.readWrite)
+                 txBundle.getTx()->sorobanResources().footprint.readWrite)
             {
                 if (!isSorobanEntry(rw))
                 {
@@ -1805,7 +1807,8 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
                 auto it = entryMap.find(lk);
                 releaseAssertOrThrow(it != entryMap.end());
 
-                auto opType = txBundle.tx->getRawOperations().at(0).body.type();
+                auto opType =
+                    txBundle.getTx()->getRawOperations().at(0).body.type();
 
                 auto isReadOnlyTTLIt = isReadOnlyTTLMap.find(lk);
 
@@ -1846,10 +1849,9 @@ LedgerManagerImpl::applyThread(ThreadEntryMap& entryMap, Thread const& thread,
         else
         {
             releaseAssertOrThrow(
-                txBundle.resPayload->getResultCode() == txFAILED ||
-                txBundle.resPayload->getResultCode() == txINTERNAL_ERROR);
+                txBundle.getResPayload()->getResultCode() == txFAILED ||
+                txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR);
         }
-        txBundle.mDelta = res.mDelta;
     }
 
     return readOnlyTtlExtensions;
@@ -1873,8 +1875,9 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
     {
         for (auto const& txBundle : thread)
         {
-            txBundle.tx->preParallelApply(app, ltx, txBundle.meta,
-                                          txBundle.resPayload);
+            txBundle.getTx()->preParallelApply(app, ltx,
+                                               txBundle.getEffects().getMeta(),
+                                               txBundle.getResPayload());
         }
     }
 
@@ -1935,21 +1938,21 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
         for (auto const& txBundle : thread)
         {
             // First check the invariants
-            if (txBundle.resPayload->isSuccess())
+            if (txBundle.getResPayload()->isSuccess())
             {
                 try
                 {
                     // Soroban transactions don't have access to the ledger
                     // header, so they can't modify it. Pass in the current
                     // header as both current and previous.
-                    txBundle.mDelta->header.current =
+                    txBundle.getEffects().getDelta().header.current =
                         ltxInner.loadHeader().current();
-                    txBundle.mDelta->header.previous =
+                    txBundle.getEffects().getDelta().header.previous =
                         ltxInner.loadHeader().current();
                     app.checkOnOperationApply(
-                        txBundle.tx->getRawOperations().at(0),
-                        txBundle.resPayload->getOpResultAt(0),
-                        *txBundle.mDelta);
+                        txBundle.getTx()->getRawOperations().at(0),
+                        txBundle.getResPayload()->getOpResultAt(0),
+                        txBundle.getEffects().getDelta());
                 }
                 catch (InvariantDoesNotHold& e)
                 {
@@ -1959,12 +1962,13 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                 }
             }
 
-            txBundle.tx->processPostApply(mApp.getAppConnector(), ltxInner,
-                                          txBundle.meta, txBundle.resPayload);
+            txBundle.getTx()->processPostApply(mApp.getAppConnector(), ltxInner,
+                                               txBundle.getEffects().getMeta(),
+                                               txBundle.getResPayload());
 
             // We only increase the internal-error metric count if the
             // ledger is a newer version.
-            if (txBundle.resPayload->getResultCode() == txINTERNAL_ERROR &&
+            if (txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR &&
                 ledgerInfo.getLedgerVersion() >=
                     config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
             {
@@ -2114,11 +2118,11 @@ LedgerManagerImpl::applyTransactions(
 
                     for (auto const& tx : thread)
                     {
-                        TransactionMetaFrame tm(
-                            ltx.loadHeader().current().ledgerVersion);
                         auto num = txNum++;
                         auto mutableTxResult = mutableTxResults.at(num);
-                        applyThread.emplace_back(tx, mutableTxResult, tm, num);
+                        applyThread.emplace_back(
+                            tx, mutableTxResult,
+                            ltx.loadHeader().current().ledgerVersion, num);
                     }
                 }
             }
@@ -2136,12 +2140,12 @@ LedgerManagerImpl::applyTransactions(
                         // de-duplicated with the not-parallel apply path
                         TransactionResultPair results;
                         results.transactionHash =
-                            txBundle.tx->getContentsHash();
-                        results.result = txBundle.resPayload->getResult();
+                            txBundle.getTx()->getContentsHash();
+                        results.result = txBundle.getResPayload()->getResult();
                         if (results.result.result.code() ==
                             TransactionResultCode::txSUCCESS)
                         {
-                            if (txBundle.tx->isSoroban())
+                            if (txBundle.getTx()->isSoroban())
                             {
                                 ++sorobanTxSucceeded;
                             }
@@ -2149,7 +2153,7 @@ LedgerManagerImpl::applyTransactions(
                         }
                         else
                         {
-                            if (txBundle.tx->isSoroban())
+                            if (txBundle.getTx()->isSoroban())
                             {
                                 ++sorobanTxFailed;
                             }
@@ -2159,14 +2163,15 @@ LedgerManagerImpl::applyTransactions(
                         txResultSet.results.emplace_back(results);
 
 #ifdef BUILD_TESTS
-                        mLastLedgerTxMeta.push_back(txBundle.meta);
+                        mLastLedgerTxMeta.push_back(
+                            txBundle.getEffects().getMeta());
 #endif
 
                         if (ledgerCloseMeta)
                         {
                             ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                                txBundle.meta.getXDR(), std::move(results),
-                                txBundle.txNum);
+                                txBundle.getEffects().getMeta().getXDR(),
+                                std::move(results), txBundle.getTxNum());
                         }
                     }
                 }

@@ -160,7 +160,7 @@ OperationFrame::apply(AppConnector& app, SignatureChecker& signatureChecker,
 }
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-ParallelOpReturnVal
+ParallelTxReturnVal
 OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                               Config const& config,
                               SorobanNetworkConfig const& sorobanConfig,
@@ -177,7 +177,7 @@ OperationFrame::applyParallel(ThreadEntryMap const& entryMap,
                            ledgerInfo, sorobanMetrics, res, sorobanData);
 }
 
-ParallelOpReturnVal
+ParallelTxReturnVal
 OperationFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, Config const& appConfig,
     SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,

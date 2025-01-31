@@ -50,7 +50,7 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
-ParallelOpReturnVal
+ParallelTxReturnVal
 ExtendFootprintTTLOpFrame::doApplyParallel(
     ThreadEntryMap const& entryMap, // Must not be shared between threads
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
