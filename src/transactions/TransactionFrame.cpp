@@ -1907,6 +1907,7 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
+            auto const& restoredKeys = res.getRestoredKeys();
             // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.getModifiedEntryMap())
@@ -1929,8 +1930,18 @@ TransactionFrame::parallelApply(
 
                     if (le)
                     {
-                        changes.emplace_back(LEDGER_ENTRY_UPDATED);
-                        changes.back().updated() = *le;
+                        if (le->data.type() == TTL &&
+                            restoredKeys.liveBucketList.count(
+                                LedgerEntryKey(*le)) == 1)
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                            changes.back().restored() = *le;
+                        }
+                        else
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_UPDATED);
+                            changes.back().updated() = *le;
+                        }
                     }
                     else
                     {
@@ -1945,9 +1956,19 @@ TransactionFrame::parallelApply(
                     // op
                     releaseAssertOrThrow(le);
 
-                    // New entry
-                    changes.emplace_back(LEDGER_ENTRY_CREATED);
-                    changes.back().created() = *le;
+                    if (restoredKeys.hotArchive.count(LedgerEntryKey(*le)) == 1)
+                    {
+                        releaseAssertOrThrow(isPersistentEntry(le->data) ||
+                                             le->data.type() == TTL);
+
+                        changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                        changes.back().restored() = *le;
+                    }
+                    else
+                    {
+                        changes.emplace_back(LEDGER_ENTRY_CREATED);
+                        changes.back().created() = *le;
+                    }
                 }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
