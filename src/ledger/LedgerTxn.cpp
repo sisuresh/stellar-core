@@ -857,37 +857,6 @@ LedgerTxn::Impl::addRestoredFromHotArchiveKey(LedgerKey const& key)
 }
 
 void
-LedgerTxn::addRestoredFromLiveBucketListKey(LedgerKey const& key)
-{
-    getImpl()->addRestoredFromLiveBucketListKey(key);
-}
-
-void
-LedgerTxn::Impl::addRestoredFromLiveBucketListKey(LedgerKey const& key)
-{
-    throwIfSealed();
-    throwIfChild();
-
-    if (!isPersistentEntry(key))
-    {
-        throw std::runtime_error("Key type not supported for restoration");
-    }
-
-    auto ttlKey = getTTLKey(key);
-
-    auto addKey = [this](LedgerKey const& key) {
-        auto [_, inserted] = mRestoredKeys.liveBucketList.insert(key);
-        if (!inserted)
-        {
-            throw std::runtime_error(
-                "Key already restored from Live BucketList");
-        }
-    };
-    addKey(key);
-    addKey(ttlKey);
-}
-
-void
 LedgerTxn::restoreFromHotArchive(LedgerEntry const& entry, uint32_t ttl)
 {
     getImpl()->restoreFromHotArchive(*this, entry, ttl);

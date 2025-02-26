@@ -2039,19 +2039,14 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
     for (auto const& restoredKeys : threadRestoredKeys)
     {
         // We filter out the TTL keys here because LedgerTxn will add the ttl
-        // key
+        // key. We don't need to add the live bucket list restoration keys
+        // because they're only needed for meta generation, which has already
+        // happened.
         for (auto const& key : restoredKeys.hotArchive)
         {
             if (key.type() != TTL)
             {
                 ltxInner.addRestoredFromHotArchiveKey(key);
-            }
-        }
-        for (auto const& key : restoredKeys.liveBucketList)
-        {
-            if (key.type() != TTL)
-            {
-                ltxInner.addRestoredFromLiveBucketListKey(key);
             }
         }
     }

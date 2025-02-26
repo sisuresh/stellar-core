@@ -161,7 +161,6 @@ processOpLedgerEntryChanges(LedgerEntryChanges& changes,
 
     return changes;
 }
-#endif
 
 } // namespace
 
@@ -1882,6 +1881,7 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
+            auto const& restoredKeys = res.getRestoredKeys();
             // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.getModifiedEntryMap())
@@ -1904,8 +1904,18 @@ TransactionFrame::parallelApply(
 
                     if (le)
                     {
-                        changes.emplace_back(LEDGER_ENTRY_UPDATED);
-                        changes.back().updated() = *le;
+                        if (le->data.type() == TTL &&
+                            restoredKeys.liveBucketList.count(
+                                LedgerEntryKey(*le)) == 1)
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                            changes.back().restored() = *le;
+                        }
+                        else
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_UPDATED);
+                            changes.back().updated() = *le;
+                        }
                     }
                     else
                     {
@@ -1920,9 +1930,19 @@ TransactionFrame::parallelApply(
                     // op
                     releaseAssertOrThrow(le);
 
-                    // New entry
-                    changes.emplace_back(LEDGER_ENTRY_CREATED);
-                    changes.back().created() = *le;
+                    if (restoredKeys.hotArchive.count(LedgerEntryKey(*le)) == 1)
+                    {
+                        releaseAssertOrThrow(isPersistentEntry(le->data) ||
+                                             le->data.type() == TTL);
+
+                        changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                        changes.back().restored() = *le;
+                    }
+                    else
+                    {
+                        changes.emplace_back(LEDGER_ENTRY_CREATED);
+                        changes.back().created() = *le;
+                    }
                 }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
@@ -1947,10 +1967,34 @@ TransactionFrame::parallelApply(
                 // right before we cal into the invariants.
             }
 
-            if (op->getOperation().body.type() == RESTORE_FOOTPRINT)
+            // Now we need to insert all the LEDGER_ENTRY_RESTORED changes for
+            // the data entries that were not created but already existed on the
+            // live BucketList. These data/code entries have not been modified
+            // (only the TTL is updated), so ltx doesn't have any meta. However
+            // this is still useful for downstream so we manually insert restore
+            // meta here.
+            for (auto const& key : restoredKeys.liveBucketList)
             {
-                changes = processOpLedgerEntryChanges(
-                    changes, res.getRestoredKeys(), entryMap);
+                if (key.type() == TTL)
+                {
+                    continue;
+                }
+                releaseAssertOrThrow(isPersistentEntry(key));
+
+                auto it = entryMap.find(key);
+
+                // If TTL already exists and is just being updated, the
+                // data entry must also already exist and was preloaded into
+                // entryMap. Note that entryMap does not yet have the updates
+                // from this transaction, but that does not matter here because
+                // a live restoration doesn't modify the data entry.
+                releaseAssertOrThrow(it != entryMap.end() &&
+                                     it->second.mLedgerEntry);
+
+                LedgerEntryChange change;
+                change.type(LEDGER_ENTRY_RESTORED);
+                change.restored() = *it->second.mLedgerEntry;
+                changes.push_back(change);
             }
 
             OperationMetaArray opMetas(1);
