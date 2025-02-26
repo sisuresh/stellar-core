@@ -1851,10 +1851,9 @@ LedgerManagerImpl::applyThread(AppConnector& app,
                 auto it = entryMap->find(ttlKey);
                 if (it != entryMap->end())
                 {
-                    releaseAssertOrThrow(it->second.mLedgerEntry);
-                    releaseAssertOrThrow(it->second.mLedgerEntry->data.ttl()
-                                             .liveUntilLedgerSeq <=
-                                         extIt->second);
+                    releaseAssert(it->second.mLedgerEntry);
+                    releaseAssert(it->second.mLedgerEntry->data.ttl()
+                                      .liveUntilLedgerSeq <= extIt->second);
 
                     it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
                         extIt->second;
@@ -1903,13 +1902,13 @@ LedgerManagerImpl::applyThread(AppConnector& app,
                 releaseAssert(it != entryMap->end());
 
                 auto isReadOnlyTTLIt = isReadOnlyTTLMap.find(lk);
-                releaseAssertOrThrow(lk.type() != TTL ||
-                                     isReadOnlyTTLIt != isReadOnlyTTLMap.end());
+                releaseAssert(lk.type() != TTL ||
+                              isReadOnlyTTLIt != isReadOnlyTTLMap.end());
 
                 if (lk.type() == TTL && it->second.mLedgerEntry && updatedLe &&
                     isReadOnlyTTLIt->second /*isReadOnly*/)
                 {
-                    releaseAssertOrThrow(
+                    releaseAssert(
                         updatedLe->data.ttl().liveUntilLedgerSeq >
                         it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq);
 
@@ -1937,18 +1936,18 @@ LedgerManagerImpl::applyThread(AppConnector& app,
             for (auto const& key : res.getRestoredKeys().hotArchive)
             {
                 auto [_, inserted] = threadRestoredKeys.hotArchive.emplace(key);
-                releaseAssertOrThrow(inserted);
+                releaseAssert(inserted);
             }
             for (auto const& key : res.getRestoredKeys().liveBucketList)
             {
                 auto [_, inserted] =
                     threadRestoredKeys.liveBucketList.emplace(key);
-                releaseAssertOrThrow(inserted);
+                releaseAssert(inserted);
             }
         }
         else
         {
-            releaseAssertOrThrow(!txBundle.getResPayload()->isSuccess());
+            releaseAssert(!txBundle.getResPayload()->isSuccess());
         }
     }
 
