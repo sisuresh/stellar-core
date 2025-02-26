@@ -183,7 +183,7 @@ OperationFrame::preloadEntryHelper(
                     auto ttlKey = getTTLKey(lk);
                     auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
                     // TTL entry must exist
-                    releaseAssertOrThrow(ttlLtxe);
+                    releaseAssert(ttlLtxe);
 
                     entryMap.emplace(ttlKey,
                                      ThreadEntry{ttlLtxe.current(), false});
@@ -198,7 +198,7 @@ OperationFrame::preloadEntryHelper(
                     auto ttlKey = getTTLKey(lk);
                     auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
                     // TTL entry must not exist
-                    releaseAssertOrThrow(!ttlLtxe);
+                    releaseAssert(!ttlLtxe);
                     entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
                 }
             }
