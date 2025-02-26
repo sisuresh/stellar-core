@@ -165,102 +165,6 @@ processOpLedgerEntryChanges(std::shared_ptr<OperationFrame const> op,
     return changes;
 }
 
-// TODO: The above ltx version can be removed if parallel soroban and state
-// archival make it into the same protocol version.
-LedgerEntryChanges
-processOpLedgerEntryChanges(LedgerEntryChanges& changes,
-                            RestoredKeys const& restoredKeys,
-                            ThreadEntryMap const& entryMap)
-{
-    auto const& hotArchiveRestores = restoredKeys.hotArchive;
-    auto const& liveRestores = restoredKeys.liveBucketList;
-
-    // Depending on whether the restored entry is still in the live
-    // BucketList (has not yet been evicted), or has been evicted and is in
-    // the hot archive, meta will be handled differently as follows:
-    //
-    // Entry restore from Hot Archive:
-    // Meta before changes:
-    //     Data/Code: LEDGER_ENTRY_CREATED
-    //     TTL: LEDGER_ENTRY_CREATED
-    // Meta after changes:
-    //     Data/Code: LEDGER_ENTRY_RESTORED
-    //     TTL: LEDGER_ENTRY_RESTORED
-    //
-    // Entry restore from Live BucketList:
-    // Meta before changes:
-    //     Data/Code: no meta
-    //     TTL: LEDGER_ENTRY_STATE(oldValue), LEDGER_ENTRY_UPDATED(newValue)
-    // Meta after changes:
-    //     Data/Code: LEDGER_ENTRY_RESTORED
-    //     TTL: LEDGER_ENTRY_STATE(oldValue), LEDGER_ENTRY_RESTORED(newValue)
-    //
-    // First, iterate through existing meta and change everything we need to
-    // update.
-    for (auto& change : changes)
-    {
-        // For entry creation meta, we only need to check for Hot Archive
-        // restores
-        if (change.type() == LEDGER_ENTRY_CREATED)
-        {
-            auto le = change.created();
-            if (hotArchiveRestores.find(LedgerEntryKey(le)) !=
-                hotArchiveRestores.end())
-            {
-                releaseAssertOrThrow(isPersistentEntry(le.data) ||
-                                     le.data.type() == TTL);
-                change.type(LEDGER_ENTRY_RESTORED);
-                change.restored() = le;
-            }
-        }
-        // Update meta only applies to TTL meta
-        else if (change.type() == LEDGER_ENTRY_UPDATED)
-        {
-            if (change.updated().data.type() == TTL)
-            {
-                auto ttlLe = change.updated();
-                if (liveRestores.find(LedgerEntryKey(ttlLe)) !=
-                    liveRestores.end())
-                {
-                    // Update the TTL change from LEDGER_ENTRY_UPDATED to
-                    // LEDGER_ENTRY_RESTORED.
-                    change.type(LEDGER_ENTRY_RESTORED);
-                    change.restored() = ttlLe;
-                }
-            }
-        }
-    }
-
-    // Now we need to insert all the LEDGER_ENTRY_RESTORED changes for the
-    // data entries that were not created but already existed on the live
-    // BucketList. These data/code entries have not been modified (only the TTL
-    // is updated), so ltx doesn't have any meta. However this is still useful
-    // for downstream so we manually insert restore meta here.
-    for (auto const& key : liveRestores)
-    {
-        if (key.type() == TTL)
-        {
-            continue;
-        }
-        releaseAssertOrThrow(isPersistentEntry(key));
-
-        auto it = entryMap.find(key);
-
-        // If TTL already exists and is just being updated, the
-        // data entry must also already exist and was preloaded into entryMap.
-        // Note that entryMap does not yet have the updates from this
-        // transaction, but that does not matter here because a live restoration
-        // doesn't modify the data entry.
-        releaseAssertOrThrow(it != entryMap.end() && it->second.mLedgerEntry);
-
-        LedgerEntryChange change;
-        change.type(LEDGER_ENTRY_RESTORED);
-        change.restored() = *it->second.mLedgerEntry;
-        changes.push_back(change);
-    }
-
-    return changes;
-}
 #endif
 
 } // namespace
@@ -1951,6 +1855,7 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
+            auto const& restoredKeys = res.getRestoredKeys();
             // Build OperationMeta
             LedgerEntryChanges changes;
             for (auto const& newUpdates : res.getModifiedEntryMap())
@@ -1975,8 +1880,18 @@ TransactionFrame::parallelApply(
 
                     if (le)
                     {
-                        changes.emplace_back(LEDGER_ENTRY_UPDATED);
-                        changes.back().updated() = *le;
+                        if (le->data.type() == TTL &&
+                            restoredKeys.liveBucketList.count(
+                                LedgerEntryKey(*le)) == 1)
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                            changes.back().restored() = *le;
+                        }
+                        else
+                        {
+                            changes.emplace_back(LEDGER_ENTRY_UPDATED);
+                            changes.back().updated() = *le;
+                        }
                     }
                     else
                     {
@@ -1991,9 +1906,19 @@ TransactionFrame::parallelApply(
                     // op
                     releaseAssertOrThrow(le);
 
-                    // New entry
-                    changes.emplace_back(LEDGER_ENTRY_CREATED);
-                    changes.back().created() = *le;
+                    if (restoredKeys.hotArchive.count(LedgerEntryKey(*le)) == 1)
+                    {
+                        releaseAssertOrThrow(isPersistentEntry(le->data) ||
+                                             le->data.type() == TTL);
+
+                        changes.emplace_back(LEDGER_ENTRY_RESTORED);
+                        changes.back().restored() = *le;
+                    }
+                    else
+                    {
+                        changes.emplace_back(LEDGER_ENTRY_CREATED);
+                        changes.back().created() = *le;
+                    }
                 }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
@@ -2018,10 +1943,34 @@ TransactionFrame::parallelApply(
                 // right before we cal into the invariants.
             }
 
-            if (op->getOperation().body.type() == RESTORE_FOOTPRINT)
+            // Now we need to insert all the LEDGER_ENTRY_RESTORED changes for
+            // the data entries that were not created but already existed on the
+            // live BucketList. These data/code entries have not been modified
+            // (only the TTL is updated), so ltx doesn't have any meta. However
+            // this is still useful for downstream so we manually insert restore
+            // meta here.
+            for (auto const& key : restoredKeys.liveBucketList)
             {
-                changes = processOpLedgerEntryChanges(
-                    changes, res.getRestoredKeys(), entryMap);
+                if (key.type() == TTL)
+                {
+                    continue;
+                }
+                releaseAssertOrThrow(isPersistentEntry(key));
+
+                auto it = entryMap.find(key);
+
+                // If TTL already exists and is just being updated, the
+                // data entry must also already exist and was preloaded into
+                // entryMap. Note that entryMap does not yet have the updates
+                // from this transaction, but that does not matter here because
+                // a live restoration doesn't modify the data entry.
+                releaseAssertOrThrow(it != entryMap.end() &&
+                                     it->second.mLedgerEntry);
+
+                LedgerEntryChange change;
+                change.type(LEDGER_ENTRY_RESTORED);
+                change.restored() = *it->second.mLedgerEntry;
+                changes.push_back(change);
             }
 
             xdr::xvector<OperationMeta> operationMetas;
