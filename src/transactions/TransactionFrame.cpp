@@ -1702,11 +1702,11 @@ TransactionFrame::preloadEntriesForParallelApply(
     AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
     ThreadEntryMap& entryMap, MutableTxResultPtr txResult) const
 {
-    releaseAssertOrThrow(isSoroban());
-    releaseAssertOrThrow(mOperations.size() == 1);
+    releaseAssert(isSoroban());
+    releaseAssert(mOperations.size() == 1);
 
     auto sorobanData = txResult->getSorobanData();
-    releaseAssertOrThrow(sorobanData);
+    releaseAssert(sorobanData);
 
     auto op = mOperations.front();
     auto& opResult = txResult->getOpResultAt(0);
@@ -1829,7 +1829,9 @@ TransactionFrame::parallelApply(
             ledgerInfo.getLedgerVersion() >=
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
 
-        releaseAssertOrThrow(txResult);
+        // We can't set an internal error if this is missing, which is why this
+        // aborts instead of throwing.
+        releaseAssert(txResult);
 
         // This tx failed validation earlier, do not apply it
         if (!txResult->isSuccess())
