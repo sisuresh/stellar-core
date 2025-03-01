@@ -104,8 +104,7 @@ RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
     auto const& resources = mParentTx.sorobanResources();
     if (resources.diskReadBytes < ledgerReadByte)
     {
-        res.tr().restoreFootprintResult().code(
-            RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+        innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
 
             diagnosticEvents.pushError(
             SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
