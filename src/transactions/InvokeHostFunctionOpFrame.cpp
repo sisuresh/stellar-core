@@ -404,7 +404,7 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
 
             if (resources.diskReadBytes < readEntryCounters.mLedgerReadByte)
             {
-                this->innerResult(res).code(
+                innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
 
                 buffer.pushApplyTimeDiagnosticError(

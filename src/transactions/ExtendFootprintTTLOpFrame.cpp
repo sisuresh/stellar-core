@@ -104,8 +104,7 @@ ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
         auto const& resources = mParentTx.sorobanResources();
         if (resources.diskReadBytes < metrics.mLedgerReadByte)
         {
-            res.tr().extendFootprintTTLResult().code(
-                EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+            innerResult(res).code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
 
             buffer.pushApplyTimeDiagnosticError(
                 SCE_BUDGET, SCEC_EXCEEDED_LIMIT,

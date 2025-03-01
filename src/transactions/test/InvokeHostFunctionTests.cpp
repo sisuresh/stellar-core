@@ -5522,7 +5522,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
     cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
         static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
-    cfg.SOROBAN_PHASE_STAGE_COUNT = 2;
+    cfg.SOROBAN_PHASE_STAGE_COUNT = 1;
     cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
 
     TmpDirManager tdm(std::string("metatest-soroban-") +
@@ -5538,9 +5538,9 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
     auto& app = test.getApp();
     modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
         cfg.mLedgerMaxInstructions = 25'000'000;
+        cfg.mTxMaxInstructions = 25'000'000;
         cfg.mLedgerMaxDependentTxClusters = 2;
     });
-
     auto issuerKey = getAccount("issuer");
     Asset idr = makeAsset(issuerKey, "IDR");
     AssetContractTestClient assetClient(test, idr);
@@ -5579,8 +5579,8 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
 
     REQUIRE(test.getTTL(client.getContract().getDataKey(
                 makeSymbolSCVal("key2"), ContractDataDurability::TEMPORARY)) ==
-            42);
-    REQUIRE(test.getLCLSeq() == 27);
+            47);
+    REQUIRE(test.getLCLSeq() == 32);
 
     REQUIRE(client.put("key4", ContractDataDurability::PERSISTENT, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
@@ -5722,7 +5722,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         for (auto const& txResultMeta : lcm.v1().txProcessing)
         {
             auto const& changesAfter =
-                txResultMeta.txApplyProcessing.v3().txChangesAfter;
+                txResultMeta.txApplyProcessing.v4().txChangesAfter;
 
             // Just verify that a refund happened
             REQUIRE(changesAfter.size() == 2);
@@ -5739,7 +5739,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         // One tx will fail
         checkResults(r, sorobanTxs.size() - 1, 1);
 
-        REQUIRE(r.results[9]
+        REQUIRE(r.results[1]
                     .result.result.results()[0]
                     .tr()
                     .invokeHostFunctionResult()
@@ -5822,7 +5822,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         auto i1 = client.getContract().prepareInvocation(
             isPersistent ? "del_persistent" : "del_temporary",
             {makeSymbolSCVal("recreate")},
-            writeSpec.setInclusionFee(writeSpec.getInclusionFee() + 100));
+            writeSpec.setInclusionFee(writeSpec.getInclusionFee()));
         auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a2);
 
         auto i2 = client.getContract().prepareInvocation(
@@ -5849,7 +5849,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         // them.
         auto tx1OpChanges = lcm.v1()
                                 .txProcessing.at(0)
-                                .txApplyProcessing.v3()
+                                .txApplyProcessing.v4()
                                 .operations.at(0)
                                 .changes;
         REQUIRE(tx1OpChanges.at(0).type() == LEDGER_ENTRY_STATE);
@@ -5859,7 +5859,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
 
         auto tx2OpChanges = lcm.v1()
                                 .txProcessing.at(1)
-                                .txApplyProcessing.v3()
+                                .txApplyProcessing.v4()
                                 .operations.at(0)
                                 .changes;
         REQUIRE(tx2OpChanges.at(0).type() == LEDGER_ENTRY_CREATED);
@@ -5985,7 +5985,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
                            txResultMeta.result.transactionHash;
 
             auto const& changes =
-                txResultMeta.txApplyProcessing.v3().operations.at(0).changes;
+                txResultMeta.txApplyProcessing.v4().operations.at(0).changes;
 
             if (isWrite)
             {
@@ -6073,9 +6073,14 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     SorobanTest test(cfg);
     ContractStorageTestClient client(test);
 
+    auto contractExpirationLedger =
+        test.getLCLSeq() +
+        test.getNetworkCfg().stateArchivalSettings().minPersistentTTL;
+
     auto& app = test.getApp();
     modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
         cfg.mLedgerMaxInstructions = 5'000'000;
+        cfg.mTxMaxInstructions = 5'000'000;
         cfg.mLedgerMaxDependentTxClusters = 2;
     });
 
@@ -6086,40 +6091,103 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     auto& root = test.getRoot();
     auto a1 = root.create("a1", startingBalance);
     auto a2 = root.create("a2", startingBalance);
+    auto a3 = root.create("a3", startingBalance);
 
     REQUIRE(client.put("key2", ContractDataDurability::TEMPORARY, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 
-    // tx1 will fast fail due to hitting the readBytes limit
-    auto i1Spec = client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
-                      .setReadBytes(5);
-    auto i1 = client.getContract().prepareInvocation(
-        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
-        i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
-    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+    SECTION("invoke")
+    {
+        // tx1 will fast fail due to hitting the readBytes limit
+        auto i1Spec =
+            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
+                .setReadBytes(5);
+        auto i1 = client.getContract().prepareInvocation(
+            "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+            i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
+        auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
 
-    // extend key2
-    auto i2 = client.getContract().prepareInvocation(
-        "extend_temporary",
-        {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
-        client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 2));
-    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+        // extend key2
+        auto i2 = client.getContract().prepareInvocation(
+            "extend_temporary",
+            {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
+            client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 2));
+        auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
 
-    std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
-    sorobanTxs.emplace_back(tx1);
-    sorobanTxs.emplace_back(tx2);
+        auto r = closeLedger(test.getApp(), {tx1, tx2});
+        REQUIRE(r.results.size() == 2);
 
-    auto r = closeLedger(test.getApp(), sorobanTxs);
-    REQUIRE(r.results.size() == sorobanTxs.size());
+        REQUIRE(r.results[1]
+                    .result.result.results()[0]
+                    .tr()
+                    .invokeHostFunctionResult()
+                    .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+    }
+    SECTION("extend")
+    {
+        auto const& contractKeys = client.getContract().getKeys();
 
-    checkTx(0, r, txSUCCESS);
+        SorobanResources extendResources;
+        extendResources.footprint.readOnly = contractKeys;
+        extendResources.diskReadBytes = 3'028 + 104;
+        auto tx1 =
+            test.createExtendOpTx(extendResources, 1'000, 30'000, 500'000, &a1);
 
-    REQUIRE(r.results[1]
-                .result.result.results()[0]
-                .tr()
-                .invokeHostFunctionResult()
-                .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+        --extendResources.diskReadBytes;
+        auto tx2 = test.createExtendOpTx(extendResources, 10'000, 30'000,
+                                         500'000, &a2);
+
+        // Will succeed because it'll only read the TTL entries
+        auto tx3 =
+            test.createExtendOpTx(extendResources, 10, 30'000, 500'000, &a3);
+
+        auto r = closeLedger(test.getApp(), {tx1, tx2, tx3});
+        REQUIRE(r.results.size() == 3);
+
+        checkTx(0, r, txFAILED);
+        checkTx(1, r, txSUCCESS);
+        checkTx(2, r, txSUCCESS);
+
+        REQUIRE(r.results[0]
+                    .result.result.results()[0]
+                    .tr()
+                    .extendFootprintTTLResult()
+                    .code() == EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+
+        REQUIRE(test.getTTL(contractKeys.at(0)) == test.getLCLSeq() + 1'000);
+    }
+    SECTION("restore")
+    {
+        for (uint32_t i = test.getLCLSeq() + 1; i <= contractExpirationLedger;
+             ++i)
+        {
+            closeLedgerOn(test.getApp(), i, 2, 1, 2016);
+        }
+
+        auto const& contractKeys = client.getContract().getKeys();
+
+        SorobanResources restoreResources;
+        restoreResources.footprint.readWrite = contractKeys;
+        restoreResources.diskReadBytes = 3'028 + 104;
+        restoreResources.writeBytes = restoreResources.diskReadBytes;
+        auto tx1 = test.createRestoreTx(restoreResources, 30'000, 500'000, &a1);
+
+        --restoreResources.diskReadBytes;
+        auto tx2 = test.createRestoreTx(restoreResources, 30'000, 500'000, &a2);
+
+        auto r = closeLedger(test.getApp(), {tx1, tx2});
+        REQUIRE(r.results.size() == 2);
+
+        checkTx(0, r, txSUCCESS);
+        checkTx(1, r, txFAILED);
+
+        REQUIRE(r.results[1]
+                    .result.result.results()[0]
+                    .tr()
+                    .restoreFootprintResult()
+                    .code() == RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+    }
 }
 
 TEST_CASE("delete non existent entry", "[tx][soroban][parallelapply]")
@@ -6164,7 +6232,7 @@ TEST_CASE("apply generated parallel tx sets", "[tx][soroban][parallelapply]")
     cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
         static_cast<uint32_t>(PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION);
 
-    cfg.SOROBAN_PHASE_STAGE_COUNT = 2;
+    cfg.SOROBAN_PHASE_STAGE_COUNT = 1;
     cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
 
     std::vector<std::string> keys = {"key1", "key2", "key3", "key4",
@@ -6387,8 +6455,8 @@ TEST_CASE("restore and update", "[tx][soroban][parallelapply]")
     auto i1Spec =
         client.writeKeySpec("key", ContractDataDurability::PERSISTENT);
     auto i1 = client.getContract().prepareInvocation(
-        "put_persistent", {makeSymbolSCVal("key"), makeU64SCVal(2)},
-        i1Spec.setInclusionFee(i1Spec.getInclusionFee()));
+        "put_persistent", {makeSymbolSCVal("key"), makeU64SCVal(3)},
+        i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 2));
     auto tx2 = i1.withExactNonRefundableResourceFee().createTx(&a2);
 
     std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
@@ -6406,6 +6474,6 @@ TEST_CASE("restore and update", "[tx][soroban][parallelapply]")
                 test.getNetworkCfg().stateArchivalSettings().minPersistentTTL -
                 1);
 
-    REQUIRE(client.get("key", ContractDataDurability::PERSISTENT, 2) ==
+    REQUIRE(client.get("key", ContractDataDurability::PERSISTENT, 3) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 }
