@@ -409,7 +409,7 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
 
             if (resources.readBytes < readEntryCounters.mLedgerReadByte)
             {
-                this->innerResult(res).code(
+                innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
 
                 sorobanData.pushApplyTimeDiagnosticError(
