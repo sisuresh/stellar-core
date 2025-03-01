@@ -5355,40 +5355,98 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     auto& root = test.getRoot();
     auto a1 = root.create("a1", startingBalance);
     auto a2 = root.create("a2", startingBalance);
+    auto a3 = root.create("a3", startingBalance);
 
     REQUIRE(client.put("key2", ContractDataDurability::TEMPORARY, 0) ==
             INVOKE_HOST_FUNCTION_SUCCESS);
 
-    // tx1 will fast fail due to hitting the readBytes limit
-    auto i1Spec = client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
-                      .setReadBytes(5);
-    auto i1 = client.getContract().prepareInvocation(
-        "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
-        i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
-    auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
+    SECTION("invoke")
+    {
+        // tx1 will fast fail due to hitting the readBytes limit
+        auto i1Spec = client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
+                        .setReadBytes(5);
+        auto i1 = client.getContract().prepareInvocation(
+            "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
+            i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
+        auto tx1 = i1.withExactNonRefundableResourceFee().createTx(&a1);
 
-    // extend key2
-    auto i2 = client.getContract().prepareInvocation(
-        "extend_temporary",
-        {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
-        client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
-            .setInclusionFee(i1Spec.getInclusionFee() + 2));
-    auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
+        // extend key2
+        auto i2 = client.getContract().prepareInvocation(
+            "extend_temporary",
+            {makeSymbolSCVal("key2"), makeU32SCVal(400), makeU32SCVal(400)},
+            client.readKeySpec("key2", ContractDataDurability::TEMPORARY)
+                .setInclusionFee(i1Spec.getInclusionFee() + 2));
+        auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a2);
 
-    std::vector<TransactionFrameBaseConstPtr> sorobanTxs;
-    sorobanTxs.emplace_back(tx1);
-    sorobanTxs.emplace_back(tx2);
+        auto r = closeLedger(test.getApp(), {tx1, tx2});
+        REQUIRE(r.results.size() == 2);
 
-    auto r = closeLedger(test.getApp(), sorobanTxs);
-    REQUIRE(r.results.size() == sorobanTxs.size());
+        REQUIRE(r.results[1]
+                    .result.result.results()[0]
+                    .tr()
+                    .invokeHostFunctionResult()
+                    .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+    }
+    SECTION("extend")
+    {
+        auto const& contractKeys = client.getContract().getKeys();
 
-    checkTx(0, r, txSUCCESS);
+        SorobanResources extendResources;
+        extendResources.footprint.readOnly = contractKeys;
+        extendResources.readBytes = 3'028 + 104;
+        auto tx1 =
+            test.createExtendOpTx(extendResources, 1'000, 30'000, 500'000, &a1);
+        
+        --extendResources.readBytes;
+        auto tx2 =
+            test.createExtendOpTx(extendResources, 10'000, 30'000, 500'000, &a2);
+        
+        // Will succeed because it'll only read the TTL entries
+        auto tx3 =
+            test.createExtendOpTx(extendResources, 10, 30'000, 500'000, &a3);
 
-    REQUIRE(r.results[1]
-                .result.result.results()[0]
-                .tr()
-                .invokeHostFunctionResult()
-                .code() == INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+        auto r = closeLedger(test.getApp(), {tx1, tx2, tx3});
+        REQUIRE(r.results.size() == 3);
+
+        checkTx(0, r, txSUCCESS);
+        checkTx(1, r, txFAILED);
+        checkTx(2, r, txSUCCESS);
+
+        REQUIRE(r.results[1]
+                    .result.result.results()[0]
+                    .tr()
+                    .extendFootprintTTLResult()
+                    .code() == EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+        
+        REQUIRE(test.getTTL(contractKeys.at(0)) == test.getLCLSeq() + 1'000);
+    }
+    //TODO:Finish
+    /* SECTION("restore")
+    {
+        auto const& contractKeys = client.getContract().getKeys();
+
+        SorobanResources restoreResources;
+        restoreResources.footprint.readOnly = contractKeys;
+        restoreResources.readBytes = 3'028 + 104;
+        auto tx1 =
+            test.createRestoreTx(restoreResources, 30'000, 500'000, &a1);
+        
+        --restoreResources.readBytes;
+        auto tx2 =
+            test.createRestoreTx(restoreResources, 30'000, 500'000, &a2);
+
+        auto r = closeLedger(test.getApp(), {tx1, tx2});
+        REQUIRE(r.results.size() == 2);
+
+        checkTx(0, r, txSUCCESS);
+        checkTx(1, r, txFAILED);
+
+        REQUIRE(r.results[1]
+                    .result.result.results()[0]
+                    .tr()
+                    .restoreFootprintResult()
+                    .code() == RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+    } */
 }
 
 TEST_CASE("delete non existent entry", "[tx][soroban][parallelapply]")
