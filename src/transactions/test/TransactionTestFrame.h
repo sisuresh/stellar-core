@@ -120,7 +120,7 @@ class TransactionTestFrame : public TransactionFrameBase
                               LedgerKeyMeter* lkMeter) const override;
 
     void preloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
         MutableTxResultPtr txResult) const override;
 

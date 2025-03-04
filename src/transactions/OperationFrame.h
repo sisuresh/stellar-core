@@ -50,7 +50,7 @@ class OperationFrame
 
     // returns false if preloading failed.
     virtual bool doPreloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
         SorobanTxData& sorobanData) const;
 
@@ -101,7 +101,7 @@ class OperationFrame
                OperationResult& res,
                std::shared_ptr<SorobanTxData> sorobanData) const;
 
-    bool preloadEntriesForParallelApply(Config const& config,
+    bool preloadEntriesForParallelApply(AppConnector& app,
                                         SorobanMetrics& sorobanMetrics,
                                         AbstractLedgerTxn& ltx,
                                         ThreadEntryMap& entryMap,

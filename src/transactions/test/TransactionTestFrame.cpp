@@ -292,12 +292,11 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
 
 void
 TransactionTestFrame::preloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-    MutableTxResultPtr txResult) const
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, MutableTxResultPtr txResult) const
 {
-    mTransactionFrame->preloadEntriesForParallelApply(config, sorobanMetrics,
-                                                      ltx, entryMap, txResult);
+    mTransactionFrame->preloadEntriesForParallelApply(app, sorobanMetrics, ltx,
+                                                      entryMap, txResult);
 }
 
 void

@@ -220,21 +220,21 @@ OperationFrame::preloadEntryHelper(
 }
 
 bool
-OperationFrame::preloadEntriesForParallelApply(Config const& config,
+OperationFrame::preloadEntriesForParallelApply(AppConnector& app,
                                                SorobanMetrics& sorobanMetrics,
                                                AbstractLedgerTxn& ltx,
                                                ThreadEntryMap& entryMap,
                                                OperationResult& res,
                                                SorobanTxData& sorobanData) const
 {
-    return doPreloadEntriesForParallelApply(config, sorobanMetrics, ltx,
-                                            entryMap, res, sorobanData);
+    return doPreloadEntriesForParallelApply(app, sorobanMetrics, ltx, entryMap,
+                                            res, sorobanData);
 }
 
 bool
 OperationFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, OperationResult& res,
     SorobanTxData& sorobanData) const
 {
     throw std::runtime_error("Cannot call preloadEntriesForParallelApply on a "

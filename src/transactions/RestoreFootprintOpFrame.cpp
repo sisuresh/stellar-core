@@ -16,27 +16,6 @@
 namespace stellar
 {
 
-struct ParallelRestoreFootprintMetrics
-{
-    SorobanMetrics& mMetrics;
-
-    uint32_t mLedgerWriteByte{0};
-
-    ParallelRestoreFootprintMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
-    {
-    }
-
-    ~ParallelRestoreFootprintMetrics()
-    {
-        mMetrics.mRestoreFpOpWriteLedgerByte.Mark(mLedgerWriteByte);
-    }
-    medida::TimerContext
-    getExecTimer()
-    {
-        return mMetrics.mRestoreFpOpExec.TimeScope();
-    }
-};
-
 struct RestoreFootprintMetrics
 {
     SorobanMetrics& mMetrics;
@@ -75,39 +54,67 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, OperationResult& res,
     SorobanTxData& sorobanData) const
 {
     uint32_t ledgerReadByte = 0;
 
-    auto const& resources = mParentTx.sorobanResources();
+    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
 
-    auto callback = [&ledgerReadByte, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
-        ledgerReadByte += entrySize;
-        if (resources.readBytes < ledgerReadByte)
+    for (auto const& lk : mParentTx.sorobanResources().footprint.readWrite)
+    {
+        auto ttlKey = getTTLKey(lk);
+        auto constTTLLtxe = ltx.loadWithoutRecord(ttlKey);
+        if (constTTLLtxe)
         {
-            res.tr().restoreFootprintResult().code(
-                RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            entryMap.emplace(ttlKey,
+                             ThreadEntry{constTTLLtxe.current(), false});
 
-            sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(ledgerReadByte),
-                 makeU64SCVal(resources.readBytes)});
+            if (!isLive(constTTLLtxe.current(), ledgerSeq))
+            {
+                auto constEntryLtxe = ltx.loadWithoutRecord(lk);
 
-            return false;
+                entryMap.emplace(lk,
+                                 ThreadEntry{constEntryLtxe.current(), false});
+
+                // We checked for TTLEntry existence above
+                releaseAssertOrThrow(constEntryLtxe);
+
+                ledgerReadByte += static_cast<uint32>(
+                    xdr::xdr_size(constEntryLtxe.current()));
+            }
+            // We aren't adding the entry key if it's live. This means we will
+            // not try to access the entry after this point for this
+            // transaction.
         }
+        else
+        {
+            entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
+            entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+        }
+        // If the entry exists in the hot archive, we'll load those during
+        // parallel apply and also validate the read bytes limit then
+    }
 
-        return true;
-    };
+    auto const& resources = mParentTx.sorobanResources();
+    if (resources.readBytes < ledgerReadByte)
+    {
+        res.tr().restoreFootprintResult().code(
+            RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
 
-    bool success = preloadEntryHelper(ltx, entryMap, callback);
+        sorobanData.pushApplyTimeDiagnosticError(
+            app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+            "operation byte-read mresources exceeds amount specified",
+            {makeU64SCVal(ledgerReadByte), makeU64SCVal(resources.readBytes)});
 
-    sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
+        // Only mark on failure because we'll also count read bytes during apply
+        // to also count anything read from the hot archive.
+        sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
+        return false;
+    }
 
-    return success;
+    return true;
 }
 
 ParallelTxReturnVal
@@ -121,9 +128,7 @@ RestoreFootprintOpFrame::doApplyParallel(
 {
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
 
-    // We don't use RestoreFootprintMetrics here because it tracks two metrics,
-    // one of which is taken care of in doPreloadEntriesForParallelApply.
-    ParallelRestoreFootprintMetrics metrics(sorobanMetrics);
+    RestoreFootprintMetrics metrics(sorobanMetrics);
     auto timeScope = metrics.getExecTimer();
 
     auto const& resources = mParentTx.sorobanResources();
@@ -196,6 +201,18 @@ RestoreFootprintOpFrame::doApplyParallel(
 
             entrySize = static_cast<uint32>(
                 xdr::xdr_size(*entryLtxe->second.mLedgerEntry));
+        }
+
+        metrics.mLedgerReadByte += entrySize;
+        if (resources.readBytes < metrics.mLedgerReadByte)
+        {
+            sorobanData.pushApplyTimeDiagnosticError(
+                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                "operation byte-read resources exceeds amount specified",
+                {makeU64SCVal(metrics.mLedgerReadByte),
+                 makeU64SCVal(resources.readBytes)});
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
         }
 
         // To maintain consistency with InvokeHostFunction, TTLEntry

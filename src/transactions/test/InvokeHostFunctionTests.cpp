@@ -5363,8 +5363,9 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     SECTION("invoke")
     {
         // tx1 will fast fail due to hitting the readBytes limit
-        auto i1Spec = client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
-                        .setReadBytes(5);
+        auto i1Spec =
+            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
+                .setReadBytes(5);
         auto i1 = client.getContract().prepareInvocation(
             "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
             i1Spec.setInclusionFee(i1Spec.getInclusionFee() + 1));
@@ -5396,11 +5397,11 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
         extendResources.readBytes = 3'028 + 104;
         auto tx1 =
             test.createExtendOpTx(extendResources, 1'000, 30'000, 500'000, &a1);
-        
+
         --extendResources.readBytes;
-        auto tx2 =
-            test.createExtendOpTx(extendResources, 10'000, 30'000, 500'000, &a2);
-        
+        auto tx2 = test.createExtendOpTx(extendResources, 10'000, 30'000,
+                                         500'000, &a2);
+
         // Will succeed because it'll only read the TTL entries
         auto tx3 =
             test.createExtendOpTx(extendResources, 10, 30'000, 500'000, &a3);
@@ -5417,10 +5418,10 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
                     .tr()
                     .extendFootprintTTLResult()
                     .code() == EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
-        
+
         REQUIRE(test.getTTL(contractKeys.at(0)) == test.getLCLSeq() + 1'000);
     }
-    //TODO:Finish
+    // TODO:Finish
     /* SECTION("restore")
     {
         auto const& contractKeys = client.getContract().getKeys();
@@ -5430,7 +5431,7 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
         restoreResources.readBytes = 3'028 + 104;
         auto tx1 =
             test.createRestoreTx(restoreResources, 30'000, 500'000, &a1);
-        
+
         --restoreResources.readBytes;
         auto tx2 =
             test.createRestoreTx(restoreResources, 30'000, 500'000, &a2);

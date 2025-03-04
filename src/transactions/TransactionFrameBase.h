@@ -214,7 +214,7 @@ class TransactionFrameBase
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
     virtual void preloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
         MutableTxResultPtr txResult) const = 0;
     virtual void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,

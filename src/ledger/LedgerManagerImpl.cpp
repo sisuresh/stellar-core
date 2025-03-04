@@ -1609,8 +1609,8 @@ LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
         if (txBundle.getResPayload()->isSuccess())
         {
             txBundle.getTx()->preloadEntriesForParallelApply(
-                app.getConfig(), app.getLedgerManager().getSorobanMetrics(),
-                ltx, entryMap, txBundle.getResPayload());
+                app, app.getLedgerManager().getSorobanMetrics(), ltx, entryMap,
+                txBundle.getResPayload());
         }
     }
 
@@ -1953,6 +1953,8 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
     // Need to processPostApply after entries are updated because the refund can
     // update an account entry that was updated during apply.
+
+    // TODO: Change this so the refund is observable after a transaction.
     for (auto const& thread : stage)
     {
         for (auto const& txBundle : thread)

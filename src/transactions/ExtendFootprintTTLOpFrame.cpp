@@ -51,24 +51,64 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
 
 bool
 ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, OperationResult& res,
     SorobanTxData& sorobanData) const
 {
     ExtendFootprintTTLMetrics metrics(sorobanMetrics);
 
-    auto const& resources = mParentTx.sorobanResources();
+    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+    uint32_t newLiveUntilLedgerSeq = ledgerSeq + mExtendFootprintTTLOp.extendTo;
 
-    auto callback = [&metrics, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
+    for (auto const& lk : mParentTx.sorobanResources().footprint.readOnly)
+    {
+        auto ttlKey = getTTLKey(lk);
+        {
+            auto ttlConstLtxe = ltx.loadWithoutRecord(ttlKey);
+            if (!ttlConstLtxe)
+            {
+                entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+                entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
+                // Skip archived and missing entries
+                continue;
+            }
+
+            entryMap.emplace(ttlKey,
+                             ThreadEntry{ttlConstLtxe.current(), false});
+
+            if (!isLive(ttlConstLtxe.current(), ledgerSeq))
+            {
+                // We aren't adding the entry key if it isn't live. This means
+                // we will not try to access the entry after this point for this
+                // transaction.
+                continue;
+            }
+
+            // Skip entries that don't need to be extended
+            auto currLiveUntilLedgerSeq =
+                ttlConstLtxe.current().data.ttl().liveUntilLedgerSeq;
+            if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
+            {
+                continue;
+            }
+        }
+
+        auto entryLtxe = ltx.loadWithoutRecord(lk);
+        // We checked for TTLEntry existence above
+        releaseAssertOrThrow(entryLtxe);
+
+        uint32_t entrySize =
+            static_cast<uint32>(xdr::xdr_size(entryLtxe.current()));
         metrics.mLedgerReadByte += entrySize;
+
+        auto const& resources = mParentTx.sorobanResources();
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
             res.tr().extendFootprintTTLResult().code(
                 EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
 
             sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read mresources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
@@ -76,10 +116,9 @@ ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
             return false;
         }
 
-        return true;
-    };
-
-    return preloadEntryHelper(ltx, entryMap, callback);
+        entryMap.emplace(lk, ThreadEntry{entryLtxe.current(), false});
+    }
+    return true;
 }
 
 ParallelTxReturnVal

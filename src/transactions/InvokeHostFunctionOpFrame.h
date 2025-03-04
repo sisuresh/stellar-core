@@ -50,7 +50,7 @@ class InvokeHostFunctionOpFrame : public OperationFrame
                       OperationResult& res) const override;
 
     bool doPreloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
         SorobanTxData& sorobanData) const override;
 

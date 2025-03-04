@@ -201,6 +201,21 @@ struct HostFunctionMetrics
 
     ~HostFunctionMetrics()
     {
+        mMetrics.mHostFnOpReadEntry.Mark(mReadEntryCounters.mReadEntry);
+
+        mMetrics.mHostFnOpReadKeyByte.Mark(mReadEntryCounters.mReadKeyByte);
+        mMetrics.mHostFnOpReadLedgerByte.Mark(
+            mReadEntryCounters.mLedgerReadByte);
+        mMetrics.mHostFnOpReadDataByte.Mark(mReadEntryCounters.mReadDataByte);
+        mMetrics.mHostFnOpReadCodeByte.Mark(mReadEntryCounters.mReadCodeByte);
+
+        mMetrics.mHostFnOpMaxRwKeyByte.Mark(
+            mReadEntryCounters.mMaxReadWriteKeyByte);
+        mMetrics.mHostFnOpMaxRwDataByte.Mark(
+            mReadEntryCounters.mMaxReadWriteDataByte);
+        mMetrics.mHostFnOpMaxRwCodeByte.Mark(
+            mReadEntryCounters.mMaxReadWriteCodeByte);
+
         mMetrics.mHostFnOpWriteEntry.Mark(mWriteEntry);
 
         mMetrics.mHostFnOpWriteKeyByte.Mark(mWriteKeyByte);
@@ -336,53 +351,105 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
 
 bool
 InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, OperationResult& res,
     SorobanTxData& sorobanData) const
 {
     ReadEntryCounters readEntryCounters;
 
     auto const& resources = mParentTx.sorobanResources();
+    auto config = app.getConfig();
+    auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
 
-    auto callback = [&readEntryCounters, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
-        uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
-        readEntryCounters.noteReadEntry(isCodeKey(lk), keySize, entrySize);
-
-        if (resources.readBytes < readEntryCounters.mLedgerReadByte)
+    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) -> bool {
+        for (auto const& lk : keys)
         {
-            res.tr().invokeHostFunctionResult().code(
-                INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+            uint32_t entrySize = 0u;
 
-            sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(readEntryCounters.mLedgerReadByte),
-                 makeU64SCVal(resources.readBytes)});
+            if (isSorobanEntry(lk))
+            {
+                auto ttlKey = getTTLKey(lk);
+                auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
+                if (ttlLtxe)
+                {
+                    entryMap.emplace(ttlKey,
+                                     ThreadEntry{ttlLtxe.current(), false});
+                    if (isLive(ttlLtxe.current(), ledgerSeq))
+                    {
+                        auto ltxe = ltx.loadWithoutRecord(lk);
+                        entrySize = static_cast<uint32_t>(
+                            xdr::xdr_size(ltxe.current()));
+                        entryMap.emplace(lk,
+                                         ThreadEntry{ltxe.current(), false});
+                    }
 
-            return false;
+                    // We aren't adding the entry key if it isn't live. This
+                    // means we will not try to access the entry after this
+                    // point for this transaction.
+                }
+                else
+                {
+                    entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
+                    entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+                }
+            }
+            else
+            {
+                auto ltxe = ltx.loadWithoutRecord(lk);
+                if (ltxe)
+                {
+                    entrySize =
+                        static_cast<uint32_t>(xdr::xdr_size(ltxe.current()));
+                    entryMap.emplace(lk, ThreadEntry{ltxe.current(), false});
+                }
+            }
+
+            uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
+            readEntryCounters.noteReadEntry(isCodeKey(lk), keySize, entrySize);
+
+            if (resources.readBytes < readEntryCounters.mLedgerReadByte)
+            {
+                this->innerResult(res).code(
+                    INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+
+                sorobanData.pushApplyTimeDiagnosticError(
+                    config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                    "operation byte-read mresources exceeds amount specified",
+                    {makeU64SCVal(readEntryCounters.mLedgerReadByte),
+                     makeU64SCVal(resources.readBytes)});
+
+                // Only mark on failure because we'll also count read bytes
+                // during apply to also count anything read from the hot
+                // archive.
+                sorobanMetrics.mHostFnOpReadEntry.Mark(
+                    readEntryCounters.mReadEntry);
+
+                sorobanMetrics.mHostFnOpReadKeyByte.Mark(
+                    readEntryCounters.mReadKeyByte);
+                sorobanMetrics.mHostFnOpReadLedgerByte.Mark(
+                    readEntryCounters.mLedgerReadByte);
+                sorobanMetrics.mHostFnOpReadDataByte.Mark(
+                    readEntryCounters.mReadDataByte);
+                sorobanMetrics.mHostFnOpReadCodeByte.Mark(
+                    readEntryCounters.mReadCodeByte);
+
+                sorobanMetrics.mHostFnOpMaxRwKeyByte.Mark(
+                    readEntryCounters.mMaxReadWriteKeyByte);
+                sorobanMetrics.mHostFnOpMaxRwDataByte.Mark(
+                    readEntryCounters.mMaxReadWriteDataByte);
+                sorobanMetrics.mHostFnOpMaxRwCodeByte.Mark(
+                    readEntryCounters.mMaxReadWriteCodeByte);
+
+                return false;
+            }
         }
-
         return true;
     };
-
-    auto success = preloadEntryHelper(ltx, entryMap, callback);
-
-    sorobanMetrics.mHostFnOpReadEntry.Mark(readEntryCounters.mReadEntry);
-
-    sorobanMetrics.mHostFnOpReadKeyByte.Mark(readEntryCounters.mReadKeyByte);
-    sorobanMetrics.mHostFnOpReadLedgerByte.Mark(
-        readEntryCounters.mLedgerReadByte);
-    sorobanMetrics.mHostFnOpReadDataByte.Mark(readEntryCounters.mReadDataByte);
-    sorobanMetrics.mHostFnOpReadCodeByte.Mark(readEntryCounters.mReadCodeByte);
-
-    sorobanMetrics.mHostFnOpMaxRwKeyByte.Mark(
-        readEntryCounters.mMaxReadWriteKeyByte);
-    sorobanMetrics.mHostFnOpMaxRwDataByte.Mark(
-        readEntryCounters.mMaxReadWriteDataByte);
-    sorobanMetrics.mHostFnOpMaxRwCodeByte.Mark(
-        readEntryCounters.mMaxReadWriteCodeByte);
-
+    bool success = getEntries(mParentTx.sorobanResources().footprint.readOnly);
+    if (success)
+    {
+        success = getEntries(mParentTx.sorobanResources().footprint.readWrite);
+    }
     return success;
 }
 
@@ -684,7 +751,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
         opEntryMap.emplace(lk, le);
         auto iter = entryMap.find(lk);
-        if (iter == entryMap.end())
+        if (iter == entryMap.end() || !iter->second.mLedgerEntry)
         {
             createdKeys.insert(lk);
         }

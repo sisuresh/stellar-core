@@ -240,7 +240,7 @@ class TransactionFrame : public TransactionFrameBase
                      std::optional<int64_t> baseFee) const override;
 
     void preloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
         MutableTxResultPtr txResult) const override;
 

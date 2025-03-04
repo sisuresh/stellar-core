@@ -1699,9 +1699,8 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 
 void
 TransactionFrame::preloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-    MutableTxResultPtr txResult) const
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, MutableTxResultPtr txResult) const
 {
     releaseAssert(isSoroban());
     releaseAssert(mOperations.size() == 1);
@@ -1713,7 +1712,7 @@ TransactionFrame::preloadEntriesForParallelApply(
     auto& opResult = txResult->getOpResultAt(0);
 
     bool res = mOperations.at(0)->preloadEntriesForParallelApply(
-        config, sorobanMetrics, ltx, entryMap, opResult, *sorobanData);
+        app, sorobanMetrics, ltx, entryMap, opResult, *sorobanData);
     if (!res)
     {
         txResult->setInnermostResultCode(txFAILED);
@@ -1866,6 +1865,8 @@ TransactionFrame::parallelApply(
                 auto const& lk = newUpdates.first;
                 auto const& le = newUpdates.second;
 
+                // TODO: This assert is only true if we add missing keys to
+                // entryMap.
                 // Any key the op updates should also be in entryMap because the
                 // keys were taken from the footprint (the ttl keys were added
                 // as well)

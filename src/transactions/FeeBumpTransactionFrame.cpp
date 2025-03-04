@@ -74,14 +74,13 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 
 void
 FeeBumpTransactionFrame::preloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-    MutableTxResultPtr txResult) const
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, MutableTxResultPtr txResult) const
 {
     // TODO:Need to do exception safety analysis For the entire Pull Request
     try
     {
-        mInnerTx->preloadEntriesForParallelApply(config, sorobanMetrics, ltx,
+        mInnerTx->preloadEntriesForParallelApply(app, sorobanMetrics, ltx,
                                                  entryMap, txResult);
     }
     catch (std::exception& e)
