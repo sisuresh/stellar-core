@@ -1698,29 +1698,6 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 #endif
 
 void
-TransactionFrame::preloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-    MutableTxResultPtr txResult) const
-{
-    releaseAssert(isSoroban());
-    releaseAssert(mOperations.size() == 1);
-
-    auto sorobanData = txResult->getSorobanData();
-    releaseAssert(sorobanData);
-
-    auto op = mOperations.front();
-    auto& opResult = txResult->getOpResultAt(0);
-
-    bool res = mOperations.at(0)->preloadEntriesForParallelApply(
-        config, sorobanMetrics, ltx, entryMap, opResult, *sorobanData);
-    if (!res)
-    {
-        txResult->setInnermostResultCode(txFAILED);
-    }
-}
-
-void
 TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                    TransactionMetaFrame& meta,
                                    MutableTxResultPtr resPayload) const
@@ -1858,6 +1835,10 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
+            // TODO: Look at the cost of calling copySearchableLiveBucketListSnapshot. We could
+            // Use a single snapshot per thread.
+            auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
+
             auto const& restoredKeys = res.getRestoredKeys();
             // Build OperationMeta
             LedgerEntryChanges changes;
@@ -1866,18 +1847,13 @@ TransactionFrame::parallelApply(
                 auto const& lk = newUpdates.first;
                 auto const& le = newUpdates.second;
 
-                // Any key the op updates should also be in entryMap because the
-                // keys were taken from the footprint (the ttl keys were added
-                // as well)
-                auto prev = entryMap.find(lk);
-                releaseAssertOrThrow(prev != entryMap.end());
+                auto entryMapIt = entryMap.find(lk);
+                auto prev = entryMapIt == entryMap.end() ? liveSnapshot->load(lk) : entryMapIt->second;
 
-                auto prevLe = prev->second.mLedgerEntry;
-
-                if (prevLe)
+                if (prev)
                 {
                     changes.emplace_back(LEDGER_ENTRY_STATE);
-                    changes.back().state() = *prevLe;
+                    changes.back().state() = *prev;
 
                     if (le)
                     {
@@ -1923,10 +1899,10 @@ TransactionFrame::parallelApply(
                 }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
-                if (prevLe)
+                if (prev)
                 {
                     entryDelta.previous =
-                        std::make_shared<InternalLedgerEntry>(*prevLe);
+                        std::make_shared<InternalLedgerEntry>(*prev);
                 }
                 if (le)
                 {
@@ -1958,19 +1934,18 @@ TransactionFrame::parallelApply(
                 }
                 releaseAssertOrThrow(isPersistentEntry(key));
 
-                auto it = entryMap.find(key);
-
+                auto entryMapIt = entryMap.find(key);
+                auto entry = entryMapIt == entryMap.end() ? liveSnapshot->load(key) : entryMapIt->second;
                 // If TTL already exists and is just being updated, the
                 // data entry must also already exist and was preloaded into
                 // entryMap. Note that entryMap does not yet have the updates
                 // from this transaction, but that does not matter here because
                 // a live restoration doesn't modify the data entry.
-                releaseAssertOrThrow(it != entryMap.end() &&
-                                     it->second.mLedgerEntry);
+                releaseAssertOrThrow(entry);
 
                 LedgerEntryChange change;
                 change.type(LEDGER_ENTRY_RESTORED);
-                change.restored() = *it->second.mLedgerEntry;
+                change.restored() = *entry;
                 changes.push_back(change);
             }
 

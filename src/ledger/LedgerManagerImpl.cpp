@@ -1599,24 +1599,6 @@ LedgerManagerImpl::getReadWriteKeysForStage(ApplyStage const& stage)
     return res;
 }
 
-ThreadEntryMap
-LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
-                                  Thread const& txs)
-{
-    ThreadEntryMap entryMap;
-    for (auto const& txBundle : txs)
-    {
-        if (txBundle.getResPayload()->isSuccess())
-        {
-            txBundle.getTx()->preloadEntriesForParallelApply(
-                app.getConfig(), app.getLedgerManager().getSorobanMetrics(),
-                ltx, entryMap, txBundle.getResPayload());
-        }
-    }
-
-    return entryMap;
-}
-
 RestoredKeys
 LedgerManagerImpl::applyThread(AppConnector& app, ThreadEntryMap& entryMap,
                                Thread const& thread, Config const& config,
@@ -1625,9 +1607,12 @@ LedgerManagerImpl::applyThread(AppConnector& app, ThreadEntryMap& entryMap,
                                Hash const& sorobanBasePrngSeed,
                                SorobanMetrics& sorobanMetrics)
 {
+    std::cout << "apply thread\n\n" << std::endl;
     // RO extensions should only be observed when the entry is modified, so
     // we accumulate the RO extensions until we need to apply them.
-    UnorderedMap<LedgerKey, uint32_t> readOnlyTtlExtensions;
+    UnorderedMap<LedgerKey, TTLEntry> readOnlyTtlExtensions;
+
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     RestoredKeys threadRestoredKeys;
     for (auto const& txBundle : thread)
@@ -1655,18 +1640,32 @@ LedgerManagerImpl::applyThread(AppConnector& app, ThreadEntryMap& entryMap,
                 // "Commit" max RO bump now that the key is in a
                 // readWrite set
                 auto it = entryMap.find(ttlKey);
-                if (it != entryMap.end())
+                if (it != entryMap.end() && it->second)
                 {
-                    releaseAssert(it->second.mLedgerEntry);
-                    releaseAssert(it->second.mLedgerEntry->data.ttl()
-                                      .liveUntilLedgerSeq <= extIt->second);
+                    releaseAssert(it->second->data.ttl()
+                                      .liveUntilLedgerSeq <= extIt->second.liveUntilLedgerSeq);
 
-                    it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
-                        extIt->second;
-
-                    // Mark as dirty so this entry gets written.
-                    it->second.isDirty = true;
+                    it->second->data.ttl().liveUntilLedgerSeq =
+                        extIt->second.liveUntilLedgerSeq;
                 }
+                //TODO:Test this
+                else if(it == entryMap.end())
+                {
+                    auto ttlEntryPtr = liveSnapshot->load(ttlKey);
+
+                    // If a deletion for this key is not in entryMap, then it must exist because an ro extension before this was successful.
+                    releaseAssert(ttlEntryPtr);
+                    auto ttlLe = *ttlEntryPtr;
+
+                    releaseAssert(ttlLe.data.ttl()
+                                      .liveUntilLedgerSeq <= extIt->second.liveUntilLedgerSeq);
+
+                    ttlLe.data.ttl().liveUntilLedgerSeq = extIt->second.liveUntilLedgerSeq;
+
+                    entryMap.emplace(ttlKey, std::make_shared<LedgerEntry>(ttlLe));
+                }   
+                //else (it != entryMap.end() && !it->second) ttl was deleted
+
                 readOnlyTtlExtensions.erase(extIt);
             }
         }
@@ -1705,37 +1704,36 @@ LedgerManagerImpl::applyThread(AppConnector& app, ThreadEntryMap& entryMap,
                 auto const& updatedLe = entry.second;
 
                 auto it = entryMap.find(lk);
-                releaseAssert(it != entryMap.end());
 
                 auto isReadOnlyTTLIt = isReadOnlyTTLMap.find(lk);
                 releaseAssert(lk.type() != TTL ||
                               isReadOnlyTTLIt != isReadOnlyTTLMap.end());
 
-                if (lk.type() == TTL && it->second.mLedgerEntry && updatedLe &&
+                if (lk.type() == TTL && updatedLe &&
                     isReadOnlyTTLIt->second /*isReadOnly*/)
                 {
-                    releaseAssert(
-                        updatedLe->data.ttl().liveUntilLedgerSeq >
-                        it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq);
 
                     auto ttlIt = readOnlyTtlExtensions.find(lk);
                     if (ttlIt != readOnlyTtlExtensions.end())
                     {
-                        ttlIt->second =
-                            std::max(ttlIt->second,
+                        ttlIt->second.liveUntilLedgerSeq =
+                            std::max(ttlIt->second.liveUntilLedgerSeq,
                                      updatedLe->data.ttl().liveUntilLedgerSeq);
                     }
                     else
                     {
                         readOnlyTtlExtensions.emplace(
-                            lk, updatedLe->data.ttl().liveUntilLedgerSeq);
+                            lk, updatedLe->data.ttl());
                     }
+                }
+                else if (it != entryMap.end())
+                {
+                    // A entry deletion will be marked by a nullptr.
+                    it->second = updatedLe;
                 }
                 else
                 {
-                    // A entry deletion will be marked by a nullopt le.
-                    // Set the dirty bit so it'll be written to ltx later.
-                    it->second = {updatedLe, true};
+                    entryMap.emplace(lk, updatedLe);
                 }
             }
 
@@ -1760,17 +1758,23 @@ LedgerManagerImpl::applyThread(AppConnector& app, ThreadEntryMap& entryMap,
     for (auto kvp : readOnlyTtlExtensions)
     {
         auto const& lk = kvp.first;
-        auto const& ttlExtension = kvp.second;
+        auto const& ttlLe = kvp.second;
 
         auto it = entryMap.find(lk);
-        // TODO: The key in entryMap should always exist
-        if (it != entryMap.end() && it->second.mLedgerEntry &&
-            it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq <
-                ttlExtension)
+        if(it != entryMap.end())
         {
-            it->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq =
-                ttlExtension;
-            it->second.isDirty = true;
+            // If the key was deleted, then the the RO extensions would have been observed, so we would never enter this loop for that key.
+            releaseAssert(it->second);
+            it->second->data.ttl().liveUntilLedgerSeq = ttlLe.liveUntilLedgerSeq;   
+        }
+        else
+        {
+            // This was an RO bump without any writes that forced an observation, so observe them now.
+            TTLEntry ttlLe;
+            LedgerEntry le;
+            le.data.type(TTL);
+            le.data.ttl() = ttlLe;
+            entryMap.emplace(lk, std::make_shared<LedgerEntry>(le));
         }
     }
 
@@ -1801,16 +1805,14 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                                                txBundle.getResPayload());
         }
     }
-
+std::cout << "after pre parallel apply\n\n" << std::endl;
     auto const& config = app.getConfig();
     auto const& sorobanConfig = app.getSorobanNetworkConfigForApply();
     auto& sorobanMetrics = app.getLedgerManager().getSorobanMetrics();
 
     std::vector<ThreadEntryMap> entryMapsByThread;
-    for (auto const& thread : stage)
-    {
-        entryMapsByThread.emplace_back(collectEntries(app, ltx, thread));
-    }
+    //TODO: return from applyThread instead?
+    entryMapsByThread.resize(stage.size());
 
     std::vector<std::future<RestoredKeys>> threadRestoredKeyFutures;
 
@@ -1903,15 +1905,9 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
     {
         for (auto const& entry : threadEntryMap)
         {
-            // Only update if dirty bit is set
-            if (!entry.second.isDirty)
+            if (entry.second)
             {
-                continue;
-            }
-
-            if (entry.second.mLedgerEntry)
-            {
-                auto const& updatedEntry = *entry.second.mLedgerEntry;
+                auto const& updatedEntry = *entry.second;
                 auto ltxe = ltxInner.load(entry.first);
                 if (ltxe)
                 {

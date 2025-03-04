@@ -5515,8 +5515,6 @@ TEST_CASE("apply generated parallel tx sets", "[tx][soroban][parallelapply]")
         cfg.mLedgerMaxDependentTxClusters = 5;
     });
 
-    test.invokeExtendOp(client.getContract().getKeys(), 10'000);
-
     auto& lm = app.getLedgerManager();
     auto& root = test.getRoot();
     const int64_t startingBalance = lm.getLastMinBalance(50);

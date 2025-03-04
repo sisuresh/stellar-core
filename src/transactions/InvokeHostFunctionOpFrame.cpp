@@ -31,6 +31,7 @@
 #include "transactions/MutableTransactionResult.h"
 #include <Tracy.hpp>
 #include <crypto/SHA.h>
+#include "util/XDRCereal.h"
 
 namespace stellar
 {
@@ -114,18 +115,47 @@ metricsEvent(bool success, std::string&& topic, uint64_t value)
 
 } // namespace
 
-struct ReadEntryCounters
+struct HostFunctionMetrics
 {
+    SorobanMetrics& mMetrics;
+
     uint32_t mReadEntry{0};
+    uint32_t mWriteEntry{0};
+
     uint32_t mLedgerReadByte{0};
+    uint32_t mLedgerWriteByte{0};
+
     uint32_t mReadKeyByte{0};
+    uint32_t mWriteKeyByte{0};
+
     uint32_t mReadDataByte{0};
+    uint32_t mWriteDataByte{0};
+
     uint32_t mReadCodeByte{0};
+    uint32_t mWriteCodeByte{0};
+
+    uint32_t mEmitEvent{0};
+    uint32_t mEmitEventByte{0};
+
+    // host runtime metrics
+    uint64_t mCpuInsn{0};
+    uint64_t mMemByte{0};
+    uint64_t mInvokeTimeNsecs{0};
+    uint64_t mCpuInsnExclVm{0};
+    uint64_t mInvokeTimeNsecsExclVm{0};
+    uint64_t mDeclaredCpuInsn{0};
 
     // max single entity size metrics
     uint32_t mMaxReadWriteKeyByte{0};
-    uint32_t mMaxReadWriteCodeByte{0};
     uint32_t mMaxReadWriteDataByte{0};
+    uint32_t mMaxReadWriteCodeByte{0};
+    uint32_t mMaxEmitEventByte{0};
+
+    bool mSuccess{false};
+
+    HostFunctionMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
+    {
+    }
 
     void
     noteReadEntry(bool isCodeEntry, uint32_t keySize, uint32_t entrySize)
@@ -145,65 +175,36 @@ struct ReadEntryCounters
             mMaxReadWriteDataByte = std::max(mMaxReadWriteDataByte, entrySize);
         }
     }
-};
-
-struct HostFunctionMetrics
-{
-    SorobanMetrics& mMetrics;
-
-    uint32_t mWriteEntry{0};
-    uint32_t mLedgerWriteByte{0};
-    uint32_t mWriteKeyByte{0};
-    uint32_t mWriteDataByte{0};
-    uint32_t mWriteCodeByte{0};
-
-    uint32_t mEmitEvent{0};
-    uint32_t mEmitEventByte{0};
-
-    // host runtime metrics
-    uint64_t mCpuInsn{0};
-    uint64_t mMemByte{0};
-    uint64_t mInvokeTimeNsecs{0};
-    uint64_t mCpuInsnExclVm{0};
-    uint64_t mInvokeTimeNsecsExclVm{0};
-    uint64_t mDeclaredCpuInsn{0};
-
-    uint32_t mMaxEmitEventByte{0};
-
-    ReadEntryCounters mReadEntryCounters;
-
-    bool mSuccess{false};
-
-    HostFunctionMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
-    {
-    }
 
     void
     noteWriteEntry(bool isCodeEntry, uint32_t keySize, uint32_t entrySize)
     {
         mWriteEntry++;
-        mReadEntryCounters.mMaxReadWriteKeyByte =
-            std::max(mReadEntryCounters.mMaxReadWriteKeyByte, keySize);
+        mMaxReadWriteKeyByte = std::max(mMaxReadWriteKeyByte, keySize);
         mLedgerWriteByte += entrySize;
         if (isCodeEntry)
         {
             mWriteCodeByte += entrySize;
-            mReadEntryCounters.mMaxReadWriteCodeByte =
-                std::max(mReadEntryCounters.mMaxReadWriteCodeByte, entrySize);
+            mMaxReadWriteCodeByte = std::max(mMaxReadWriteCodeByte, entrySize);
         }
         else
         {
             mWriteDataByte += entrySize;
-            mReadEntryCounters.mMaxReadWriteDataByte =
-                std::max(mReadEntryCounters.mMaxReadWriteDataByte, entrySize);
+            mMaxReadWriteDataByte = std::max(mMaxReadWriteDataByte, entrySize);
         }
     }
 
     ~HostFunctionMetrics()
     {
+        mMetrics.mHostFnOpReadEntry.Mark(mReadEntry);
         mMetrics.mHostFnOpWriteEntry.Mark(mWriteEntry);
 
+        mMetrics.mHostFnOpReadKeyByte.Mark(mReadKeyByte);
         mMetrics.mHostFnOpWriteKeyByte.Mark(mWriteKeyByte);
+
+        mMetrics.mHostFnOpReadLedgerByte.Mark(mLedgerReadByte);
+        mMetrics.mHostFnOpReadDataByte.Mark(mReadDataByte);
+        mMetrics.mHostFnOpReadCodeByte.Mark(mReadCodeByte);
 
         mMetrics.mHostFnOpWriteLedgerByte.Mark(mLedgerWriteByte);
         mMetrics.mHostFnOpWriteDataByte.Mark(mWriteDataByte);
@@ -227,6 +228,9 @@ struct HostFunctionMetrics
         mMetrics.mHostFnOpDeclaredInsnsUsageRatio.Update(
             mCpuInsn * 1000000 / std::max(mDeclaredCpuInsn, uint64_t(1)));
 
+        mMetrics.mHostFnOpMaxRwKeyByte.Mark(mMaxReadWriteKeyByte);
+        mMetrics.mHostFnOpMaxRwDataByte.Mark(mMaxReadWriteDataByte);
+        mMetrics.mHostFnOpMaxRwCodeByte.Mark(mMaxReadWriteCodeByte);
         mMetrics.mHostFnOpMaxEmitEventByte.Mark(mMaxEmitEventByte);
 
         mMetrics.accumulateModelledCpuInsns(mCpuInsn, mCpuInsnExclVm,
@@ -282,27 +286,27 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
         // add additional diagnostic events for metrics
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "read_entry",
-                         metrics.mReadEntryCounters.mReadEntry));
+                         metrics.mReadEntry));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "write_entry", metrics.mWriteEntry));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "ledger_read_byte",
-                         metrics.mReadEntryCounters.mLedgerReadByte));
+                         metrics.mLedgerReadByte));
         diagnosticEvents.emplace_back(metricsEvent(
             metrics.mSuccess, "ledger_write_byte", metrics.mLedgerWriteByte));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "read_key_byte",
-                         metrics.mReadEntryCounters.mReadKeyByte));
+                         metrics.mReadKeyByte));
         diagnosticEvents.emplace_back(metricsEvent(
             metrics.mSuccess, "write_key_byte", metrics.mWriteKeyByte));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "read_data_byte",
-                         metrics.mReadEntryCounters.mReadDataByte));
+                         metrics.mReadDataByte));
         diagnosticEvents.emplace_back(metricsEvent(
             metrics.mSuccess, "write_data_byte", metrics.mWriteDataByte));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "read_code_byte",
-                         metrics.mReadEntryCounters.mReadCodeByte));
+                         metrics.mReadCodeByte));
         diagnosticEvents.emplace_back(metricsEvent(
             metrics.mSuccess, "write_code_byte", metrics.mWriteCodeByte));
         diagnosticEvents.emplace_back(
@@ -319,71 +323,19 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
         // we are mostly interested in those internally
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "max_rw_key_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteKeyByte));
+                         metrics.mMaxReadWriteKeyByte));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "max_rw_data_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteDataByte));
+                         metrics.mMaxReadWriteDataByte));
         diagnosticEvents.emplace_back(
             metricsEvent(metrics.mSuccess, "max_rw_code_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteCodeByte));
+                         metrics.mMaxReadWriteCodeByte));
         diagnosticEvents.emplace_back(metricsEvent(metrics.mSuccess,
                                                    "max_emit_event_byte",
                                                    metrics.mMaxEmitEventByte));
 
         sorobanData.pushDiagnosticEvents(diagnosticEvents);
     }
-}
-
-bool
-InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-    SorobanTxData& sorobanData) const
-{
-    ReadEntryCounters readEntryCounters;
-
-    auto const& resources = mParentTx.sorobanResources();
-
-    auto callback = [&readEntryCounters, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
-        uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
-        readEntryCounters.noteReadEntry(isCodeKey(lk), keySize, entrySize);
-
-        if (resources.readBytes < readEntryCounters.mLedgerReadByte)
-        {
-            res.tr().invokeHostFunctionResult().code(
-                INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-
-            sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(readEntryCounters.mLedgerReadByte),
-                 makeU64SCVal(resources.readBytes)});
-
-            return false;
-        }
-
-        return true;
-    };
-
-    auto success = preloadEntryHelper(ltx, entryMap, callback);
-
-    sorobanMetrics.mHostFnOpReadEntry.Mark(readEntryCounters.mReadEntry);
-
-    sorobanMetrics.mHostFnOpReadKeyByte.Mark(readEntryCounters.mReadKeyByte);
-    sorobanMetrics.mHostFnOpReadLedgerByte.Mark(
-        readEntryCounters.mLedgerReadByte);
-    sorobanMetrics.mHostFnOpReadDataByte.Mark(readEntryCounters.mReadDataByte);
-    sorobanMetrics.mHostFnOpReadCodeByte.Mark(readEntryCounters.mReadCodeByte);
-
-    sorobanMetrics.mHostFnOpMaxRwKeyByte.Mark(
-        readEntryCounters.mMaxReadWriteKeyByte);
-    sorobanMetrics.mHostFnOpMaxRwDataByte.Mark(
-        readEntryCounters.mMaxReadWriteDataByte);
-    sorobanMetrics.mHostFnOpMaxRwCodeByte.Mark(
-        readEntryCounters.mMaxReadWriteCodeByte);
-
-    return success;
 }
 
 ParallelTxReturnVal
@@ -411,11 +363,12 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     auto footprintLength =
         footprint.readOnly.size() + footprint.readWrite.size();
     auto hotArchive = app.copySearchableHotArchiveBucketListSnapshot();
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     ledgerEntryCxxBufs.reserve(footprintLength);
     ttlEntryCxxBufs.reserve(footprintLength);
 
-    auto addReads = [&hotArchive, &metrics, &ledgerEntryCxxBufs,
+    auto addReads = [&resources, &hotArchive, &liveSnapshot, &metrics, &ledgerEntryCxxBufs,
                      &ttlEntryCxxBufs, &entryMap, &sorobanConfig, &appConfig,
                      &sorobanData, &res, &ledgerInfo,
                      this](auto const& keys) -> bool {
@@ -429,11 +382,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             if (isSorobanEntry(lk))
             {
                 auto ttlKey = getTTLKey(lk);
-                auto ttlIter = entryMap.find(ttlKey);
-                if (ttlIter != entryMap.end() && ttlIter->second.mLedgerEntry)
+                auto ttlEntryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, ttlKey);
+                if (ttlEntryPtr)
                 {
-                    if (!isLive(*(ttlIter->second.mLedgerEntry),
-                                ledgerInfo.getLedgerSeq()))
+                    if (!isLive(*ttlEntryPtr, ledgerInfo.getLedgerSeq()))
                     {
                         // For temporary entries, treat the expired entry as
                         // if the key did not exist
@@ -459,6 +411,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                                          lk.contractData().contract),
                                      lk.contractData().key});
                             }
+
+                            std::cout << xdrToCerealString(lk, "lk") << std::endl;
                             // Cannot access an archived entry
                             this->innerResult(res).code(
                                 INVOKE_HOST_FUNCTION_ENTRY_ARCHIVED);
@@ -468,8 +422,7 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                     else
                     {
                         sorobanEntryLive = true;
-                        ttlEntry =
-                            ttlIter->second.mLedgerEntry.value().data.ttl();
+                        ttlEntry = ttlEntryPtr->data.ttl();
                     }
                 }
                 // Starting in protocol 23, we must check the Hot Archive for
@@ -510,11 +463,10 @@ InvokeHostFunctionOpFrame::doApplyParallel(
 
             if (!isSorobanEntry(lk) || sorobanEntryLive)
             {
-                auto entryIter = entryMap.find(lk);
-                if (entryIter != entryMap.end() &&
-                    entryIter->second.mLedgerEntry)
+                auto entryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, lk);
+                if (entryPtr)
                 {
-                    auto leBuf = toCxxBuf(*(entryIter->second.mLedgerEntry));
+                    auto leBuf = toCxxBuf(*entryPtr);
                     entrySize = static_cast<uint32_t>(leBuf.data->size());
 
                     // For entry types that don't have an ttlEntry (i.e.
@@ -535,15 +487,27 @@ InvokeHostFunctionOpFrame::doApplyParallel(
                 }
             }
 
-            // Only used for diagnostic events because loads are done in
-            // doPreloadEntriesForParallelApply
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
-            metrics.mReadEntryCounters.noteReadEntry(isCodeKey(lk), keySize,
+            metrics.noteReadEntry(isCodeKey(lk), keySize,
                                                      entrySize);
 
             if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                              appConfig, mParentTx, sorobanData))
             {
+                this->innerResult(res).code(
+                    INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
+                return false;
+            }
+
+            if (resources.readBytes <
+                metrics.mLedgerReadByte)
+            {
+                sorobanData.pushApplyTimeDiagnosticError(
+                    appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                    "operation byte-read resources exceeds amount specified",
+                    {makeU64SCVal(metrics.mLedgerReadByte),
+                     makeU64SCVal(resources.readBytes)});
+
                 this->innerResult(res).code(
                     INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
                 return false;
@@ -682,9 +646,8 @@ InvokeHostFunctionOpFrame::doApplyParallel(
             }
         }
 
-        opEntryMap.emplace(lk, le);
-        auto iter = entryMap.find(lk);
-        if (iter == entryMap.end())
+        opEntryMap.emplace(lk, std::make_shared<LedgerEntry>(le));
+        if (loadEntryDuringParallelApply(entryMap, liveSnapshot, lk))
         {
             createdKeys.insert(lk);
         }
@@ -713,18 +676,18 @@ InvokeHostFunctionOpFrame::doApplyParallel(
     {
         if (createdAndModifiedKeys.find(lk) == createdAndModifiedKeys.end())
         {
-            auto entryIter = entryMap.find(lk);
-            if (entryIter != entryMap.end() && entryIter->second.mLedgerEntry)
+            auto entryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, lk);
+            if (entryPtr)
             {
                 releaseAssertOrThrow(isSorobanEntry(lk));
-                opEntryMap.emplace(lk, std::nullopt);
+                opEntryMap.emplace(lk, nullptr);
 
                 // Also delete associated ttlEntry
                 auto ttlLK = getTTLKey(lk);
 
-                auto ttlIter = entryMap.find(ttlLK);
-                releaseAssertOrThrow(ttlIter != entryMap.end());
-                opEntryMap.emplace(ttlLK, std::nullopt);
+                auto ttlEntryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, ttlLK);
+                releaseAssertOrThrow(ttlEntryPtr);
+                opEntryMap.emplace(ttlLK, nullptr);
             }
         }
     }
@@ -936,7 +899,7 @@ InvokeHostFunctionOpFrame::doApply(
                 }
             }
 
-            metrics.mReadEntryCounters.noteReadEntry(isCodeKey(lk), keySize,
+            metrics.noteReadEntry(isCodeKey(lk), keySize,
                                                      entrySize);
             if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                              appConfig, mParentTx,
@@ -948,12 +911,12 @@ InvokeHostFunctionOpFrame::doApply(
             }
 
             if (resources.readBytes <
-                metrics.mReadEntryCounters.mLedgerReadByte)
+                metrics.mLedgerReadByte)
             {
                 sorobanData->pushApplyTimeDiagnosticError(
                     appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                     "operation byte-read resources exceeds amount specified",
-                    {makeU64SCVal(metrics.mReadEntryCounters.mLedgerReadByte),
+                    {makeU64SCVal(metrics.mLedgerReadByte),
                      makeU64SCVal(resources.readBytes)});
 
                 this->innerResult(res).code(

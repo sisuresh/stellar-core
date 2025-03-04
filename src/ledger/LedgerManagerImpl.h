@@ -119,11 +119,8 @@ class LedgerManagerImpl : public LedgerManager
 
     UnorderedSet<LedgerKey> getReadWriteKeysForStage(ApplyStage const& stage);
 
-    ThreadEntryMap collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
-                                  Thread const& txs);
-
     RestoredKeys applyThread(AppConnector& app,
-                             ThreadEntryMap& entryMapByCluster,
+                             ThreadEntryMap& entryMap,
                              Thread const& thread, Config const& config,
                              SorobanNetworkConfig const& sorobanConfig,
                              ParallelLedgerInfo const& ledgerInfo,

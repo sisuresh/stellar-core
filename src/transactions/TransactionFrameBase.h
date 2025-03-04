@@ -37,7 +37,7 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
-using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
+using ModifiedEntryMap = UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry>>;
 
 struct ThreadEntry
 {
@@ -47,7 +47,7 @@ struct ThreadEntry
     bool isDirty;
 };
 
-using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
+using ThreadEntryMap = UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry>>;
 
 class ParallelTxReturnVal
 {
@@ -213,10 +213,6 @@ class TransactionFrameBase
                        TransactionMetaFrame& meta, MutableTxResultPtr txResult,
                        Hash const& sorobanBasePrngSeed = Hash{}) const = 0;
 
-    virtual void preloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        MutableTxResultPtr txResult) const = 0;
     virtual void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr resPayload) const = 0;

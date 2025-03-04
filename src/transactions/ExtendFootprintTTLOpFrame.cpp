@@ -49,39 +49,6 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
-bool
-ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-    SorobanTxData& sorobanData) const
-{
-    ExtendFootprintTTLMetrics metrics(sorobanMetrics);
-
-    auto const& resources = mParentTx.sorobanResources();
-
-    auto callback = [&metrics, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
-        metrics.mLedgerReadByte += entrySize;
-        if (resources.readBytes < metrics.mLedgerReadByte)
-        {
-            res.tr().extendFootprintTTLResult().code(
-                EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
-
-            sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(metrics.mLedgerReadByte),
-                 makeU64SCVal(resources.readBytes)});
-
-            return false;
-        }
-
-        return true;
-    };
-
-    return preloadEntryHelper(ltx, entryMap, callback);
-}
-
 ParallelTxReturnVal
 ExtendFootprintTTLOpFrame::doApplyParallel(
     AppConnector& app,
@@ -93,12 +60,13 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
 {
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame doApplyParallel", true);
 
-    // We don't use ExtendFootprintTTLMetrics here because it only tracks
-    // ledgerReadBytes, which is handled in doPreloadEntriesForParallelApply
-    auto timescope = sorobanMetrics.mExtFpTtlOpExec.TimeScope();
+    ExtendFootprintTTLMetrics metrics(sorobanMetrics);
+    auto timescope = metrics.getExecTimer();
 
     auto const& resources = mParentTx.sorobanResources();
     auto const& footprint = resources.footprint;
+
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     // Keep track of LedgerEntry updates we need to make
     ModifiedEntryMap opEntryMap;
@@ -113,10 +81,9 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
     for (auto const& lk : footprint.readOnly)
     {
         auto ttlKey = getTTLKey(lk);
-        auto ttlIter = entryMap.find(ttlKey);
+        auto ttlEntryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, ttlKey);
 
-        if (ttlIter == entryMap.end() || !ttlIter->second.mLedgerEntry ||
-            !isLive(*ttlIter->second.mLedgerEntry, ledgerInfo.getLedgerSeq()))
+        if (!ttlEntryPtr || !isLive(*ttlEntryPtr, ledgerInfo.getLedgerSeq()))
         {
             // Skip archived entries, as those must be restored.
             //
@@ -126,21 +93,18 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
             continue;
         }
 
-        auto currLiveUntilLedgerSeq =
-            ttlIter->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
+        auto currLiveUntilLedgerSeq = ttlEntryPtr->data.ttl().liveUntilLedgerSeq;
         if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
         {
             continue;
         }
 
-        auto entryIter = entryMap.find(lk);
-
         // Load the ContractCode/ContractData entry for fee calculation.
 
+        auto entryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, lk);
         // We checked for TTLEntry existence above
-        releaseAssertOrThrow(entryIter != entryMap.end() &&
-                             entryIter->second.mLedgerEntry);
-        auto const& entryLe = *entryIter->second.mLedgerEntry;
+        releaseAssertOrThrow(entryPtr);
+        auto const& entryLe = *entryPtr;
 
         uint32_t entrySize = static_cast<uint32>(xdr::xdr_size(entryLe));
 
@@ -151,7 +115,19 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
             return {false, {}};
         }
 
-        auto ttlLe = *ttlIter->second.mLedgerEntry;
+        if (resources.readBytes < metrics.mLedgerReadByte)
+        {
+            sorobanData.pushApplyTimeDiagnosticError(
+                app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                "operation byte-read resources exceeds amount specified",
+                {makeU64SCVal(metrics.mLedgerReadByte),
+                 makeU64SCVal(resources.readBytes)});
+
+            innerResult(res).code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
+        }
+
+        auto ttlLe = *ttlEntryPtr;
 
         rustEntryRentChanges.emplace_back();
         auto& rustChange = rustEntryRentChanges.back();
@@ -162,7 +138,7 @@ ExtendFootprintTTLOpFrame::doApplyParallel(
         rustChange.new_live_until_ledger = newLiveUntilLedgerSeq;
         ttlLe.data.ttl().liveUntilLedgerSeq = newLiveUntilLedgerSeq;
 
-        opEntryMap.emplace(ttlKey, ttlLe);
+        opEntryMap.emplace(ttlKey, std::make_shared<LedgerEntry>(ttlLe));
     }
 
     // This may throw, but only in case of the Core version misconfiguration.

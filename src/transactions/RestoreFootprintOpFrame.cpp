@@ -16,27 +16,6 @@
 namespace stellar
 {
 
-struct ParallelRestoreFootprintMetrics
-{
-    SorobanMetrics& mMetrics;
-
-    uint32_t mLedgerWriteByte{0};
-
-    ParallelRestoreFootprintMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
-    {
-    }
-
-    ~ParallelRestoreFootprintMetrics()
-    {
-        mMetrics.mRestoreFpOpWriteLedgerByte.Mark(mLedgerWriteByte);
-    }
-    medida::TimerContext
-    getExecTimer()
-    {
-        return mMetrics.mRestoreFpOpExec.TimeScope();
-    }
-};
-
 struct RestoreFootprintMetrics
 {
     SorobanMetrics& mMetrics;
@@ -73,43 +52,6 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
-bool
-RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
-    Config const& config, SorobanMetrics& sorobanMetrics,
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-    SorobanTxData& sorobanData) const
-{
-    uint32_t ledgerReadByte = 0;
-
-    auto const& resources = mParentTx.sorobanResources();
-
-    auto callback = [&ledgerReadByte, &sorobanData, &resources, &res,
-                     &config](LedgerKey const& lk, uint32_t entrySize) -> bool {
-        ledgerReadByte += entrySize;
-        if (resources.readBytes < ledgerReadByte)
-        {
-            res.tr().restoreFootprintResult().code(
-                RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
-
-            sorobanData.pushApplyTimeDiagnosticError(
-                config, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(ledgerReadByte),
-                 makeU64SCVal(resources.readBytes)});
-
-            return false;
-        }
-
-        return true;
-    };
-
-    bool success = preloadEntryHelper(ltx, entryMap, callback);
-
-    sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
-
-    return success;
-}
-
 ParallelTxReturnVal
 RestoreFootprintOpFrame::doApplyParallel(
     AppConnector& app,
@@ -119,17 +61,17 @@ RestoreFootprintOpFrame::doApplyParallel(
     SorobanMetrics& sorobanMetrics, OperationResult& res,
     SorobanTxData& sorobanData) const
 {
+    
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
 
-    // We don't use RestoreFootprintMetrics here because it tracks two metrics,
-    // one of which is taken care of in doPreloadEntriesForParallelApply.
-    ParallelRestoreFootprintMetrics metrics(sorobanMetrics);
+    RestoreFootprintMetrics metrics(app.getSorobanMetrics());
     auto timeScope = metrics.getExecTimer();
 
     auto const& resources = mParentTx.sorobanResources();
     auto const& footprint = resources.footprint;
     auto ledgerSeq = ledgerInfo.getLedgerSeq();
     auto hotArchive = app.copySearchableHotArchiveBucketListSnapshot();
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     // Keep track of LedgerEntry updates we need to make
     ModifiedEntryMap opEntryMap;
@@ -149,8 +91,9 @@ RestoreFootprintOpFrame::doApplyParallel(
         auto ttlKey = getTTLKey(lk);
         {
             // First check the live BucketList
-            auto ttlLtxe = entryMap.find(ttlKey);
-            if (ttlLtxe == entryMap.end() || !ttlLtxe->second.mLedgerEntry)
+            auto ttlEntryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, ttlKey);
+
+            if (!ttlEntryPtr)
             {
                 // Next check the hot archive if protocol >= 23
                 if (protocolVersionStartsFrom(
@@ -172,7 +115,7 @@ RestoreFootprintOpFrame::doApplyParallel(
                 }
             }
             // Skip entry if it's already live.
-            else if (isLive(*ttlLtxe->second.mLedgerEntry, ledgerSeq))
+            else if (isLive(*ttlEntryPtr, ledgerSeq))
             {
                 continue;
             }
@@ -188,14 +131,24 @@ RestoreFootprintOpFrame::doApplyParallel(
         }
         else
         {
-            auto entryLtxe = entryMap.find(lk);
+            auto entryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, lk);
 
             // We checked for TTLEntry existence above
-            releaseAssertOrThrow(entryLtxe != entryMap.end() &&
-                                 entryLtxe->second.mLedgerEntry);
+            releaseAssertOrThrow(entryPtr);
 
-            entrySize = static_cast<uint32>(
-                xdr::xdr_size(*entryLtxe->second.mLedgerEntry));
+            entrySize = static_cast<uint32>(xdr::xdr_size(*entryPtr));
+        }
+
+        metrics.mLedgerReadByte += entrySize;
+        if (resources.readBytes < metrics.mLedgerReadByte)
+        {
+            sorobanData.pushApplyTimeDiagnosticError(
+                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                "operation byte-read resources exceeds amount specified",
+                {makeU64SCVal(metrics.mLedgerReadByte),
+                 makeU64SCVal(resources.readBytes)});
+            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
+            return {false, {}};
         }
 
         // To maintain consistency with InvokeHostFunction, TTLEntry
@@ -231,14 +184,14 @@ RestoreFootprintOpFrame::doApplyParallel(
 
         if (hotArchiveEntry)
         {
-            opEntryMap.emplace(lk, hotArchiveEntry->archivedEntry());
+            opEntryMap.emplace(lk, std::make_shared<LedgerEntry>(hotArchiveEntry->archivedEntry()));
 
             LedgerEntry ttlEntry;
             ttlEntry.data.type(TTL);
             ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
             ttlEntry.data.ttl().keyHash = ttlKey.ttl().keyHash;
 
-            opEntryMap.emplace(ttlKey, ttlEntry);
+            opEntryMap.emplace(ttlKey,  std::make_shared<LedgerEntry>(ttlEntry));
 
             restoredKeys.hotArchive.emplace(lk);
             restoredKeys.hotArchive.emplace(ttlKey);
@@ -247,14 +200,15 @@ RestoreFootprintOpFrame::doApplyParallel(
         {
             // Entry exists in the live BucketList if we get this this point due
             // to the constTTLLtxe loadWithoutRecord logic above.
+            
+            // TODO: We already called this above. Does the entry get cached?
+            auto ttlEntryPtr = loadEntryDuringParallelApply(entryMap, liveSnapshot, ttlKey);
 
-            auto ttlLtxe = entryMap.find(ttlKey);
-            releaseAssertOrThrow(ttlLtxe != entryMap.end() &&
-                                 ttlLtxe->second.mLedgerEntry);
+            releaseAssertOrThrow(ttlEntryPtr);
 
-            LedgerEntry ttlEntry = *ttlLtxe->second.mLedgerEntry;
+            LedgerEntry ttlEntry = *ttlEntryPtr;
             ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
-            opEntryMap.emplace(ttlKey, ttlEntry);
+            opEntryMap.emplace(ttlKey,  std::make_shared<LedgerEntry>(ttlEntry));
 
             restoredKeys.liveBucketList.emplace(lk);
             restoredKeys.liveBucketList.emplace(ttlKey);

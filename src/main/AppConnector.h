@@ -61,5 +61,8 @@ class AppConnector
     medida::MetricsRegistry& getMetrics() const;
     SearchableHotArchiveSnapshotConstPtr
     copySearchableHotArchiveBucketListSnapshot();
+
+    SearchableSnapshotConstPtr
+    copySearchableLiveBucketListSnapshot();
 };
 }

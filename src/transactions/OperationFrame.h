@@ -48,12 +48,6 @@ class OperationFrame
                          Hash const& sorobanBasePrngSeed, OperationResult& res,
                          std::shared_ptr<SorobanTxData> sorobanData) const = 0;
 
-    // returns false if preloading failed.
-    virtual bool doPreloadEntriesForParallelApply(
-        Config const& config, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-        SorobanTxData& sorobanData) const;
-
     virtual ParallelTxReturnVal doApplyParallel(
         AppConnector& app, ThreadEntryMap const& entryMap, Config const& config,
         SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
@@ -70,10 +64,8 @@ class OperationFrame
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header) const;
 
-    bool preloadEntryHelper(
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        std::function<bool(LedgerKey const&, uint32_t /*entrySize*/)>
-            readEntryCallback) const;
+    std::shared_ptr<LedgerEntry const>
+    loadEntryDuringParallelApply(ThreadEntryMap const& entryMap, SearchableSnapshotConstPtr snapshot, LedgerKey const& lk) const;
 
   public:
     static std::shared_ptr<OperationFrame>
@@ -100,13 +92,6 @@ class OperationFrame
                AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
                OperationResult& res,
                std::shared_ptr<SorobanTxData> sorobanData) const;
-
-    bool preloadEntriesForParallelApply(Config const& config,
-                                        SorobanMetrics& sorobanMetrics,
-                                        AbstractLedgerTxn& ltx,
-                                        ThreadEntryMap& entryMap,
-                                        OperationResult& res,
-                                        SorobanTxData& sorobanData) const;
 
     ParallelTxReturnVal applyParallel(
         AppConnector& app,
