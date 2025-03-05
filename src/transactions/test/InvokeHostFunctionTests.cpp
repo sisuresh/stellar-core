@@ -5342,6 +5342,10 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     SorobanTest test(cfg);
     ContractStorageTestClient client(test);
 
+    auto contractExpirationLedger =
+        test.getLCLSeq() +
+        test.getNetworkCfg().stateArchivalSettings().minPersistentTTL;
+
     auto& app = test.getApp();
     modifySorobanNetworkConfig(app, [](SorobanNetworkConfig& cfg) {
         cfg.mLedgerMaxInstructions = 5'000'000;
@@ -5421,33 +5425,37 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
 
         REQUIRE(test.getTTL(contractKeys.at(0)) == test.getLCLSeq() + 1'000);
     }
-    // TODO:Finish
-    /* SECTION("restore")
+    SECTION("restore")
     {
+        for (uint32_t i = test.getLCLSeq() + 1; i <= contractExpirationLedger;
+             ++i)
+        {
+            closeLedgerOn(test.getApp(), i, 2, 1, 2016);
+        }
+
         auto const& contractKeys = client.getContract().getKeys();
 
         SorobanResources restoreResources;
-        restoreResources.footprint.readOnly = contractKeys;
+        restoreResources.footprint.readWrite = contractKeys;
         restoreResources.readBytes = 3'028 + 104;
-        auto tx1 =
-            test.createRestoreTx(restoreResources, 30'000, 500'000, &a1);
+        restoreResources.writeBytes = restoreResources.readBytes;
+        auto tx1 = test.createRestoreTx(restoreResources, 30'000, 500'000, &a1);
 
         --restoreResources.readBytes;
-        auto tx2 =
-            test.createRestoreTx(restoreResources, 30'000, 500'000, &a2);
+        auto tx2 = test.createRestoreTx(restoreResources, 30'000, 500'000, &a2);
 
         auto r = closeLedger(test.getApp(), {tx1, tx2});
         REQUIRE(r.results.size() == 2);
 
-        checkTx(0, r, txSUCCESS);
-        checkTx(1, r, txFAILED);
+        checkTx(0, r, txFAILED);
+        checkTx(1, r, txSUCCESS);
 
-        REQUIRE(r.results[1]
+        REQUIRE(r.results[0]
                     .result.result.results()[0]
                     .tr()
                     .restoreFootprintResult()
                     .code() == RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
-    } */
+    }
 }
 
 TEST_CASE("delete non existent entry", "[tx][soroban][parallelapply]")
