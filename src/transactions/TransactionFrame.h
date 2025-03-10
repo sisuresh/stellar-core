@@ -277,13 +277,18 @@ class TransactionFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr txResult) const override;
 
+    // After all transactions have been applied. Currently only used
+    // for refunds in parallel Soroban.
+    LedgerEntryChanges
+    processPostTxApplyFeeProcessing(AppConnector& app, AbstractLedgerTxn& ltx,
+                                    MutableTxResultPtr txResult) const override;
+
     // TransactionFrame specific function that allows fee bumps to forward a
-    // different account for the refund. It also returns the refund so
-    // FeeBumpTransactionFrame can adjust feeCharged.
-    int64_t processRefund(AppConnector& app, AbstractLedgerTxn& ltx,
-                          TransactionMetaFrame& meta,
-                          AccountID const& feeSource,
-                          MutableTransactionResultBase& txResult) const;
+    // different account for the refund.
+    LedgerEntryChanges
+    processRefund(AppConnector& app, AbstractLedgerTxn& ltx,
+                  AccountID const& feeSource,
+                  MutableTransactionResultBase& txResult) const;
 
     // version without meta
     bool apply(AppConnector& app, AbstractLedgerTxn& ltx,

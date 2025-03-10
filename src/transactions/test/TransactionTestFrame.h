@@ -148,6 +148,10 @@ class TransactionTestFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr txResult) const override;
 
+    LedgerEntryChanges
+    processPostTxApplyFeeProcessing(AppConnector& app, AbstractLedgerTxn& ltx,
+                                    MutableTxResultPtr txResult) const override;
+
     std::shared_ptr<StellarMessage const> toStellarMessage() const override;
 
     bool hasDexOperations() const override;

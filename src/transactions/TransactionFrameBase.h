@@ -286,9 +286,15 @@ class TransactionFrameBase
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const = 0;
 
+    // After this transaction has been applied
     virtual void processPostApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& meta,
                                   MutableTxResultPtr txResult) const = 0;
+
+    // After all transactions have been applied
+    virtual LedgerEntryChanges
+    processPostTxApplyFeeProcessing(AppConnector& app, AbstractLedgerTxn& ltx,
+                                    MutableTxResultPtr txResult) const = 0;
 
     virtual std::shared_ptr<StellarMessage const> toStellarMessage() const = 0;
 

@@ -838,19 +838,26 @@ SorobanTest::invokeArchivalOp(TransactionFrameBaseConstPtr tx,
 
     int64_t balanceAfterFeeCharged = getRoot().getBalance();
 
-    auto changesAfter = txm.getChangesAfter();
-    REQUIRE(changesAfter.size() == 2);
-    int64_t nonRefundableResourceFee = sorobanResourceFee(
-        getApp(), tx->sorobanResources(), xdr::xdr_size(tx->getEnvelope()), 0);
-    int64_t expectedFeeCharged =
-        nonRefundableResourceFee + expectedRefundableFeeCharged + baseFee;
-    int64_t actualFeeCharged = initBalance - balanceAfterFeeCharged;
-    REQUIRE(actualFeeCharged == expectedFeeCharged);
+    // TODO: Refactor code so we have access to postTxApplyFeeProcessing. That's
+    // where the refund lives starting from v23
+    if (protocolVersionIsBefore(getLclProtocolVersion(getApp()),
+                                ProtocolVersion::V_23))
+    {
+        auto changesAfter = txm.getChangesAfter();
+        REQUIRE(changesAfter.size() == 2);
+        int64_t nonRefundableResourceFee =
+            sorobanResourceFee(getApp(), tx->sorobanResources(),
+                               xdr::xdr_size(tx->getEnvelope()), 0);
+        int64_t expectedFeeCharged =
+            nonRefundableResourceFee + expectedRefundableFeeCharged + baseFee;
+        int64_t actualFeeCharged = initBalance - balanceAfterFeeCharged;
+        REQUIRE(actualFeeCharged == expectedFeeCharged);
 
-    // Meta should contain the refund in `changesAfter`.
-    REQUIRE(changesAfter[1].updated().data.account().balance -
-                changesAfter[0].state().data.account().balance ==
-            chargedBeforeRefund - expectedFeeCharged);
+        // Meta should contain the refund in `changesAfter`.
+        REQUIRE(changesAfter[1].updated().data.account().balance -
+                    changesAfter[0].state().data.account().balance ==
+                chargedBeforeRefund - expectedFeeCharged);
+    }
 }
 
 Hash
