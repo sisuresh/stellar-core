@@ -324,10 +324,12 @@ struct LumenContractInfo
     SCVal mAmountSymbol;
 };
 LumenContractInfo getLumenContractInfo(Hash const& networkID);
+Hash getAssetContractID(Hash const& networkID, Asset const& asset);
 
 SCVal makeSymbolSCVal(std::string&& str);
 SCVal makeSymbolSCVal(std::string const& str);
 SCVal makeStringSCVal(std::string&& str);
+SCVal makeStringSCVal(std::string const& str);
 SCVal makeU64SCVal(uint64_t u);
 template <typename T>
 SCVal
@@ -338,4 +340,9 @@ makeBytesSCVal(T const& bytes)
     return val;
 }
 SCVal makeAddressSCVal(SCAddress const& address);
+SCVal makeI128SCVal(int64_t v);
+SCVal makeAccountIDSCVal(AccountID const& id);
+SCVal makeSep0011AssetStringSCVal(Asset const& asset);
+SCVal makeClassicMemoSCVal(Memo const& memo);
+SCVal makeMuxIDSCVal(MuxedAccount const& acc);
 }

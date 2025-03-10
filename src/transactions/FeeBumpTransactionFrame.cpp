@@ -453,6 +453,12 @@ FeeBumpTransactionFrame::getSourceID() const
     return mInnerTx->getSourceID();
 }
 
+MuxedAccount 
+FeeBumpTransactionFrame::getSourceAccount() const
+{
+    return mInnerTx->getSourceAccount();
+}
+
 std::optional<SequenceNumber const> const
 FeeBumpTransactionFrame::getMinSeqNum() const
 {

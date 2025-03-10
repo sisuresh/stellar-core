@@ -264,6 +264,12 @@ TransactionTestFrame::getSourceID() const
     return mTransactionFrame->getSourceID();
 }
 
+MuxedAccount 
+TransactionTestFrame::getSourceAccount() const
+{
+    return mTransactionFrame->getSourceAccount();
+}
+
 std::optional<SequenceNumber const> const
 TransactionTestFrame::getMinSeqNum() const
 {

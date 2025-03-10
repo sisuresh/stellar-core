@@ -95,6 +95,7 @@ class TransactionFrameBase
     virtual SequenceNumber getSeqNum() const = 0;
     virtual AccountID getFeeSourceID() const = 0;
     virtual AccountID getSourceID() const = 0;
+    virtual MuxedAccount getSourceAccount() const = 0;
     virtual std::optional<SequenceNumber const> const getMinSeqNum() const = 0;
     virtual Duration getMinSeqAge() const = 0;
     virtual uint32 getMinSeqLedgerGap() const = 0;

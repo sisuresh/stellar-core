@@ -1894,6 +1894,19 @@ getLumenContractInfo(Hash const& networkID)
     return {lumenContractID, balanceSymbol, amountSymbol};
 }
 
+Hash
+getAssetContractID(Hash const& networkID, Asset const& asset)
+{
+    // TODO: consolidate with getLumenContractInfo
+    HashIDPreimage preImage;
+    preImage.type(ENVELOPE_TYPE_CONTRACT_ID);
+    preImage.contractID().networkID = networkID;
+    preImage.contractID().contractIDPreimage.type(
+        CONTRACT_ID_PREIMAGE_FROM_ASSET);    
+    preImage.contractID().contractIDPreimage.fromAsset() = asset;
+    return xdrSha256(preImage);
+}
+
 SCVal
 makeSymbolSCVal(std::string&& str)
 {
@@ -1919,6 +1932,14 @@ makeStringSCVal(std::string&& str)
 }
 
 SCVal
+makeStringSCVal(std::string const& str)
+{
+    SCVal val(SCV_STRING);
+    val.str().assign(str);
+    return val;
+}
+
+SCVal
 makeU64SCVal(uint64_t u)
 {
     SCVal val(SCV_U64);
@@ -1932,6 +1953,64 @@ makeAddressSCVal(SCAddress const& address)
     SCVal val(SCV_ADDRESS);
     val.address() = address;
     return val;
+}
+
+SCVal
+makeI128SCVal(int64_t v)
+{
+    SCVal val(SCV_I128);
+    // Sign extend: if v is negative, hi = 0xFFFFFFFFFFFFFFFF, if positive, hi = 0x0000000000000000
+    val.i128().hi = v < 0 ? 0xFFFFFFFFFFFFFFFF : 0x0000000000000000;
+    val.i128().lo = static_cast<uint64_t>(v);
+    return val;
+}
+
+SCVal
+makeAccountIDSCVal(AccountID const& id)
+{
+    SCAddress addr(SC_ADDRESS_TYPE_ACCOUNT);
+    addr.accountId() = id;
+    return makeAddressSCVal(addr);
+}
+
+SCVal
+makeSep0011AssetStringSCVal(Asset const& asset)
+{
+    return makeStringSCVal(assetToString(asset) + ":" +  KeyUtils::toStrKey(getIssuer(asset)));
+}
+
+SCVal
+makeClassicMemoSCVal(Memo const& memo)
+{
+    switch (memo.type())
+    {
+    case MEMO_NONE:
+        throw std::runtime_error("Memo type cannot be `None`");
+    case MEMO_TEXT:
+        return makeStringSCVal(memo.text());
+    case MEMO_ID:
+        return makeU64SCVal(memo.id());
+    case MEMO_HASH:
+        return makeBytesSCVal(memo.hash());
+    case MEMO_RETURN:
+        return makeBytesSCVal(memo.retHash());
+    default:
+        throw std::runtime_error("Unknown memo type");
+    }
+}
+
+SCVal
+makeMuxIDSCVal(MuxedAccount const& acc)
+{
+    switch (acc.type())
+    {
+    case CryptoKeyType::KEY_TYPE_ED25519:
+        throw std::runtime_error("Not a muxed account");
+    case CryptoKeyType::KEY_TYPE_MUXED_ED25519:
+        return makeU64SCVal(acc.med25519().id);
+    default:
+        throw std::runtime_error("Unknown account type");
+    }
 }
 
 namespace detail

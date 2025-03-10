@@ -113,6 +113,7 @@ class TransactionTestFrame : public TransactionFrameBase
     SequenceNumber getSeqNum() const override;
     AccountID getFeeSourceID() const override;
     AccountID getSourceID() const override;
+    MuxedAccount getSourceAccount() const override;
     std::optional<SequenceNumber const> const getMinSeqNum() const override;
     Duration getMinSeqAge() const override;
     uint32 getMinSeqLedgerGap() const override;

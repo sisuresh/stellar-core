@@ -2,6 +2,7 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
+#include "transactions/EventManager.h"
 #include "transactions/PathPaymentStrictReceiveOpFrame.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
@@ -132,6 +133,10 @@ PathPaymentStrictReceiveOpFrame::doApply(
     {
         return false;
     }
+
+    // emit the event here. 
+    ContractEvent event = transfer(app.getNetworkID(), getSourceAsset(), getDestMuxedAccount(), getSourceAccount(), maxAmountRecv, mParentTx.getMemo());
+    // TODO: plumb it into meta
 
     return true;
 }

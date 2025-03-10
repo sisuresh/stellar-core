@@ -49,6 +49,12 @@ class EventManager
     static void pushValidationTimeDiagnosticError(
         EventManagerPtr const& ptr, SCErrorType ty, SCErrorCode code,
         std::string&& message, xdr::xvector<SCVal>&& args = {});
+
+    // Adds a new "transfer" contractEvent in the form of:
+    // contract: asset, topics: ["transfer", from:Address, to:Address, sep0011_asset:String], data: { amount:i128 }
+    void newTransferEvent(Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount);
+
+
 #ifdef BUILD_TESTS
     xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const
