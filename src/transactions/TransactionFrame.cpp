@@ -2406,15 +2406,31 @@ TransactionFrame::processPostApply(AppConnector& app,
                                    TransactionMetaFrame& meta,
                                    MutableTxResultPtr txResult) const
 {
+    uint32_t ledgerVersion = ltxOuter.loadHeader().current().ledgerVersion;
+    if (protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_23))
+    {
+        releaseAssertOrThrow(txResult);
+        auto changes = processRefund(app, ltxOuter, getSourceID(), *txResult);
+        if (!changes.empty())
+        {
+            meta.pushTxChangesAfter(std::move(changes));
+        }
+    }
+}
+
+LedgerEntryChanges
+TransactionFrame::processPostTxSetApply(AppConnector& app,
+                                        AbstractLedgerTxn& ltx,
+                                        MutableTxResultPtr txResult) const
+{
     releaseAssertOrThrow(txResult);
-    processRefund(app, ltxOuter, meta, getSourceID(), *txResult);
+    return processRefund(app, ltx, getSourceID(), *txResult);
 }
 
 // This is a TransactionFrame specific function that should only be used by
 // FeeBumpTransactionFrame to forward a different account for the refund.
-int64_t
+LedgerEntryChanges
 TransactionFrame::processRefund(AppConnector& app, AbstractLedgerTxn& ltxOuter,
-                                TransactionMetaFrame& meta,
                                 AccountID const& feeSource,
                                 MutableTransactionResultBase& txResult) const
 {
@@ -2422,16 +2438,16 @@ TransactionFrame::processRefund(AppConnector& app, AbstractLedgerTxn& ltxOuter,
 
     if (!isSoroban())
     {
-        return 0;
+        return {};
     }
     // Process Soroban resource fee refund (this is independent of the
     // transaction success).
     LedgerTxn ltx(ltxOuter);
-    int64_t refund = refundSorobanFee(ltx, feeSource, txResult);
-    meta.pushTxChangesAfter(ltx.getChanges());
+    refundSorobanFee(ltx, feeSource, txResult);
+    auto changes = ltx.getChanges();
     ltx.commit();
 
-    return refund;
+    return changes;
 }
 
 std::shared_ptr<StellarMessage const>

@@ -1951,10 +1951,8 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
         }
     }
 
-    // Need to processPostApply after entries are updated because the refund can
-    // update an account entry that was updated during apply.
-
-    // TODO: Change this so the refund is observable after a transaction.
+    // processPostApply is a noop starting from v23 because the refund happens
+    // in processPostTxSetApply. Should we still keep this?
     for (auto const& thread : stage)
     {
         for (auto const& txBundle : thread)
@@ -2084,12 +2082,18 @@ LedgerManagerImpl::applyTransactions(
                         mLastLedgerTxMeta.push_back(
                             txBundle.getEffects().getMeta());
 #endif
-
+                        auto refundChanges =
+                            txBundle.getTx()->processPostTxSetApply(
+                                mApp.getAppConnector(), ltx,
+                                txBundle.getResPayload());
                         if (ledgerCloseMeta)
                         {
                             ledgerCloseMeta->setTxProcessingMetaAndResultPair(
                                 txBundle.getEffects().getMeta().getXDR(),
                                 std::move(results), txBundle.getTxNum());
+
+                            ledgerCloseMeta->setPostTxApplyFeeProcessingChanges(
+                                refundChanges, txBundle.getTxNum());
                         }
                     }
                 }

@@ -220,12 +220,29 @@ FeeBumpTransactionFrame::processPostApply(AppConnector& app,
                                           TransactionMetaFrame& meta,
                                           MutableTxResultPtr txResult) const
 {
-    // We must forward the Fee-bump source so the refund is applied to the
-    // correct account
-    // Note that we are not calling TransactionFrame::processPostApply, so if
-    // any logic is added there, we would have to reason through if that logic
-    // should also be reflected here.
-    mInnerTx->processRefund(app, ltx, meta, getFeeSourceID(), *txResult);
+    uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+    if (protocolVersionIsBefore(ledgerVersion, ProtocolVersion::V_23))
+    {
+        // We must forward the Fee-bump source so the refund is applied to the
+        // correct account
+        // Note that we are not calling TransactionFrame::processPostApply, so
+        // if any logic is added there, we would have to reason through if that
+        // logic should also be reflected here.
+        auto changes =
+            mInnerTx->processRefund(app, ltx, getFeeSourceID(), *txResult);
+        if (!changes.empty())
+        {
+            meta.pushTxChangesAfter(std::move(changes));
+        }
+    }
+}
+
+LedgerEntryChanges
+FeeBumpTransactionFrame::processPostTxSetApply(
+    AppConnector& app, AbstractLedgerTxn& ltx,
+    MutableTxResultPtr txResult) const
+{
+    return mInnerTx->processRefund(app, ltx, getFeeSourceID(), *txResult);
 }
 
 bool

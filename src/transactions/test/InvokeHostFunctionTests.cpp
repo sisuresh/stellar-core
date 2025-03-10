@@ -4762,7 +4762,7 @@ TEST_CASE("contract constructor support", "[tx][soroban]")
 }
 
 UnorderedMap<uint32_t /*ledgerSeq*/, LedgerCloseMeta>
-readMeta(std::string const& metaPath)
+readLCMv2(std::string const& metaPath)
 {
     UnorderedMap<uint32_t, LedgerCloseMeta> res;
 
@@ -4771,10 +4771,8 @@ readMeta(std::string const& metaPath)
     LedgerCloseMeta lcm;
     while (in.readOne(lcm))
     {
-        // We make the assumption this is only used for soroban, so meta version
-        // should be v1
-        REQUIRE(lcm.v() == 1);
-        auto ledgerSeq = lcm.v1().ledgerHeader.header.ledgerSeq;
+        REQUIRE((lcm.v() == 2));
+        auto ledgerSeq = lcm.v2().ledgerHeader.header.ledgerSeq;
 
         res.emplace(ledgerSeq, lcm);
     }
@@ -4982,20 +4980,21 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         REQUIRE(r.results.size() == sorobanTxs.size());
 
         // Do a sanity check on tx meta
-        auto metaMap = readMeta(metaPath);
+        auto metaMap = readLCMv2(metaPath);
         REQUIRE(metaMap.count(test.getLCLSeq()));
 
         auto const& lcm = metaMap[test.getLCLSeq()];
-        REQUIRE(lcm.v1().txProcessing.size() == 11);
-        for (auto const& txResultMeta : lcm.v1().txProcessing)
+        REQUIRE(lcm.v2().txProcessing.size() == 11);
+        for (auto const& txResultMeta : lcm.v2().txProcessing)
         {
             auto const& changesAfter =
                 txResultMeta.txApplyProcessing.v3().txChangesAfter;
+            REQUIRE(changesAfter.size() == 0);
 
             // Just verify that a refund happened
-            REQUIRE(changesAfter.size() == 2);
-            REQUIRE(changesAfter[1].updated().data.account().balance >
-                    changesAfter[0].state().data.account().balance);
+            auto const& refundChanges = txResultMeta.postTxApplyFeeProcessing;
+            REQUIRE(refundChanges[1].updated().data.account().balance >
+                    refundChanges[0].state().data.account().balance);
         }
 
         REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
@@ -5106,16 +5105,16 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
 
         checkResults(r, 2, 0);
 
-        auto metaMap = readMeta(metaPath);
+        auto metaMap = readLCMv2(metaPath);
         REQUIRE(metaMap.count(test.getLCLSeq()));
 
         auto const& lcm = metaMap[test.getLCLSeq()];
-        REQUIRE(lcm.v1().txProcessing.size() == 2);
+        REQUIRE(lcm.v2().txProcessing.size() == 2);
 
         // Make sure meta looks looks correct
         // tx1 removes two entries (contract data and ttl), and then tx2 creates
         // them.
-        auto tx1OpChanges = lcm.v1()
+        auto tx1OpChanges = lcm.v2()
                                 .txProcessing.at(0)
                                 .txApplyProcessing.v3()
                                 .operations.at(0)
@@ -5125,7 +5124,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         REQUIRE(tx1OpChanges.at(2).type() == LEDGER_ENTRY_STATE);
         REQUIRE(tx1OpChanges.at(3).type() == LEDGER_ENTRY_REMOVED);
 
-        auto tx2OpChanges = lcm.v1()
+        auto tx2OpChanges = lcm.v2()
                                 .txProcessing.at(1)
                                 .txApplyProcessing.v3()
                                 .operations.at(0)
@@ -5242,12 +5241,12 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
 
         checkResults(r, sorobanTxs.size(), 0);
 
-        auto metaMap = readMeta(metaPath);
+        auto metaMap = readLCMv2(metaPath);
         REQUIRE(metaMap.count(test.getLCLSeq()));
 
         auto const& lcm = metaMap[test.getLCLSeq()];
-        REQUIRE(lcm.v1().txProcessing.size() == 6);
-        for (auto const& txResultMeta : lcm.v1().txProcessing)
+        REQUIRE(lcm.v2().txProcessing.size() == 6);
+        for (auto const& txResultMeta : lcm.v2().txProcessing)
         {
             bool isWrite = sorobanTxs.at(0)->getContentsHash() ==
                            txResultMeta.result.transactionHash;

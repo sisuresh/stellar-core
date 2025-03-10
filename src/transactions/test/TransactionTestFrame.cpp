@@ -127,6 +127,14 @@ TransactionTestFrame::processPostApply(AppConnector& app,
     mTransactionFrame->processPostApply(app, ltx, meta, mTransactionTxResult);
 }
 
+LedgerEntryChanges
+TransactionTestFrame::processPostTxSetApply(AppConnector& app,
+                                            AbstractLedgerTxn& ltx,
+                                            MutableTxResultPtr txResult) const
+{
+    return mTransactionFrame->processPostTxSetApply(app, ltx, txResult);
+}
+
 bool
 TransactionTestFrame::checkValidForTesting(AppConnector& app,
                                            AbstractLedgerTxn& ltxOuter,
