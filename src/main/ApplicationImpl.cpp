@@ -28,6 +28,7 @@
 #include "invariant/BucketListIsConsistentWithDatabase.h"
 #include "invariant/ConservationOfLumens.h"
 #include "invariant/ConstantProductInvariant.h"
+#include "invariant/EventsAreConsistentWithEntryDiffs.h"
 #include "invariant/InvariantManager.h"
 #include "invariant/LedgerEntryIsValid.h"
 #include "invariant/LiabilitiesMatchOffers.h"
@@ -289,6 +290,11 @@ ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
     LiabilitiesMatchOffers::registerInvariant(*this);
     SponsorshipCountIsValid::registerInvariant(*this);
     ConstantProductInvariant::registerInvariant(*this);
+
+#if defined(__SIZEOF_INT128__) || defined(_GLIBCXX_USE_INT128)
+    EventsAreConsistentWithEntryDiffs::registerInvariant(*this);
+#endif
+
     enableInvariantsFromConfig();
 
     if (initNewDB)

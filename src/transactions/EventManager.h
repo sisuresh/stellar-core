@@ -57,6 +57,8 @@ class OpEventManager
 
     void pushContractEvents(xdr::xvector<ContractEvent> const& evts);
 
+    xdr::xvector<ContractEvent> const& getContractEvents();
+
     void flushContractEvents(xdr::xvector<ContractEvent>& buf);
 
     void
