@@ -1894,6 +1894,20 @@ getLumenContractInfo(Hash const& networkID)
     return {lumenContractID, balanceSymbol, amountSymbol};
 }
 
+// TODO: Copied from Jays branch. Clean up.
+Hash
+getAssetContractID(Hash const& networkID, Asset const& asset)
+{
+    // TODO: consolidate with getLumenContractInfo
+    HashIDPreimage preImage;
+    preImage.type(ENVELOPE_TYPE_CONTRACT_ID);
+    preImage.contractID().networkID = networkID;
+    preImage.contractID().contractIDPreimage.type(
+        CONTRACT_ID_PREIMAGE_FROM_ASSET);
+    preImage.contractID().contractIDPreimage.fromAsset() = asset;
+    return xdrSha256(preImage);
+}
+
 SCVal
 makeSymbolSCVal(std::string&& str)
 {

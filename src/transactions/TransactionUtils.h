@@ -323,6 +323,7 @@ struct LumenContractInfo
     SCVal mAmountSymbol;
 };
 LumenContractInfo getLumenContractInfo(Hash const& networkID);
+Hash getAssetContractID(Hash const& networkID, Asset const& asset);
 
 SCVal makeSymbolSCVal(std::string&& str);
 SCVal makeSymbolSCVal(std::string const& str);
