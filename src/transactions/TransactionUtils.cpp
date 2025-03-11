@@ -2057,7 +2057,7 @@ isIssuer(SCAddress const& addr, Asset const& asset)
 SCVal
 makeSep0011AssetStringSCVal(Asset const& asset)
 {
-    if(asset.type() == ASSET_TYPE_NATIVE)
+    if (asset.type() == ASSET_TYPE_NATIVE)
     {
         return makeStringSCVal("native");
     }
@@ -2089,6 +2089,39 @@ SCVal
 makeMuxIDSCVal(MuxedEd25519Account const& acc)
 {
     return makeU64SCVal(acc.id);
+}
+
+LedgerKey
+addressToLedgerKey(SCAddress const& address)
+{
+    LedgerKey lk;
+    switch (address.type())
+    {
+    case SC_ADDRESS_TYPE_ACCOUNT:
+        lk.type(ACCOUNT);
+        lk.account().accountID = address.accountId();
+        break;
+    case SC_ADDRESS_TYPE_MUXED_ACCOUNT:
+        lk.type(ACCOUNT);
+        lk.account().accountID.ed25519() = address.muxedAccount().ed25519;
+        break;
+    case SC_ADDRESS_TYPE_CONTRACT:
+        lk.type(CONTRACT_CODE);
+        lk.contractCode().hash = address.contractId();
+        break;
+    case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE:
+        lk.type(CLAIMABLE_BALANCE);
+        lk.claimableBalance().balanceID = address.claimableBalanceId();
+        break;
+    case SC_ADDRESS_TYPE_LIQUIDITY_POOL:
+        lk.type(LIQUIDITY_POOL);
+        lk.liquidityPool().liquidityPoolID = address.liquidityPoolId();
+        break;
+    default:
+        break;
+    }
+
+    return lk;
 }
 
 namespace detail

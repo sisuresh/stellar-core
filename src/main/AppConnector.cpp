@@ -72,12 +72,14 @@ AppConnector::getSorobanMetrics() const
 }
 
 void
-AppConnector::checkOnOperationApply(Operation const& operation,
-                                    OperationResult const& opres,
-                                    LedgerTxnDelta const& ltxDelta)
+AppConnector::checkOnOperationApply(
+    Operation const& operation, OperationResult const& opres,
+    LedgerTxnDelta const& ltxDelta,
+    std::vector<ContractEvent> const&
+        events /*TODO: This is a placeholder for the final format*/)
 {
-    mApp.getInvariantManager().checkOnOperationApply(operation, opres,
-                                                     ltxDelta);
+    mApp.getInvariantManager().checkOnOperationApply(operation, opres, ltxDelta,
+                                                     events);
 }
 
 Hash const&

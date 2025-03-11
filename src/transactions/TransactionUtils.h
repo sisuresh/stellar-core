@@ -353,4 +353,5 @@ SCAddress liquidityPoolIDToSCAddress(PoolID const& id);
 SCAddress getAddressWithDroppedMuxedInfo(SCAddress const& addr);
 bool isIssuer(SCAddress const& addr, Asset const& asset);
 
+LedgerKey addressToLedgerKey(SCAddress const& address);
 }

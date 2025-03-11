@@ -1307,9 +1307,12 @@ AssetContractTestClient::setLastEvent(
         mLastEvent = std::nullopt;
         return;
     }
-    auto const& sorobanMeta = invocation.getTxMeta().getXDR().v3().sorobanMeta;
-    REQUIRE(sorobanMeta->events.size() == 1);
-    mLastEvent = sorobanMeta->events[0];
+    auto const& txMetaXDR = invocation.getTxMeta().getXDR();
+    auto const& events = txMetaXDR.v() == 3
+                             ? txMetaXDR.v3().sorobanMeta->events
+                             : txMetaXDR.v4().operations.at(0).events;
+    REQUIRE(events.size() == 1);
+    mLastEvent = events[0];
 }
 
 LedgerKey

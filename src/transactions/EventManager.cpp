@@ -130,6 +130,7 @@ OpEventManager::eventsForClaimAtoms(
                                             seller, amountToSeller, memo);
             eventForTransferWithIssuerCheck(
                 assetToSource, seller, sourceSCAddress, amountToSource, memo);
+            break;
         }
         case CLAIM_ATOM_TYPE_ORDER_BOOK:
         {
@@ -145,6 +146,7 @@ OpEventManager::eventsForClaimAtoms(
                                             seller, amountToSeller, memo);
             eventForTransferWithIssuerCheck(
                 assetToSource, seller, sourceSCAddress, amountToSource, memo);
+            break;
         }
         case CLAIM_ATOM_TYPE_LIQUIDITY_POOL:
         {
@@ -161,6 +163,7 @@ OpEventManager::eventsForClaimAtoms(
                                             poolID, amountToPool, memo);
             eventForTransferWithIssuerCheck(
                 assetFromPool, poolID, sourceSCAddress, amountFromPool, memo);
+            break;
         }
         }
     }
@@ -354,6 +357,12 @@ OpEventManager::pushContractEvents(xdr::xvector<ContractEvent> const& evts)
 {
     auto& ces = mContractEvents;
     ces.insert(ces.end(), evts.begin(), evts.end());
+}
+
+xdr::xvector<ContractEvent> const&
+OpEventManager::getContractEvents()
+{
+    return mContractEvents;
 }
 
 void
