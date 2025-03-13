@@ -89,7 +89,6 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
     auto lk = current ? LedgerEntryKey(*current) : LedgerEntryKey(*previous);
     auto let = current ? current->data.type() : previous->data.type();
 
-    auto const& eventAmounts = agg.mEventAmounts;
     switch (let)
     {
     case ACCOUNT:
@@ -254,20 +253,34 @@ verifyEventsDelta(AggregatedEvents const& agg,
 
 // TODO: move to TransactionUtils
 static LedgerKey
-addressToLedgerKey(SCAddress const address)
+addressToLedgerKey(SCAddress const& address)
 {
     LedgerKey lk;
-    if (address.type() == SC_ADDRESS_TYPE_ACCOUNT)
+    switch (address.type())
     {
+    case SC_ADDRESS_TYPE_ACCOUNT:
         lk.type(ACCOUNT);
         lk.account().accountID = address.accountId();
-    }
-    else if (address.type() == SC_ADDRESS_TYPE_CONTRACT)
-    {
+        break;
+    case SC_ADDRESS_TYPE_MUXED_ACCOUNT:
+        lk.type(ACCOUNT);
+        lk.account().accountID.ed25519() = address.muxedAccount().ed25519;
+        break;
+    case SC_ADDRESS_TYPE_CONTRACT:
         lk.type(CONTRACT_CODE);
         lk.contractCode().hash = address.contractId();
+        break;
+    case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE:
+        lk.type(CLAIMABLE_BALANCE);
+        lk.claimableBalance().balanceID = address.claimableBalanceId();
+        break;
+    case SC_ADDRESS_TYPE_LIQUIDITY_POOL:
+        lk.type(LIQUIDITY_POOL);
+        lk.liquidityPool().liquidityPoolID = address.liquidityPoolId();
+        break;
+    default:
+        break;
     }
-    // TODO: add cb, lp, (and muxed?)
 
     return lk;
 }
@@ -456,6 +469,8 @@ EventsAreConsistentWithEntryDiffs::getName() const
     return "EventsAreConsistentWithEntryDiffs";
 }
 
+// Note that this invariant only verifies balance changes in the context of an
+// operation. The fee events should not be accounted for here.
 std::string
 EventsAreConsistentWithEntryDiffs::checkOnOperationApply(
     Operation const& operation, OperationResult const& result,
