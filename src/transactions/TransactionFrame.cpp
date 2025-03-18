@@ -22,6 +22,7 @@
 #include "ledger/SorobanMetrics.h"
 #include "main/AppConnector.h"
 #include "main/Application.h"
+#include "transactions/LumenEventReconciler.h"
 #include "transactions/MutableTransactionResult.h"
 #include "transactions/SignatureChecker.h"
 #include "transactions/SignatureUtils.h"
@@ -1763,8 +1764,17 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             // case
             if (success)
             {
-                app.checkOnOperationApply(op->getOperation(), opResult,
-                                          ltxOp.getDelta(),
+                auto delta = ltxOp.getDelta();
+
+                if (protocolVersionIsBefore(ledgerVersion,
+                                            ProtocolVersion::V_8))
+                {
+                    // TODO: return events and inject into meta
+                    LumenEventReconciler::reconcileEvents(
+                        getSourceID(), op->getOperation(), opResult, delta);
+                }
+
+                app.checkOnOperationApply(op->getOperation(), opResult, delta,
                                           {} /*TODO: Pass all events in here*/);
 
                 LedgerEntryChanges changes;
@@ -1822,6 +1832,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             }
 
             ltxTx.commit();
+
+            CLOG_ERROR(Tx, "{}", xdrToCerealString(operationMetas, "meta"));
             // commit -> propagate the meta to the outer scope
             outerMeta.pushOperationMetas(std::move(operationMetas));
             outerMeta.pushTxChangesAfter(std::move(changesAfter));
