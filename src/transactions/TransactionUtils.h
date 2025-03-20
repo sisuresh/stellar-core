@@ -34,6 +34,7 @@ struct LedgerHeader;
 struct LedgerKey;
 struct TransactionEnvelope;
 struct MuxedAccount;
+class EventManager;
 
 template <typename IterType>
 std::pair<IterType, bool>
@@ -314,7 +315,7 @@ bool validateContractLedgerEntry(LedgerKey const& lk, size_t entrySize,
                                  SorobanNetworkConfig const& config,
                                  Config const& appConfig,
                                  TransactionFrame const& parentTx,
-                                 SorobanTxData& sorobanData);
+                                 EventManager& eventManager);
 
 struct LumenContractInfo
 {

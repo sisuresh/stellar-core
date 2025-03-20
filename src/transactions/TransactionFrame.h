@@ -141,7 +141,7 @@ class TransactionFrame : public TransactionFrameBase
     bool validateSorobanResources(SorobanNetworkConfig const& config,
                                   Config const& appConfig,
                                   uint32_t protocolVersion,
-                                  SorobanTxData& sorobanData) const;
+                                  EventManager& eventManager) const;
     int64_t refundSorobanFee(AbstractLedgerTxn& ltx, AccountID const& feeSource,
                              MutableTransactionResultBase& txResult) const;
     void updateSorobanMetrics(AppConnector& app) const;
