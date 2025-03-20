@@ -50,9 +50,11 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
 }
 
 bool
-ExtendFootprintTTLOpFrame::doApply(
-    AppConnector& app, AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,
-    OperationResult& res, std::shared_ptr<SorobanTxData> sorobanData) const
+ExtendFootprintTTLOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
+                                   Hash const& sorobanBasePrngSeed,
+                                   OperationResult& res,
+                                   std::shared_ptr<SorobanTxData> sorobanData,
+                                   EventManager& eventManager) const
 {
     releaseAssertOrThrow(sorobanData);
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame apply", true);
@@ -108,7 +110,7 @@ ExtendFootprintTTLOpFrame::doApply(
 
         if (!validateContractLedgerEntry(lk, entrySize, sorobanConfig,
                                          app.getConfig(), mParentTx,
-                                         *sorobanData))
+                                         eventManager))
         {
             innerResult(res).code(EXTEND_FOOTPRINT_TTL_RESOURCE_LIMIT_EXCEEDED);
             return false;
@@ -116,7 +118,7 @@ ExtendFootprintTTLOpFrame::doApply(
 
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
-            sorobanData->pushApplyTimeDiagnosticError(
+            eventManager.pushApplyTimeDiagnosticError(
                 app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
@@ -147,7 +149,7 @@ ExtendFootprintTTLOpFrame::doApply(
         ledgerSeq);
     if (!sorobanData->consumeRefundableSorobanResources(
             0, rentFee, ledgerVersion, sorobanConfig, app.getConfig(),
-            mParentTx))
+            mParentTx, eventManager))
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_INSUFFICIENT_REFUNDABLE_FEE);
         return false;
@@ -160,13 +162,13 @@ bool
 ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
     uint32_t ledgerVersion, OperationResult& res,
-    SorobanTxData& sorobanData) const
+    EventManager& eventManager) const
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readWrite.empty())
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        sorobanData.pushValidationTimeDiagnosticError(
+        eventManager.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-write footprint must be empty for ExtendFootprintTTL "
             "operation",
@@ -179,7 +181,7 @@ ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
         if (!isSorobanEntry(lk))
         {
             innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-            sorobanData.pushValidationTimeDiagnosticError(
+            eventManager.pushValidationTimeDiagnosticError(
                 appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only entries with TTL (contract data or code entries) can "
                 "have it extended",
@@ -192,7 +194,7 @@ ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
         networkConfig.stateArchivalSettings().maxEntryTTL - 1)
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        sorobanData.pushValidationTimeDiagnosticError(
+        eventManager.pushValidationTimeDiagnosticError(
             appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
             "TTL extension is too large: {} > {}",
             {

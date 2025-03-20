@@ -930,7 +930,7 @@ class FuzzTransactionFrame : public TransactionFrame
             return !op->checkValid(
                 app.getAppConnector(), signatureChecker,
                 app.getAppConnector().getLastClosedSorobanNetworkConfig(),
-                ltxStmt, false, opResult, mTxResult->getSorobanData());
+                ltxStmt, false, opResult, mTxResult->getEventManager());
         };
 
         auto const& ops = getOperations();

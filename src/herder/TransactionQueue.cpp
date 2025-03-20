@@ -492,7 +492,7 @@ TransactionQueue::canAdd(
         auto sorobanTxData = txResult->getSorobanData();
         releaseAssertOrThrow(sorobanTxData);
 
-        sorobanTxData->pushValidationTimeDiagnosticError(
+        txResult->getEventManager().pushValidationTimeDiagnosticError(
             mApp.getConfig(), SCE_CONTEXT, SCEC_INVALID_INPUT,
             "non-source auth Soroban tx uses memo or muxed source account");
 

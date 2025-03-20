@@ -27,7 +27,8 @@ ClawbackOpFrame::isOpSupported(LedgerHeader const& header) const
 bool
 ClawbackOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
                          Hash const& sorobanBasePrngSeed, OperationResult& res,
-                         std::shared_ptr<SorobanTxData> sorobanData) const
+                         std::shared_ptr<SorobanTxData> sorobanData,
+                         EventManager& eventManager) const
 {
     ZoneNamedN(applyZone, "ClawbackOp apply", true);
 
