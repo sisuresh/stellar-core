@@ -2044,7 +2044,25 @@ TransactionFrame::processPostApply(AppConnector& app,
                                    MutableTxResultPtr txResult) const
 {
     releaseAssertOrThrow(txResult);
-    processRefund(app, ltxOuter, meta, getSourceID(), *txResult);
+    auto refund = processRefund(app, ltxOuter, meta, getSourceID(), *txResult);
+
+    auto ledgerVersion = ltxOuter.loadHeader().current().ledgerVersion;
+    auto fee = txResult->getResult().feeCharged;
+    bool isFeeBump = txResult->getResultCode() == txFEE_BUMP_INNER_SUCCESS ||
+                     txResult->getResultCode() == txFEE_BUMP_INNER_FAILED;
+
+    if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_21) &&
+        isFeeBump)
+    {
+        // This is due to a bug in V20 where we didn't set feeCharged correctly
+        // for feeBumps
+        fee -= refund;
+    }
+
+    // Push fee event
+    // from: getFeeSourceID()
+    // amount: fee
+    // txResult->getEventsManager().pushTxEvents()
 }
 
 // This is a TransactionFrame specific function that should only be used by
