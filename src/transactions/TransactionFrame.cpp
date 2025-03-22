@@ -22,7 +22,9 @@
 #include "ledger/SorobanMetrics.h"
 #include "main/AppConnector.h"
 #include "main/Application.h"
+#include "transactions/EventManager.h"
 #include "transactions/MutableTransactionResult.h"
+#include "transactions/OperationMetaWrapper.h"
 #include "transactions/SignatureChecker.h"
 #include "transactions/SignatureUtils.h"
 #include "transactions/SponsorshipUtils.h"
@@ -649,15 +651,16 @@ bool
 TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
                                            Config const& appConfig,
                                            uint32_t protocolVersion,
-                                           SorobanTxData& sorobanData) const
+                                           EventManagerPtr evtManager) const
 {
     auto const& resources = sorobanResources();
     auto const& readEntries = resources.footprint.readOnly;
     auto const& writeEntries = resources.footprint.readWrite;
+
     if (resources.instructions > config.txMaxInstructions())
     {
-        sorobanData.pushValidationTimeDiagnosticError(
-            appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "transaction instructions resources exceed network config limit",
             {makeU64SCVal(resources.instructions),
              makeU64SCVal(config.txMaxInstructions())});
@@ -665,8 +668,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     }
     if (resources.readBytes > config.txMaxReadBytes())
     {
-        sorobanData.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-read resources exceed network config limit",
             {makeU64SCVal(resources.readBytes),
              makeU64SCVal(config.txMaxReadBytes())});
@@ -674,8 +677,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     }
     if (resources.writeBytes > config.txMaxWriteBytes())
     {
-        sorobanData.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction byte-write resources exceed network config limit",
             {makeU64SCVal(resources.writeBytes),
              makeU64SCVal(config.txMaxWriteBytes())});
@@ -684,8 +687,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     if (readEntries.size() + writeEntries.size() >
         config.txMaxReadLedgerEntries())
     {
-        sorobanData.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-read resources exceed network config limit",
             {makeU64SCVal(readEntries.size() + writeEntries.size()),
              makeU64SCVal(config.txMaxReadLedgerEntries())});
@@ -693,13 +696,14 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
     }
     if (writeEntries.size() > config.txMaxWriteLedgerEntries())
     {
-        sorobanData.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
             "transaction entry-write resources exceed network config limit",
             {makeU64SCVal(writeEntries.size()),
              makeU64SCVal(config.txMaxWriteLedgerEntries())});
         return false;
     }
+
     auto footprintKeyIsValid = [&](LedgerKey const& key) -> bool {
         switch (key.type())
         {
@@ -714,8 +718,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
                 (tl.asset.type() == ASSET_TYPE_NATIVE) ||
                 isIssuer(tl.accountID, tl.asset))
             {
-                sorobanData.pushValidationTimeDiagnosticError(
-                    appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+                EventManager::pushValidationTimeDiagnosticError(
+                    evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
                     "transaction footprint contains invalid trustline asset");
                 return false;
             }
@@ -727,8 +731,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
         case LIQUIDITY_POOL:
         case CONFIG_SETTING:
         case TTL:
-            sorobanData.pushValidationTimeDiagnosticError(
-                appConfig, SCE_STORAGE, SCEC_UNEXPECTED_TYPE,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_UNEXPECTED_TYPE,
                 "transaction footprint contains unsupported ledger key type",
                 {makeU64SCVal(key.type())});
             return false;
@@ -738,8 +742,8 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
 
         if (xdr::xdr_size(key) > config.maxContractDataKeySizeBytes())
         {
-            sorobanData.pushValidationTimeDiagnosticError(
-                appConfig, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction footprint key exceeds network config limit",
                 {makeU64SCVal(xdr::xdr_size(key)),
                  makeU64SCVal(config.maxContractDataKeySizeBytes())});
@@ -748,6 +752,7 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
 
         return true;
     };
+
     for (auto const& lk : readEntries)
     {
         if (!footprintKeyIsValid(lk))
@@ -762,11 +767,12 @@ TransactionFrame::validateSorobanResources(SorobanNetworkConfig const& config,
             return false;
         }
     }
+
     auto txSize = this->getSize();
     if (txSize > config.txMaxSizeBytes())
     {
-        sorobanData.pushSimpleDiagnosticError(
-            appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushDiagnosticError(
+            evtManager, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "total transaction size exceeds network config limit",
             {makeU64SCVal(txSize), makeU64SCVal(config.txMaxSizeBytes())});
         return false;
@@ -987,8 +993,8 @@ TransactionFrame::commonValidPreSeqNum(
     AppConnector& app, std::optional<SorobanNetworkConfig> const& cfg,
     LedgerSnapshot const& ls, bool chargeFee,
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
-    std::optional<FeePair> sorobanResourceFee,
-    MutableTxResultPtr txResult) const
+    std::optional<FeePair> sorobanResourceFee, MutableTxResultPtr txResult,
+    EventManagerPtr evtManager) const
 {
     ZoneScoped;
     releaseAssertOrThrow(txResult);
@@ -1057,17 +1063,16 @@ TransactionFrame::commonValidPreSeqNum(
 
         releaseAssert(cfg);
         if (!checkSorobanResourceAndSetError(app, cfg.value(), ledgerVersion,
-                                             txResult))
+                                             txResult, evtManager))
         {
             return false;
         }
 
         auto const& sorobanData = mEnvelope.v1().tx.ext.sorobanData();
-        auto& sorobanTxData = *txResult->getSorobanData();
         if (sorobanData.resourceFee > getFullFee())
         {
-            sorobanTxData.pushValidationTimeDiagnosticError(
-                app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is higher than the "
                 "full transaction fee",
                 {makeU64SCVal(sorobanData.resourceFee),
@@ -1080,8 +1085,8 @@ TransactionFrame::commonValidPreSeqNum(
         if (sorobanResourceFee->refundable_fee >
             INT64_MAX - sorobanResourceFee->non_refundable_fee)
         {
-            sorobanTxData.pushValidationTimeDiagnosticError(
-                app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "transaction resource fees cannot be added",
                 {makeU64SCVal(sorobanResourceFee->refundable_fee),
                  makeU64SCVal(sorobanResourceFee->non_refundable_fee)});
@@ -1093,8 +1098,8 @@ TransactionFrame::commonValidPreSeqNum(
                                   sorobanResourceFee->non_refundable_fee;
         if (sorobanData.resourceFee < resourceFees)
         {
-            sorobanTxData.pushValidationTimeDiagnosticError(
-                app.getConfig(), SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_EXCEEDED_LIMIT,
                 "transaction `sorobanData.resourceFee` is lower than the "
                 "actual Soroban resource fee",
                 {makeU64SCVal(sorobanData.resourceFee),
@@ -1112,8 +1117,8 @@ TransactionFrame::commonValidPreSeqNum(
             {
                 if (!set.emplace(lk).second)
                 {
-                    sorobanTxData.pushValidationTimeDiagnosticError(
-                        app.getConfig(), SCE_STORAGE, SCEC_INVALID_INPUT,
+                    EventManager::pushValidationTimeDiagnosticError(
+                        evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
                         "Found duplicate key in the Soroban footprint; every "
                         "key across read-only and read-write footprints has to "
                         "be unique.",
@@ -1292,15 +1297,13 @@ TransactionFrame::isBadSeq(LedgerHeaderWrapper const& header,
 }
 
 TransactionFrame::ValidationType
-TransactionFrame::commonValid(AppConnector& app,
-                              std::optional<SorobanNetworkConfig> const& cfg,
-                              SignatureChecker& signatureChecker,
-                              LedgerSnapshot const& ls, SequenceNumber current,
-                              bool applying, bool chargeFee,
-                              uint64_t lowerBoundCloseTimeOffset,
-                              uint64_t upperBoundCloseTimeOffset,
-                              std::optional<FeePair> sorobanResourceFee,
-                              MutableTxResultPtr txResult) const
+TransactionFrame::commonValid(
+    AppConnector& app, std::optional<SorobanNetworkConfig> const& cfg,
+    SignatureChecker& signatureChecker, LedgerSnapshot const& ls,
+    SequenceNumber current, bool applying, bool chargeFee,
+    uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
+    std::optional<FeePair> sorobanResourceFee, MutableTxResultPtr txResult,
+    EventManagerPtr evtManager) const
 {
     ZoneScoped;
     releaseAssertOrThrow(txResult);
@@ -1308,8 +1311,8 @@ TransactionFrame::commonValid(AppConnector& app,
 
     auto validate = [this, &signatureChecker, applying,
                      lowerBoundCloseTimeOffset, upperBoundCloseTimeOffset, &app,
-                     chargeFee, sorobanResourceFee, txResult, &current, &res,
-                     cfg](LedgerSnapshot const& ls) {
+                     chargeFee, sorobanResourceFee, txResult, &evtManager,
+                     &current, &res, cfg](LedgerSnapshot const& ls) {
         if (applying &&
             (lowerBoundCloseTimeOffset != 0 || upperBoundCloseTimeOffset != 0))
         {
@@ -1317,9 +1320,10 @@ TransactionFrame::commonValid(AppConnector& app,
                 "Applying transaction with non-current closeTime");
         }
 
-        if (!commonValidPreSeqNum(
-                app, cfg, ls, chargeFee, lowerBoundCloseTimeOffset,
-                upperBoundCloseTimeOffset, sorobanResourceFee, txResult))
+        if (!commonValidPreSeqNum(app, cfg, ls, chargeFee,
+                                  lowerBoundCloseTimeOffset,
+                                  upperBoundCloseTimeOffset, sorobanResourceFee,
+                                  txResult, evtManager))
         {
             return;
         }
@@ -1526,7 +1530,7 @@ MutableTxResultPtr
 TransactionFrame::checkValidWithOptionallyChargedFee(
     AppConnector& app, LedgerSnapshot const& ls, SequenceNumber current,
     bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
-    uint64_t upperBoundCloseTimeOffset) const
+    uint64_t upperBoundCloseTimeOffset, EventManagerPtr evtManager) const
 {
     ZoneScoped;
     mCachedAccountPreProtocol8.reset();
@@ -1566,7 +1570,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
     bool res = commonValid(app, sorobanConfig, signatureChecker, ls, current,
                            false, chargeFee, lowerBoundCloseTimeOffset,
                            upperBoundCloseTimeOffset, sorobanResourceFee,
-                           txResult) == ValidationType::kMaybeValid;
+                           txResult, evtManager) == ValidationType::kMaybeValid;
     if (res)
     {
         for (size_t i = 0; i < mOperations.size(); ++i)
@@ -1575,7 +1579,7 @@ TransactionFrame::checkValidWithOptionallyChargedFee(
             auto& opResult = txResult->getOpResultAt(i);
 
             if (!op->checkValid(app, signatureChecker, sorobanConfig, ls, false,
-                                opResult, txResult->getSorobanData()))
+                                opResult, evtManager))
             {
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
@@ -1598,7 +1602,8 @@ MutableTxResultPtr
 TransactionFrame::checkValid(AppConnector& app, LedgerSnapshot const& ls,
                              SequenceNumber current,
                              uint64_t lowerBoundCloseTimeOffset,
-                             uint64_t upperBoundCloseTimeOffset) const
+                             uint64_t upperBoundCloseTimeOffset,
+                             EventManagerPtr evtManager) const
 {
     // Subtle: this check has to happen in `checkValid` and not
     // `checkValidWithOptionallyChargedFee` in order to not validate the
@@ -1612,18 +1617,18 @@ TransactionFrame::checkValid(AppConnector& app, LedgerSnapshot const& ls,
         txResult->setResultCode(txMALFORMED);
         return txResult;
     }
-    return checkValidWithOptionallyChargedFee(app, ls, current, true,
-                                              lowerBoundCloseTimeOffset,
-                                              upperBoundCloseTimeOffset);
+    return checkValidWithOptionallyChargedFee(
+        app, ls, current, true, lowerBoundCloseTimeOffset,
+        upperBoundCloseTimeOffset, evtManager);
 }
 
 bool
 TransactionFrame::checkSorobanResourceAndSetError(
     AppConnector& app, SorobanNetworkConfig const& cfg, uint32_t ledgerVersion,
-    MutableTxResultPtr txResult) const
+    MutableTxResultPtr txResult, EventManagerPtr evtManager) const
 {
     if (!validateSorobanResources(cfg, app.getConfig(), ledgerVersion,
-                                  *txResult->getSorobanData()))
+                                  evtManager))
     {
         txResult->setInnermostResultCode(txSOROBAN_INVALID);
         return false;
@@ -1675,11 +1680,12 @@ TransactionFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
 
 bool
 TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
-                        MutableTxResultPtr txResult,
+                        MutableTxResultPtr txResult, EventManager& evtManager,
                         Hash const& sorobanBasePrngSeed) const
 {
-    TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion);
-    return apply(app, ltx, tm, txResult, sorobanBasePrngSeed);
+    TransactionMetaFrame tm(ltx.loadHeader().current().ledgerVersion,
+                            app.getConfig().EMIT_CLASSIC_EVENTS);
+    return apply(app, ltx, tm, txResult, evtManager, sorobanBasePrngSeed);
 }
 
 bool
@@ -1687,6 +1693,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   AppConnector& app, AbstractLedgerTxn& ltx,
                                   TransactionMetaFrame& outerMeta,
                                   MutableTransactionResultBase& txResult,
+                                  EventManager& evtManager,
                                   Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
@@ -1714,10 +1721,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
     try
     {
         bool success = true;
-
-        xdr::xvector<OperationMeta> operationMetas;
-        operationMetas.reserve(getNumOperations());
-
         // shield outer scope of any side effects with LedgerTxn
         LedgerTxn ltxTx(ltx);
         uint32_t ledgerVersion = ltxTx.loadHeader().current().ledgerVersion;
@@ -1731,6 +1734,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
         uint64_t opNum{0};
+        OperationMetaWrapper opMetas(getNumOperations());
+        xdr::xvector<DiagnosticEvent> txDiagnostics;
         for (size_t i = 0; i < mOperations.size(); ++i)
         {
             auto time = opTimer.TimeScope();
@@ -1750,8 +1755,11 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             }
             ++opNum;
 
-            bool txRes = op->apply(app, signatureChecker, ltxOp, subSeed,
-                                   opResult, txResult.getSorobanData());
+            evtManager.clear();
+            bool txRes =
+                op->apply(app, signatureChecker, ltxOp, subSeed, opResult,
+                          txResult.getSorobanData(), evtManager);
+            evtManager.flushDiagnosticEvents(txDiagnostics);
 
             if (!txRes)
             {
@@ -1780,7 +1788,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 {
                     changes = ltxOp.getChanges();
                 }
-                operationMetas.emplace_back(changes);
+                xdr::xvector<ContractEvent> ces;
+                evtManager.flushContractEvents(ces);
+                opMetas.push(std::move(changes), std::move(ces));
             }
 
             if (txRes ||
@@ -1789,6 +1799,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 ltxOp.commit();
             }
         }
+
+        // we push the diagnostic events no matter what
+        outerMeta.pushDiagnosticEvents(std::move(txDiagnostics));
 
         if (success)
         {
@@ -1822,16 +1835,17 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
             ltxTx.commit();
             // commit -> propagate the meta to the outer scope
-            outerMeta.pushOperationMetas(std::move(operationMetas));
             outerMeta.pushTxChangesAfter(std::move(changesAfter));
 
             if (protocolVersionStartsFrom(ledgerVersion,
                                           SOROBAN_PROTOCOL_VERSION) &&
                 isSoroban())
             {
-                txResult.getSorobanData()->publishSuccessDiagnosticsToMeta(
-                    outerMeta, app.getConfig());
+                txResult.getSorobanData()->publishSuccessMeta(outerMeta,
+                                                              app.getConfig());
+                outerMeta.maybePushSorobanContractEvents(opMetas);
             }
+            outerMeta.pushOperationMetas(std::move(opMetas));
         }
         else
         {
@@ -1850,8 +1864,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                     declaredSorobanResourceFee() -
                     preApplyFee.non_refundable_fee);
 
-                txResult.getSorobanData()->publishFailureDiagnosticsToMeta(
-                    outerMeta, app.getConfig());
+                txResult.getSorobanData()->publishFailureMeta(outerMeta,
+                                                              app.getConfig());
             }
         }
         return success;
@@ -1926,7 +1940,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 bool
 TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta, MutableTxResultPtr txResult,
-                        bool chargeFee, Hash const& sorobanBasePrngSeed) const
+                        EventManager& evtManager, bool chargeFee,
+                        Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
     try
@@ -1976,7 +1991,8 @@ TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
         LedgerSnapshot ltxStmt(ltxTx);
         auto cv =
             commonValid(app, sorobanConfig, *signatureChecker, ltxStmt, 0, true,
-                        chargeFee, 0, 0, sorobanResourceFee, txResult);
+                        chargeFee, 0, 0, sorobanResourceFee, txResult,
+                        std::make_shared<EventManager>(evtManager));
         if (cv >= ValidationType::kInvalidUpdateSeqNum)
         {
             processSeqNum(ltxTx);
@@ -2001,8 +2017,9 @@ TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
                     updateSorobanMetrics(app);
                 }
 
-                ok = applyOperations(*signatureChecker, app, ltx, meta,
-                                     *txResult, sorobanBasePrngSeed);
+                ok =
+                    applyOperations(*signatureChecker, app, ltx, meta,
+                                    *txResult, evtManager, sorobanBasePrngSeed);
             }
             return ok;
         }
@@ -2032,9 +2049,11 @@ TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
 bool
 TransactionFrame::apply(AppConnector& app, AbstractLedgerTxn& ltx,
                         TransactionMetaFrame& meta, MutableTxResultPtr txResult,
+                        EventManager& evtManager,
                         Hash const& sorobanBasePrngSeed) const
 {
-    return apply(app, ltx, meta, txResult, true, sorobanBasePrngSeed);
+    return apply(app, ltx, meta, txResult, evtManager, true,
+                 sorobanBasePrngSeed);
 }
 
 void
@@ -2065,6 +2084,9 @@ TransactionFrame::processRefund(AppConnector& app, AbstractLedgerTxn& ltxOuter,
     // transaction success).
     LedgerTxn ltx(ltxOuter);
     int64_t refund = refundSorobanFee(ltx, feeSource, txResult);
+
+    // TODO: handle fee event logic here
+
     meta.pushTxChangesAfter(ltx.getChanges());
     ltx.commit();
 

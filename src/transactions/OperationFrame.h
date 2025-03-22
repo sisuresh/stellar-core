@@ -42,7 +42,7 @@ class OperationFrame
     doCheckValidForSoroban(SorobanNetworkConfig const& networkConfig,
                            Config const& appConfig, uint32_t ledgerVersion,
                            OperationResult& res,
-                           EventManager& eventManager) const;
+                           EventManagerPtr evtManager) const;
     virtual bool doCheckValid(uint32_t ledgerVersion,
                               OperationResult& res) const = 0;
     virtual bool doApply(AppConnector& app, AbstractLedgerTxn& ltx,
@@ -78,7 +78,7 @@ class OperationFrame
     bool checkValid(AppConnector& app, SignatureChecker& signatureChecker,
                     std::optional<SorobanNetworkConfig> const& cfg,
                     LedgerSnapshot const& ls, bool forApply,
-                    OperationResult& res, EventManager& eventManager) const;
+                    OperationResult& res, EventManagerPtr evtManager) const;
 
     bool apply(AppConnector& app, SignatureChecker& signatureChecker,
                AbstractLedgerTxn& ltx, Hash const& sorobanBasePrngSeed,

@@ -1,10 +1,17 @@
 #include "transactions/EventManager.h"
 #include "crypto/KeyUtils.h"
+#include "transactions/TransactionFrameBase.h"
 #include "transactions/TransactionUtils.h"
 #include "util/types.h"
 
 namespace stellar
 {
+
+EventManager::EventManager(uint32_t protocolVersion, Config const& config,
+                           TransactionFrameBaseConstPtr tx)
+    : mProtocolVersion(protocolVersion), mConfig(config), mTx(tx)
+{
+}
 
 void
 EventManager::pushContractEvents(xdr::xvector<ContractEvent> const& evts)
@@ -21,8 +28,8 @@ EventManager::pushDiagnosticEvents(xdr::xvector<DiagnosticEvent> const& evts)
 }
 
 void
-EventManager::pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
-                                        SCErrorCode code, std::string&& message,
+EventManager::pushSimpleDiagnosticError(SCErrorType ty, SCErrorCode code,
+                                        std::string&& message,
                                         xdr::xvector<SCVal>&& args)
 {
     ContractEvent ce;
@@ -54,32 +61,57 @@ EventManager::pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
 }
 
 void
-EventManager::pushApplyTimeDiagnosticError(Config const& cfg, SCErrorType ty,
-                                           SCErrorCode code,
-                                           std::string&& message,
-                                           xdr::xvector<SCVal>&& args)
+EventManager::pushDiagnosticError(EventManagerPtr const& ptr, SCErrorType ty,
+                                  SCErrorCode code, std::string&& message,
+                                  xdr::xvector<SCVal>&& args)
 {
-    if (!cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
+    if (ptr)
     {
-        return;
+        ptr->pushSimpleDiagnosticError(ty, code, std::move(message),
+                                       std::move(args));
     }
-    pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args));
 }
 
 void
-EventManager::pushValidationTimeDiagnosticError(Config const& cfg,
+EventManager::pushApplyTimeDiagnosticError(SCErrorType ty, SCErrorCode code,
+                                           std::string&& message,
+                                           xdr::xvector<SCVal>&& args)
+{
+    if (mConfig.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
+    {
+        pushSimpleDiagnosticError(ty, code, std::move(message),
+                                  std::move(args));
+    }
+}
+
+void
+EventManager::pushValidationTimeDiagnosticError(EventManagerPtr const& ptr,
                                                 SCErrorType ty,
                                                 SCErrorCode code,
                                                 std::string&& message,
                                                 xdr::xvector<SCVal>&& args)
 {
-    if (!cfg.ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION)
+    if (ptr && ptr->mConfig.ENABLE_DIAGNOSTICS_FOR_TX_SUBMISSION)
     {
-        return;
+        ptr->pushSimpleDiagnosticError(ty, code, std::move(message),
+                                       std::move(args));
     }
-    pushSimpleDiagnosticError(cfg, ty, code, std::move(message),
-                              std::move(args));
 }
+
+void
+EventManager::flushContractEvents(xdr::xvector<ContractEvent>& buf)
+{
+    std::move(mContractEvents.begin(), mContractEvents.end(),
+              std::back_inserter(buf));
+    mContractEvents.clear();
+};
+
+void
+EventManager::flushDiagnosticEvents(xdr::xvector<DiagnosticEvent>& buf)
+{
+    std::move(mDiagnosticEvents.begin(), mDiagnosticEvents.end(),
+              std::back_inserter(buf));
+    mDiagnosticEvents.clear();
+};
 
 } // namespace stellar

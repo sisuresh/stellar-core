@@ -219,11 +219,9 @@ TransactionMetaFrame::clearTxChangesAfter()
     }
 }
 
-// TODO: consolidate the events pushing at tx level and op level and
-// sorobantxmeta levels
-
 void
-TransactionMetaFrame::pushTxContractEvents(xdr::xvector<ContractEvent>&& events)
+TransactionMetaFrame::maybePushSorobanContractEvents(
+    OperationMetaWrapper& opMetas)
 {
     switch (mTransactionMeta.v())
     {
@@ -231,10 +229,11 @@ TransactionMetaFrame::pushTxContractEvents(xdr::xvector<ContractEvent>&& events)
         // Do nothing, until v3 we don't create events.
         break;
     case 3:
-        mTransactionMeta.v3().sorobanMeta.activate().events = std::move(events);
+        mTransactionMeta.v3().sorobanMeta.activate().events =
+            opMetas.flushContractEvents();
         break;
     case 4:
-        mTransactionMeta.v4().events = std::move(events);
+        // Do nothing, v4 soroban contract events live in the operation meta
         break;
     default:
         releaseAssert(false);
@@ -242,7 +241,26 @@ TransactionMetaFrame::pushTxContractEvents(xdr::xvector<ContractEvent>&& events)
 }
 
 void
-TransactionMetaFrame::pushTxDiagnosticEvents(
+TransactionMetaFrame::pushTxContractEvents(xdr::xvector<ContractEvent>&& events)
+{
+    switch (mTransactionMeta.v())
+    {
+    case 2:
+    case 3:
+        // Do nothing, until v4 we don't have Tx-level contract events.
+        // v3 soroban contract events should be populated via
+        // `maybePushSorobanContractEvents`.
+        break;
+    case 4:
+        vecAppend(mTransactionMeta.v4().events, std::move(events));
+        break;
+    default:
+        releaseAssert(false);
+    }
+}
+
+void
+TransactionMetaFrame::pushDiagnosticEvents(
     xdr::xvector<DiagnosticEvent>&& events)
 {
     switch (mTransactionMeta.v())
@@ -255,7 +273,7 @@ TransactionMetaFrame::pushTxDiagnosticEvents(
             std::move(events);
         break;
     case 4:
-        mTransactionMeta.v4().txDiagnosticEvents = std::move(events);
+        vecAppend(mTransactionMeta.v4().diagnosticEvents, std::move(events));
         break;
     default:
         releaseAssert(false);
@@ -282,6 +300,90 @@ TransactionMetaFrame::setReturnValue(SCVal&& returnValue)
         releaseAssert(false);
     }
 }
+
+#ifdef BUILD_TESTS
+TransactionMetaFrame::TransactionMetaFrame(TransactionMeta meta)
+    : mTransactionMeta(meta), mVersion(meta.v())
+{
+}
+
+SCVal const&
+TransactionMetaFrame::getReturnValue() const
+{
+    switch (mTransactionMeta.v())
+    {
+    case 2:
+        throw std::runtime_error("Return value not available for v2 meta");
+    case 3:
+        return mTransactionMeta.v3().sorobanMeta->returnValue;
+    case 4:
+        return mTransactionMeta.v4().sorobanMeta->returnValue;
+    default:
+        releaseAssert(false);
+    }
+}
+
+xdr::xvector<stellar::DiagnosticEvent> const&
+TransactionMetaFrame::getDiagnosticEvents() const
+{
+    switch (mTransactionMeta.v())
+    {
+    case 2:
+        throw std::runtime_error("Diagnostic events not available for v2 meta");
+    case 3:
+        return mTransactionMeta.v3().sorobanMeta->diagnosticEvents;
+    case 4:
+        return mTransactionMeta.v4().diagnosticEvents;
+    default:
+        releaseAssert(false);
+    }
+}
+
+xdr::xvector<stellar::ContractEvent>
+TransactionMetaFrame::getSorobanContractEvents() const
+{
+    switch (mTransactionMeta.v())
+    {
+    case 2:
+        throw std::runtime_error("Contract events not available for v2 meta");
+    case 3:
+        return mTransactionMeta.v3().sorobanMeta->events;
+    case 4:
+        if (mTransactionMeta.v4().operations.empty())
+        {
+            return xdr::xvector<stellar::ContractEvent>{};
+        }
+        else if (mTransactionMeta.v4().operations.size() == 1)
+        {
+            return mTransactionMeta.v4().operations.at(0).events;
+        }
+        else
+        {
+            throw std::runtime_error("Operation meta size can only be 0 or 1 "
+                                     "in a Soroban transaction");
+        }
+    default:
+        releaseAssert(false);
+    }
+}
+
+stellar::LedgerEntryChanges const&
+TransactionMetaFrame::getLedgerEntryChangesAtOp(size_t opIdx) const
+{
+    switch (mTransactionMeta.v())
+    {
+    case 2:
+        return mTransactionMeta.v2().operations.at(opIdx).changes;
+    case 3:
+        return mTransactionMeta.v3().operations.at(opIdx).changes;
+    case 4:
+        return mTransactionMeta.v4().operations.at(opIdx).changes;
+    default:
+        releaseAssert(false);
+    }
+}
+
+#endif
 
 void
 TransactionMetaFrame::setSorobanFeeInfo(int64_t nonRefundableFeeSpent,

@@ -46,7 +46,7 @@ class InvokeHostFunctionOpFrame : public OperationFrame
     bool doCheckValidForSoroban(SorobanNetworkConfig const& networkConfig,
                                 Config const& appConfig, uint32_t ledgerVersion,
                                 OperationResult& res,
-                                EventManager& eventManager) const override;
+                                EventManagerPtr evtManager) const override;
     bool doCheckValid(uint32_t ledgerVersion,
                       OperationResult& res) const override;
 

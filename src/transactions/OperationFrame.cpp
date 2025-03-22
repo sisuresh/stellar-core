@@ -150,7 +150,7 @@ OperationFrame::apply(AppConnector& app, SignatureChecker& signatureChecker,
         isSoroban() ? std::make_optional(app.getSorobanNetworkConfigForApply())
                     : std::nullopt;
     bool applyRes = checkValid(app, signatureChecker, cfg, ltxState, true, res,
-                               eventManager);
+                               std::make_shared<EventManager>(eventManager));
     if (applyRes)
     {
         applyRes = doApply(app, ltx, sorobanBasePrngSeed, res, sorobanData,
@@ -228,13 +228,12 @@ OperationFrame::checkValid(AppConnector& app,
                            std::optional<SorobanNetworkConfig> const& cfg,
                            LedgerSnapshot const& ls, bool forApply,
                            OperationResult& res,
-                           EventManager& eventManager) const
+                           EventManagerPtr evtManager) const
 {
     ZoneScoped;
     bool validationResult = false;
-    auto validate = [this, &res, forApply, &signatureChecker, &app,
-                     &eventManager, &validationResult,
-                     &cfg](LedgerSnapshot const& ls) {
+    auto validate = [this, &res, forApply, &signatureChecker, &app, evtManager,
+                     &validationResult, &cfg](LedgerSnapshot const& ls) {
         if (!isOpSupported(ls.getLedgerHeader().current()))
         {
             res.code(opNOT_SUPPORTED);
@@ -270,7 +269,7 @@ OperationFrame::checkValid(AppConnector& app,
         {
             releaseAssertOrThrow(cfg);
             validationResult = doCheckValidForSoroban(
-                cfg.value(), app.getConfig(), ledgerVersion, res, eventManager);
+                cfg.value(), app.getConfig(), ledgerVersion, res, evtManager);
         }
         else
         {
@@ -300,7 +299,7 @@ OperationFrame::doCheckValidForSoroban(SorobanNetworkConfig const& config,
                                        Config const& appConfig,
                                        uint32_t ledgerVersion,
                                        OperationResult& res,
-                                       EventManager& eventManager) const
+                                       EventManagerPtr evtManager) const
 {
     return doCheckValid(ledgerVersion, res);
 }

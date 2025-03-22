@@ -449,8 +449,10 @@ TEST_CASE("basic contract invocation", "[tx][soroban]")
 
         TransactionMetaFrame txm(test.getLedgerVersion());
         auto timerBefore = hostFnExecTimer.count();
-        bool success =
-            tx->apply(test.getApp().getAppConnector(), rootLtx, txm, result);
+        EventManager evtManager = EventManager(test.getLedgerVersion(),
+                                               test.getApp().getConfig(), tx);
+        bool success = tx->apply(test.getApp().getAppConnector(), rootLtx, txm,
+                                 result, evtManager);
         REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
 
         {
@@ -540,12 +542,12 @@ TEST_CASE("basic contract invocation", "[tx][soroban]")
         REQUIRE(ores.tr().invokeHostFunctionResult().code() ==
                 INVOKE_HOST_FUNCTION_SUCCESS);
 
-        SCVal resultVal = txm.getXDR().v3().sorobanMeta->returnValue;
+        SCVal resultVal = txm.getReturnValue();
         REQUIRE(resultVal.i32() == 7 + 16);
 
         InvokeHostFunctionSuccessPreImage successPreImage;
         successPreImage.returnValue = resultVal;
-        successPreImage.events = txm.getXDR().v3().sorobanMeta->events;
+        successPreImage.events = txm.getSorobanContractEvents();
 
         REQUIRE(ores.tr().invokeHostFunctionResult().success() ==
                 xdrSha256(successPreImage));
@@ -724,7 +726,7 @@ TEST_CASE("version test", "[tx][soroban]")
     {
         auto txm = invoke(contract, fnName, {}, spec);
 
-        REQUIRE(txm.getXDR().v3().sorobanMeta->returnValue.u32() == curr);
+        REQUIRE(txm.getReturnValue().u32() == curr);
     }
 
     // Check protocol version in next
@@ -734,7 +736,7 @@ TEST_CASE("version test", "[tx][soroban]")
 
         auto txm2 = invoke(contract, fnName, {}, spec);
 
-        REQUIRE(txm2.getXDR().v3().sorobanMeta->returnValue.u32() == next);
+        REQUIRE(txm2.getReturnValue().u32() == next);
     }
 }
 
@@ -1392,8 +1394,7 @@ TEST_CASE("failure diagnostics", "[tx][soroban]")
         addContract.prepareInvocation(fnName, {sc7, scMax}, invocationSpec);
     REQUIRE(!invocation.invoke());
 
-    auto const& opEvents =
-        invocation.getTxMeta().getXDR().v3().sorobanMeta->diagnosticEvents;
+    auto const& opEvents = invocation.getTxMeta().getDiagnosticEvents();
     REQUIRE(opEvents.size() == 23);
 
     auto const& callEv = opEvents.at(0);
@@ -1454,14 +1455,17 @@ TEST_CASE("transaction validation diagnostics", "[tx][soroban]")
             .prepareInvocation(fnName, {sc7, scMax},
                                invocationSpec.setInstructions(2'000'000'000))
             .createTx();
-    MutableTxResultPtr result;
+
+    auto evtManager =
+        std::make_shared<EventManager>(test.getLedgerVersion(), cfg, tx);
     {
         LedgerTxn ltx(test.getApp().getLedgerTxnRoot());
-        result = tx->checkValid(test.getApp().getAppConnector(), ltx, 0, 0, 0);
+        auto result = tx->checkValid(test.getApp().getAppConnector(), ltx, 0, 0,
+                                     0, evtManager);
     }
     REQUIRE(!test.isTxValid(tx));
 
-    auto const& diagEvents = result->getDiagnosticEvents();
+    auto const& diagEvents = evtManager->getDiagnosticEvents();
     REQUIRE(diagEvents.size() == 1);
 
     DiagnosticEvent const& diag_ev = diagEvents.at(0);
@@ -1738,35 +1742,33 @@ TEST_CASE("complex contract", "[tx][soroban]")
 
         auto invocation = contract.prepareInvocation("go", {}, invocationSpec);
         REQUIRE(invocation.invoke());
-        auto const& txm = invocation.getTxMeta();
+        auto const& contractEvents =
+            invocation.getTxMeta().getSorobanContractEvents();
         // Contract should have emitted a single event carrying a `Bytes`
         // value.
-        REQUIRE(txm.getXDR().v3().sorobanMeta->events.size() == 1);
-        REQUIRE(txm.getXDR().v3().sorobanMeta->events.at(0).type ==
-                ContractEventType::CONTRACT);
-        REQUIRE(
-            txm.getXDR().v3().sorobanMeta->events.at(0).body.v0().data.type() ==
-            SCV_BYTES);
+        REQUIRE(contractEvents.size() == 1);
+        REQUIRE(contractEvents.at(0).type == ContractEventType::CONTRACT);
+        REQUIRE(contractEvents.at(0).body.v0().data.type() == SCV_BYTES);
 
         if (enableDiagnostics)
         {
-            auto const& events =
-                txm.getXDR().v3().sorobanMeta->diagnosticEvents;
-            REQUIRE(events.size() == 22);
+            auto const& diagnosticEvents =
+                invocation.getTxMeta().getDiagnosticEvents();
+            REQUIRE(diagnosticEvents.size() == 22);
 
-            auto call_ev = events.at(0);
+            auto call_ev = diagnosticEvents.at(0);
             REQUIRE(call_ev.event.type == ContractEventType::DIAGNOSTIC);
             REQUIRE(call_ev.event.body.v0().data.type() == SCV_VOID);
 
-            auto contract_ev = events.at(1);
+            auto contract_ev = diagnosticEvents.at(1);
             REQUIRE(contract_ev.event.type == ContractEventType::CONTRACT);
             REQUIRE(contract_ev.event.body.v0().data.type() == SCV_BYTES);
 
-            auto return_ev = events.at(2);
+            auto return_ev = diagnosticEvents.at(2);
             REQUIRE(return_ev.event.type == ContractEventType::DIAGNOSTIC);
             REQUIRE(return_ev.event.body.v0().data.type() == SCV_VOID);
 
-            auto const& metrics_ev = events.back();
+            auto const& metrics_ev = diagnosticEvents.back();
             REQUIRE(metrics_ev.event.type == ContractEventType::DIAGNOSTIC);
             auto const& v0 = metrics_ev.event.body.v0();
             REQUIRE(v0.topics.size() == 2);
@@ -1776,8 +1778,7 @@ TEST_CASE("complex contract", "[tx][soroban]")
         }
         else
         {
-            REQUIRE(txm.getXDR().v3().sorobanMeta->diagnosticEvents.size() ==
-                    0);
+            REQUIRE(invocation.getTxMeta().getDiagnosticEvents().size() == 0);
         }
     };
 
@@ -2777,16 +2778,14 @@ TEST_CASE_VERSIONS("entry eviction", "[tx][soroban][archival]")
 
                         REQUIRE(lcm.v1().txProcessing.size() == 1);
                         auto txMeta = lcm.v1().txProcessing.front();
-                        REQUIRE(
-                            txMeta.txApplyProcessing.v3().operations.size() ==
-                            1);
+                        auto txApplyProcessing =
+                            TransactionMetaFrame(txMeta.txApplyProcessing);
+                        REQUIRE(txApplyProcessing.getNumOperations() == 1);
 
-                        REQUIRE(txMeta.txApplyProcessing.v3()
-                                    .operations[0]
-                                    .changes.size() == 2);
-                        for (auto const& change : txMeta.txApplyProcessing.v3()
-                                                      .operations[0]
-                                                      .changes)
+                        auto const& changes =
+                            txApplyProcessing.getLedgerEntryChangesAtOp(0);
+                        REQUIRE(changes.size() == 2);
+                        for (auto const& change : changes)
                         {
 
                             // Only support persistent eviction meta >= p23

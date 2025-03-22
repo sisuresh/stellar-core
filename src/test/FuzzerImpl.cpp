@@ -170,6 +170,14 @@ getShortKey(LedgerKey const& key)
             return getShortKey(key.contractData().contract.accountId());
         case SC_ADDRESS_TYPE_CONTRACT:
             return key.contractData().contract.contractId().at(0);
+        case SC_ADDRESS_TYPE_CLAIMABLE_BALANCE:
+            return getShortKey(
+                key.contractData().contract.claimableBalanceId());
+        case SC_ADDRESS_TYPE_LIQUIDITY_POOL:
+            return getShortKey(key.contractData().contract.liquidityPoolId());
+        case SC_ADDRESS_TYPE_MUXED_ACCOUNT:
+            return getShortKey(
+                key.contractData().contract.muxedAccount().ed25519);
         }
     case CONTRACT_CODE:
         return key.contractCode().hash.at(0);
@@ -918,6 +926,8 @@ class FuzzTransactionFrame : public TransactionFrame
 
         // reset results of operations
         mTxResult = createSuccessResultWithFeeCharged(ltx.getHeader(), 0, true);
+        EventManager evtManager(ltx.loadHeader().current().ledgerVersion,
+                                app.getConfig(), nullptr);
 
         // attempt application of transaction without processing the fee or
         // committing the LedgerTxn
@@ -930,7 +940,8 @@ class FuzzTransactionFrame : public TransactionFrame
             return !op->checkValid(
                 app.getAppConnector(), signatureChecker,
                 app.getAppConnector().getLastClosedSorobanNetworkConfig(),
-                ltxStmt, false, opResult, mTxResult->getEventManager());
+                ltxStmt, false, opResult,
+                std::make_shared<EventManager>(evtManager));
         };
 
         auto const& ops = getOperations();
@@ -952,7 +963,7 @@ class FuzzTransactionFrame : public TransactionFrame
         processSeqNum(ltx);
         TransactionMetaFrame tm(2);
         applyOperations(signatureChecker, app.getAppConnector(), ltx, tm,
-                        *mTxResult, Hash{});
+                        *mTxResult, evtManager, Hash{});
         if (mTxResult->getResultCode() == txINTERNAL_ERROR)
         {
             throw std::runtime_error("Internal error while fuzzing");

@@ -57,6 +57,16 @@ TransactionQueue::AddResult::AddResult(AddResultCode addCode)
 {
 }
 
+TransactionQueue::AddResult::AddResult(
+    AddResultCode addCode, MutableTxResultPtr payload,
+    xdr::xvector<DiagnosticEvent>&& diagnostics)
+    : code(addCode)
+    , txResult(payload)
+    , mDiagnosticEvents(std::move(diagnostics))
+{
+    releaseAssert(txResult);
+}
+
 TransactionQueue::AddResult::AddResult(AddResultCode addCode,
                                        MutableTxResultPtr payload)
     : code(addCode), txResult(payload)
@@ -68,6 +78,18 @@ TransactionQueue::AddResult::AddResult(AddResultCode addCode,
                                        TransactionFrameBasePtr tx,
                                        TransactionResultCode txErrorCode)
     : code(addCode), txResult(tx->createSuccessResult())
+{
+    releaseAssert(txErrorCode != txSUCCESS);
+    txResult->setResultCode(txErrorCode);
+}
+
+TransactionQueue::AddResult::AddResult(
+    AddResultCode addCode, TransactionFrameBasePtr tx,
+    TransactionResultCode txErrorCode,
+    xdr::xvector<DiagnosticEvent>&& diagnostics)
+    : code(addCode)
+    , txResult(tx->createSuccessResult())
+    , mDiagnosticEvents(std::move(diagnostics))
 {
     releaseAssert(txErrorCode != txSUCCESS);
     txResult->setResultCode(txErrorCode);
@@ -348,6 +370,12 @@ TransactionQueue::canAdd(
 
     stateIter = mAccountStates.find(tx->getSourceID());
     TransactionFrameBasePtr currentTx;
+    auto ledgerVersion = mApp.getLedgerManager()
+                             .getLastClosedLedgerHeader()
+                             .header.ledgerVersion;
+    auto evtManager =
+        std::make_shared<EventManager>(ledgerVersion, mApp.getConfig(), tx);
+
     if (stateIter != mAccountStates.end())
     {
         auto const& transaction = stateIter->second.mTransaction;
@@ -383,10 +411,7 @@ TransactionQueue::canAdd(
                         mApp.getAppConnector(),
                         mApp.getLedgerManager()
                             .getLastClosedSorobanNetworkConfig(),
-                        mApp.getLedgerManager()
-                            .getLastClosedLedgerHeader()
-                            .header.ledgerVersion,
-                        txResult))
+                        ledgerVersion, txResult, evtManager))
                 {
                     return AddResult(AddResultCode::ADD_STATUS_ERROR, txResult);
                 }
@@ -427,7 +452,6 @@ TransactionQueue::canAdd(
     }
 
     LedgerSnapshot ls(mApp);
-    uint32_t ledgerVersion = ls.getLedgerHeader().current().ledgerVersion;
     // Subtle: transactions are rejected based on the source account limit
     // prior to this point. This is safe because we can't evict transactions
     // from the same source account, so a newer transaction won't replace an
@@ -459,9 +483,9 @@ TransactionQueue::canAdd(
             mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
     }
 
-    auto txResult =
-        tx->checkValid(mApp.getAppConnector(), ls, 0, 0,
-                       getUpperBoundCloseTimeOffset(mApp, closeTime));
+    auto txResult = tx->checkValid(
+        mApp.getAppConnector(), ls, 0, 0,
+        getUpperBoundCloseTimeOffset(mApp, closeTime), evtManager);
     if (!txResult->isSuccess())
     {
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
@@ -489,15 +513,15 @@ TransactionQueue::canAdd(
     {
         txResult->setInnermostResultCode(txSOROBAN_INVALID);
 
-        auto sorobanTxData = txResult->getSorobanData();
-        releaseAssertOrThrow(sorobanTxData);
-
-        txResult->getEventManager().pushValidationTimeDiagnosticError(
-            mApp.getConfig(), SCE_CONTEXT, SCEC_INVALID_INPUT,
+        releaseAssertOrThrow(txResult->getSorobanData());
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_CONTEXT, SCEC_INVALID_INPUT,
             "non-source auth Soroban tx uses memo or muxed source account");
 
+        xdr::xvector<DiagnosticEvent> des;
+        evtManager->flushDiagnosticEvents(des);
         return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_ERROR,
-                         txResult);
+                         txResult, std::move(des));
     }
 
     return AddResult(TransactionQueue::AddResultCode::ADD_STATUS_PENDING,

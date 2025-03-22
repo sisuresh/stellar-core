@@ -136,7 +136,7 @@ RestoreFootprintOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
@@ -157,7 +157,7 @@ RestoreFootprintOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         if (resources.writeBytes < metrics.mLedgerWriteByte)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-write resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerWriteByte),
                  makeU64SCVal(resources.writeBytes)});
@@ -207,14 +207,14 @@ bool
 RestoreFootprintOpFrame::doCheckValidForSoroban(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
     uint32_t ledgerVersion, OperationResult& res,
-    EventManager& eventManager) const
+    EventManagerPtr evtManager) const
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readOnly.empty())
     {
         innerResult(res).code(RESTORE_FOOTPRINT_MALFORMED);
-        eventManager.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-only footprint must be empty for RestoreFootprint operation",
             {});
         return false;
@@ -225,8 +225,8 @@ RestoreFootprintOpFrame::doCheckValidForSoroban(
         if (!isPersistentEntry(lk))
         {
             innerResult(res).code(RESTORE_FOOTPRINT_MALFORMED);
-            eventManager.pushValidationTimeDiagnosticError(
-                appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only persistent Soroban entries can be restored", {});
             return false;
         }

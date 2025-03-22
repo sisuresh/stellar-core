@@ -14,10 +14,9 @@ OperationMetaWrapper::OperationMetaWrapper(uint32_t reserve_size)
 
 void
 OperationMetaWrapper::push(LedgerEntryChanges&& lec,
-                           xdr::xvector<ContractEvent>&& ces,
-                           xdr::xvector<DiagnosticEvent>&& des)
+                           xdr::xvector<ContractEvent>&& ces)
 {
-    mInner.emplace_back(std::move(lec), std::move(ces), std::move(des));
+    mInner.emplace_back(std::move(lec), std::move(ces));
 }
 
 xdr::xvector<stellar::OperationMeta>
@@ -40,8 +39,7 @@ OperationMetaWrapper::convertToXDRV2()
     for (auto const& inner : mInner)
     {
         result.emplace_back(ExtensionPoint(), std::move(inner.mLeChanges),
-                            std::move(inner.mContractEvents),
-                            std::move(inner.mDiagnosticEvents));
+                            std::move(inner.mContractEvents));
     }
     return result;
 }
@@ -62,26 +60,6 @@ OperationMetaWrapper::flushContractEvents()
         std::move(op.mContractEvents.begin(), op.mContractEvents.end(),
                   std::back_inserter(result));
         op.mContractEvents.clear();
-    }
-    return result;
-}
-
-xdr::xvector<DiagnosticEvent>
-OperationMetaWrapper::flushDiagnosticEvents()
-{
-    size_t total_size = 0;
-    for (auto const& op : mInner)
-    {
-        total_size += op.mDiagnosticEvents.size();
-    }
-
-    xdr::xvector<DiagnosticEvent> result;
-    result.reserve(total_size);
-    for (auto& op : mInner)
-    {
-        std::move(op.mDiagnosticEvents.begin(), op.mDiagnosticEvents.end(),
-                  std::back_inserter(result));
-        op.mDiagnosticEvents.clear();
     }
     return result;
 }

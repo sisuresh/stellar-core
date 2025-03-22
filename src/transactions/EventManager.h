@@ -11,49 +11,68 @@
 
 namespace stellar
 {
+class EventManager;
+using EventManagerPtr = std::shared_ptr<EventManager>;
+class TransactionFrameBase;
+using TransactionFrameBaseConstPtr =
+    std::shared_ptr<TransactionFrameBase const>;
 
 class EventManager
 {
-
   private:
     xdr::xvector<ContractEvent> mContractEvents;
     xdr::xvector<DiagnosticEvent> mDiagnosticEvents;
+    uint32_t mProtocolVersion;
+    Config const& mConfig;
+    TransactionFrameBaseConstPtr mTx;
+
+    void pushSimpleDiagnosticError(SCErrorType ty, SCErrorCode code,
+                                   std::string&& message,
+                                   xdr::xvector<SCVal>&& args);
 
   public:
+    EventManager(uint32_t protocolVersion, Config const& config,
+                 TransactionFrameBaseConstPtr tx);
+
     void pushContractEvents(xdr::xvector<ContractEvent> const& evts);
 
     void pushDiagnosticEvents(xdr::xvector<DiagnosticEvent> const& evts);
 
-    void pushSimpleDiagnosticError(Config const& cfg, SCErrorType ty,
-                                   SCErrorCode code, std::string&& message,
-                                   xdr::xvector<SCVal>&& args);
+    static void pushDiagnosticError(EventManagerPtr const& ptr, SCErrorType ty,
+                                    SCErrorCode code, std::string&& message,
+                                    xdr::xvector<SCVal>&& args);
 
-    void pushApplyTimeDiagnosticError(Config const& cfg, SCErrorType ty,
-                                      SCErrorCode code, std::string&& message,
+    void pushApplyTimeDiagnosticError(SCErrorType ty, SCErrorCode code,
+                                      std::string&& message,
                                       xdr::xvector<SCVal>&& args = {});
 
-    void pushValidationTimeDiagnosticError(Config const& cfg, SCErrorType ty,
-                                           SCErrorCode code,
-                                           std::string&& message,
-                                           xdr::xvector<SCVal>&& args = {});
-
+    static void pushValidationTimeDiagnosticError(
+        EventManagerPtr const& ptr, SCErrorType ty, SCErrorCode code,
+        std::string&& message, xdr::xvector<SCVal>&& args = {});
+#ifdef BUILD_TESTS
     xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const
     {
         return mDiagnosticEvents;
     }
+#endif
 
-    xdr::xvector<ContractEvent>&&
-    flushContractEvents()
-    {
-        return std::move(mContractEvents);
-    };
+    void flushContractEvents(xdr::xvector<ContractEvent>& buf);
 
-    xdr::xvector<DiagnosticEvent>&&
-    flushDiagnosticEvents()
+    void flushDiagnosticEvents(xdr::xvector<DiagnosticEvent>& buf);
+
+    bool
+    is_empty() const
     {
-        return std::move(mDiagnosticEvents);
-    };
+        return mContractEvents.empty() && mDiagnosticEvents.empty();
+    }
+
+    void
+    clear()
+    {
+        mContractEvents.clear();
+        mDiagnosticEvents.clear();
+    }
 };
 
 }

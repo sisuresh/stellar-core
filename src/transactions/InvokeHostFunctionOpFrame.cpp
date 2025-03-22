@@ -378,7 +378,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
                             if (lk.type() == CONTRACT_CODE)
                             {
                                 eventManager.pushApplyTimeDiagnosticError(
-                                    appConfig, SCE_VALUE, SCEC_INVALID_INPUT,
+                                    SCE_VALUE, SCEC_INVALID_INPUT,
                                     "trying to access an archived contract "
                                     "code "
                                     "entry",
@@ -387,7 +387,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
                             else if (lk.type() == CONTRACT_DATA)
                             {
                                 eventManager.pushApplyTimeDiagnosticError(
-                                    appConfig, SCE_VALUE, SCEC_INVALID_INPUT,
+                                    SCE_VALUE, SCEC_INVALID_INPUT,
                                     "trying to access an archived contract "
                                     "data "
                                     "entry",
@@ -422,7 +422,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
                         if (lk.type() == CONTRACT_CODE)
                         {
                             eventManager.pushApplyTimeDiagnosticError(
-                                appConfig, SCE_VALUE, SCEC_INVALID_INPUT,
+                                SCE_VALUE, SCEC_INVALID_INPUT,
                                 "trying to access an archived contract code "
                                 "entry",
                                 {makeBytesSCVal(lk.contractCode().hash)});
@@ -430,7 +430,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
                         else if (lk.type() == CONTRACT_DATA)
                         {
                             eventManager.pushApplyTimeDiagnosticError(
-                                appConfig, SCE_VALUE, SCEC_INVALID_INPUT,
+                                SCE_VALUE, SCEC_INVALID_INPUT,
                                 "trying to access an archived contract data "
                                 "entry",
                                 {makeAddressSCVal(lk.contractData().contract),
@@ -483,7 +483,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
             if (resources.readBytes < metrics.mLedgerReadByte)
             {
                 eventManager.pushApplyTimeDiagnosticError(
-                    appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                    SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                     "operation byte-read resources exceeds amount specified",
                     {makeU64SCVal(metrics.mLedgerReadByte),
                      makeU64SCVal(resources.readBytes)});
@@ -562,7 +562,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         if (resources.instructions < out.cpu_insns)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation instructions exceeds amount specified",
                 {makeU64SCVal(out.cpu_insns),
                  makeU64SCVal(resources.instructions)});
@@ -571,7 +571,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         else if (sorobanConfig.txMemoryLimit() < out.mem_bytes)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation memory usage exceeds network config limit",
                 {makeU64SCVal(out.mem_bytes),
                  makeU64SCVal(sorobanConfig.txMemoryLimit())});
@@ -613,7 +613,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
             if (resources.writeBytes < metrics.mLedgerWriteByte)
             {
                 eventManager.pushApplyTimeDiagnosticError(
-                    appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                    SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                     "operation byte-write resources exceeds amount specified",
                     {makeU64SCVal(metrics.mLedgerWriteByte),
                      makeU64SCVal(resources.writeBytes)});
@@ -688,7 +688,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
             metrics.mEmitEventByte)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "total events size exceeds network config maximum",
                 {makeU64SCVal(metrics.mEmitEventByte),
                  makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
@@ -706,7 +706,7 @@ InvokeHostFunctionOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     if (sorobanConfig.txMaxContractEventsSizeBytes() < metrics.mEmitEventByte)
     {
         eventManager.pushApplyTimeDiagnosticError(
-            appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+            SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "return value pushes events size above network config maximum",
             {makeU64SCVal(metrics.mEmitEventByte),
              makeU64SCVal(sorobanConfig.txMaxContractEventsSizeBytes())});
@@ -737,15 +737,15 @@ bool
 InvokeHostFunctionOpFrame::doCheckValidForSoroban(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
     uint32_t ledgerVersion, OperationResult& res,
-    EventManager& eventManager) const
+    EventManagerPtr evtManager) const
 {
     // check wasm size if uploading contract
     auto const& hostFn = mInvokeHostFunction.hostFunction;
     if (hostFn.type() == HOST_FUNCTION_TYPE_UPLOAD_CONTRACT_WASM &&
         hostFn.wasm().size() > networkConfig.maxContractSizeBytes())
     {
-        eventManager.pushValidationTimeDiagnosticError(
-            appConfig, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "uploaded Wasm size exceeds network config maximum contract size",
             {makeU64SCVal(hostFn.wasm().size()),
              makeU64SCVal(networkConfig.maxContractSizeBytes())});
@@ -757,8 +757,8 @@ InvokeHostFunctionOpFrame::doCheckValidForSoroban(
         if (preimage.type() == CONTRACT_ID_PREIMAGE_FROM_ASSET &&
             !isAssetValid(preimage.fromAsset(), ledgerVersion))
         {
-            eventManager.pushValidationTimeDiagnosticError(
-                appConfig, SCE_VALUE, SCEC_INVALID_INPUT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_VALUE, SCEC_INVALID_INPUT,
                 "invalid asset to create contract from");
             return false;
         }

@@ -70,6 +70,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     bool apply(AppConnector& app, AbstractLedgerTxn& ltx,
                TransactionMetaFrame& meta, MutableTxResultPtr txResult,
+               EventManager& evtManager,
                Hash const& sorobanBasePrngSeed) const override;
 
     void processPostApply(AppConnector& app, AbstractLedgerTxn& ltx,
@@ -79,10 +80,12 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     MutableTxResultPtr
     checkValid(AppConnector& app, LedgerSnapshot const& ls,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
-               uint64_t upperBoundCloseTimeOffset) const override;
+               uint64_t upperBoundCloseTimeOffset,
+               EventManagerPtr evtManager = nullptr) const override;
     bool checkSorobanResourceAndSetError(
         AppConnector& app, SorobanNetworkConfig const& cfg,
-        uint32_t ledgerVersion, MutableTxResultPtr txResult) const override;
+        uint32_t ledgerVersion, MutableTxResultPtr txResult,
+        EventManagerPtr evtManager) const override;
 
     MutableTxResultPtr createSuccessResult() const override;
 

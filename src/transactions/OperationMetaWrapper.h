@@ -17,11 +17,12 @@ class OperationMetaWrapper
     {
         LedgerEntryChanges mLeChanges;
         xdr::xvector<ContractEvent> mContractEvents;
-        xdr::xvector<DiagnosticEvent> mDiagnosticEvents;
+        // OperationMeta doesn't store diagnostic events, those go at the
+        // transaction level. Because we want to retain the diagnostic events
+        // even if the operation fails (thus no operation meta is emitted)
 
-        OpMetaInner(LedgerEntryChanges&& lec, xdr::xvector<ContractEvent>&& ces,
-                    xdr::xvector<DiagnosticEvent>&& des)
-            : mLeChanges(lec), mContractEvents(ces), mDiagnosticEvents(des)
+        OpMetaInner(LedgerEntryChanges&& lec, xdr::xvector<ContractEvent>&& ces)
+            : mLeChanges(lec), mContractEvents(ces)
         {
         }
     };
@@ -31,16 +32,13 @@ class OperationMetaWrapper
   public:
     OperationMetaWrapper(uint32_t reserve_size);
 
-    void push(LedgerEntryChanges&& lec, xdr::xvector<ContractEvent>&& ces,
-              xdr::xvector<DiagnosticEvent>&& des);
+    void push(LedgerEntryChanges&& lec, xdr::xvector<ContractEvent>&& ces);
 
     xdr::xvector<stellar::OperationMeta> convertToXDR();
 
     xdr::xvector<stellar::OperationMetaV2> convertToXDRV2();
 
     xdr::xvector<ContractEvent> flushContractEvents();
-
-    xdr::xvector<DiagnosticEvent> flushDiagnosticEvents();
 };
 
 }

@@ -88,7 +88,7 @@ SorobanTxData::consumeRefundableSorobanResources(
     if (mFeeRefund < mConsumedRentFee)
     {
         eventManager.pushApplyTimeDiagnosticError(
-            cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+            SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "refundable resource fee was not sufficient to cover the ledger "
             "storage rent: {} > {}",
             {makeU64SCVal(mConsumedRentFee), makeU64SCVal(mFeeRefund)});
@@ -105,7 +105,7 @@ SorobanTxData::consumeRefundableSorobanResources(
     if (mFeeRefund < consumedFee.refundable_fee)
     {
         eventManager.pushApplyTimeDiagnosticError(
-            cfg, SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+            SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
             "refundable resource fee was not sufficient to cover the events "
             "fee after paying for ledger storage rent: {} > {}",
             {makeU64SCVal(consumedFee.refundable_fee),
@@ -190,18 +190,6 @@ OperationResult&
 MutableTransactionResult::getOpResultAt(size_t index)
 {
     return mTxResult->result.results().at(index);
-}
-
-xdr::xvector<DiagnosticEvent> const&
-MutableTransactionResult::getDiagnosticEvents() const
-{
-    return mEventManager.getDiagnosticEvents();
-}
-
-EventManager&
-MutableTransactionResult::getEventManager()
-{
-    return mEventManager;
 }
 
 void
@@ -331,18 +319,6 @@ std::shared_ptr<SorobanTxData>
 FeeBumpMutableTransactionResult::getSorobanData()
 {
     return mInnerTxResult->getSorobanData();
-}
-
-xdr::xvector<DiagnosticEvent> const&
-FeeBumpMutableTransactionResult::getDiagnosticEvents() const
-{
-    return mInnerTxResult->getDiagnosticEvents();
-}
-
-EventManager&
-FeeBumpMutableTransactionResult::getEventManager()
-{
-    return mInnerTxResult->getEventManager();
 }
 
 void

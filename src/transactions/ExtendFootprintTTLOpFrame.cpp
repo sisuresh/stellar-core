@@ -119,7 +119,7 @@ ExtendFootprintTTLOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         if (resources.readBytes < metrics.mLedgerReadByte)
         {
             eventManager.pushApplyTimeDiagnosticError(
-                app.getConfig(), SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
+                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read resources exceeds amount specified",
                 {makeU64SCVal(metrics.mLedgerReadByte),
                  makeU64SCVal(resources.readBytes)});
@@ -162,14 +162,14 @@ bool
 ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
     SorobanNetworkConfig const& networkConfig, Config const& appConfig,
     uint32_t ledgerVersion, OperationResult& res,
-    EventManager& eventManager) const
+    EventManagerPtr evtManager) const
 {
     auto const& footprint = mParentTx.sorobanResources().footprint;
     if (!footprint.readWrite.empty())
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        eventManager.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
             "read-write footprint must be empty for ExtendFootprintTTL "
             "operation",
             {});
@@ -181,8 +181,8 @@ ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
         if (!isSorobanEntry(lk))
         {
             innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-            eventManager.pushValidationTimeDiagnosticError(
-                appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+            EventManager::pushValidationTimeDiagnosticError(
+                evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
                 "only entries with TTL (contract data or code entries) can "
                 "have it extended",
                 {});
@@ -194,8 +194,8 @@ ExtendFootprintTTLOpFrame::doCheckValidForSoroban(
         networkConfig.stateArchivalSettings().maxEntryTTL - 1)
     {
         innerResult(res).code(EXTEND_FOOTPRINT_TTL_MALFORMED);
-        eventManager.pushValidationTimeDiagnosticError(
-            appConfig, SCE_STORAGE, SCEC_INVALID_INPUT,
+        EventManager::pushValidationTimeDiagnosticError(
+            evtManager, SCE_STORAGE, SCEC_INVALID_INPUT,
             "TTL extension is too large: {} > {}",
             {
                 makeU64SCVal(mExtendFootprintTTLOp.extendTo),
