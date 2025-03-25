@@ -2,7 +2,7 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "transactions/Event.h"
+#include "transactions/EventManager.h"
 #include "transactions/PathPaymentStrictSendOpFrame.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
@@ -127,9 +127,7 @@ PathPaymentStrictSendOpFrame::doApply(
         SimplePaymentResult(getDestID(), getDestAsset(), maxAmountSend);
 
     // Emit the final event between the source and destination account wrt the des asset. 
-    ContractEvent event = transfer(app.getNetworkID(), getDestAsset(), getSourceAccount(), getDestMuxedAccount(), maxAmountSend, mParentTx.getMemo());
-
-    // TODO: plumb it into meta
+    eventManager.newTransferEvent(app.getNetworkID(), getDestAsset(), getSourceAccount(), getDestMuxedAccount(), maxAmountSend, mParentTx.getMemo());
 
     return true;
 }

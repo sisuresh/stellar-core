@@ -100,7 +100,7 @@ EventManager::pushValidationTimeDiagnosticError(EventManagerPtr const& ptr,
 
 
 void 
-EventManager::newTransferEvent(Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount)
+EventManager::newTransferEvent(Hash const& networkID, Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount, Memo const& memo)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
@@ -165,8 +165,7 @@ EventManager::newTransferEvent(Asset const& asset, MuxedAccount const& from, Mux
 
         ev.body.v0().data = data;
     }
-    
-    return ev;
+    mContractEvents.push_back(std::move(ev));
 }
 
 void

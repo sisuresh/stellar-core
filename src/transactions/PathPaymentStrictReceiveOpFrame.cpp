@@ -135,8 +135,7 @@ PathPaymentStrictReceiveOpFrame::doApply(
     }
 
     // emit the event here. 
-    ContractEvent event = transfer(app.getNetworkID(), getSourceAsset(), getDestMuxedAccount(), getSourceAccount(), maxAmountRecv, mParentTx.getMemo());
-    // TODO: plumb it into meta
+    eventManager.newTransferEvent(app.getNetworkID(), getSourceAsset(), getDestMuxedAccount(), getSourceAccount(), maxAmountRecv, mParentTx.getMemo());
 
     return true;
 }

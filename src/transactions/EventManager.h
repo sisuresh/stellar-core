@@ -52,7 +52,7 @@ class EventManager
 
     // Adds a new "transfer" contractEvent in the form of:
     // contract: asset, topics: ["transfer", from:Address, to:Address, sep0011_asset:String], data: { amount:i128 }
-    void newTransferEvent(Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount);
+    void newTransferEvent(Hash const& networkID, Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount, Memo const& memo);
 
 
 #ifdef BUILD_TESTS
