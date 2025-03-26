@@ -50,10 +50,44 @@ class EventManager
         EventManagerPtr const& ptr, SCErrorType ty, SCErrorCode code,
         std::string&& message, xdr::xvector<SCVal>&& args = {});
 
-    // Adds a new "transfer" contractEvent in the form of:
-    // contract: asset, topics: ["transfer", from:Address, to:Address, sep0011_asset:String], data: { amount:i128 }
-    void newTransferEvent(Hash const& networkID, Asset const& asset, MuxedAccount const& from, MuxedAccount const& to, int64 amount, Memo const& memo);
+    void eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& source, xdr::xvector<stellar::ClaimAtom> const& claimAtoms, Memo const& memo);
 
+    // This will check if the issuer is involved, and emit a mint/burn instead
+    // of a transfer if so
+    void eventForTransferWithIssuerCheck(Hash const& networkID,
+                                         Asset const& asset,
+                                         SCAddress const& from,
+                                         SCAddress const& to, int64 amount,
+                                         Memo const& memo);
+
+    //TODO: Maybe make the transfer, mint, and burn methods private if possible?
+
+    // Adds a new "transfer" contractEvent in the form of:
+    // contract: asset, topics: ["transfer", from:Address, to:Address,
+    // sep0011_asset:String], data: { amount:i128 }
+    void newTransferEvent(Hash const& networkID, Asset const& asset,
+                          SCAddress const& from, SCAddress const& to,
+                          int64 amount, Memo const& memo);
+
+    // contract: asset, topics: ["mint", to:Address, sep0011_asset:String],
+    // data: { amount:i128 }
+    void newMintEvent(Hash const& networkID, Asset const& asset,
+                      SCAddress const& to, int64 amount);
+
+    // contract: asset, topics: ["burn", from:Address, sep0011_asset:String],
+    // data: { amount:i128 }
+    void newBurnEvent(Hash const& networkID, Asset const& asset,
+                      SCAddress const& from, int64 amount);
+
+    // contract: asset, topics: ["clawback", from:Address, sep0011_asset:String],
+    // data: { amount:i128 }
+    void newClawbackEvent(Hash const& networkID, Asset const& asset,
+                      SCAddress const& from, int64 amount);
+
+    // contract: asset, topics: ["set_authorized", id:Address,
+    // sep0011_asset:String], data: { authorize:bool }
+    void newSetAuthorizedEvent(Hash const& networkID, Asset const& asset,
+                          AccountID const& id, bool authorize);
 
 #ifdef BUILD_TESTS
     xdr::xvector<DiagnosticEvent> const&

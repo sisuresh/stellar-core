@@ -1902,7 +1902,7 @@ getAssetContractID(Hash const& networkID, Asset const& asset)
     preImage.type(ENVELOPE_TYPE_CONTRACT_ID);
     preImage.contractID().networkID = networkID;
     preImage.contractID().contractIDPreimage.type(
-        CONTRACT_ID_PREIMAGE_FROM_ASSET);    
+        CONTRACT_ID_PREIMAGE_FROM_ASSET);
     preImage.contractID().contractIDPreimage.fromAsset() = asset;
     return xdrSha256(preImage);
 }
@@ -1959,7 +1959,8 @@ SCVal
 makeI128SCVal(int64_t v)
 {
     SCVal val(SCV_I128);
-    // Sign extend: if v is negative, hi = 0xFFFFFFFFFFFFFFFF, if positive, hi = 0x0000000000000000
+    // Sign extend: if v is negative, hi = 0xFFFFFFFFFFFFFFFF, if positive, hi =
+    // 0x0000000000000000
     val.i128().hi = v < 0 ? 0xFFFFFFFFFFFFFFFF : 0x0000000000000000;
     val.i128().lo = static_cast<uint64_t>(v);
     return val;
@@ -1973,10 +1974,91 @@ makeAccountIDSCVal(AccountID const& id)
     return makeAddressSCVal(addr);
 }
 
+SCAddress
+accountToSCAddress(MuxedAccount const& account)
+{
+    switch (account.type())
+    {
+    case KEY_TYPE_ED25519:
+    {
+        SCAddress addr(SC_ADDRESS_TYPE_ACCOUNT);
+        addr.accountId().ed25519() = account.ed25519();
+        return addr;
+    }
+    case KEY_TYPE_MUXED_ED25519:
+    {
+        SCAddress addr(SC_ADDRESS_TYPE_MUXED_ACCOUNT);
+        addr.muxedAccount().id = account.med25519().id;
+        addr.muxedAccount().ed25519 = account.med25519().ed25519;
+        return addr;
+    }
+    default:
+        // this would be a bug
+        abort();
+    }
+}
+
+SCAddress
+accountToSCAddress(AccountID const& account)
+{
+    SCAddress addr(SC_ADDRESS_TYPE_ACCOUNT);
+    addr.accountId() = account;
+    return addr;
+}
+
+SCAddress
+claimableBalanceIDToSCAddress(ClaimableBalanceID const& id)
+{
+    SCAddress addr(SC_ADDRESS_TYPE_CLAIMABLE_BALANCE);
+    addr.claimableBalanceId() = id;
+    return addr;
+}
+
+SCAddress
+liquidityPoolIDToSCAddress(PoolID const& id)
+{
+    SCAddress addr(SC_ADDRESS_TYPE_LIQUIDITY_POOL);
+    addr.liquidityPoolId() = id;
+    return addr;
+}
+
+SCAddress
+getAddressWithDroppedMuxedInfo(SCAddress const& addr)
+{
+    if (addr.type() == SC_ADDRESS_TYPE_MUXED_ACCOUNT)
+    {
+        SCAddress accountAddr(SC_ADDRESS_TYPE_ACCOUNT);
+        accountAddr.accountId().ed25519() = addr.muxedAccount().ed25519;
+        return accountAddr;
+    }
+    return addr;
+}
+
+bool
+isIssuer(SCAddress const& addr, Asset const& asset)
+{
+    switch (addr.type())
+    {
+    case SC_ADDRESS_TYPE_ACCOUNT:
+        return isIssuer(addr.accountId(), asset);
+
+    case SC_ADDRESS_TYPE_MUXED_ACCOUNT:
+    {
+        AccountID id(PUBLIC_KEY_TYPE_ED25519);
+        id.ed25519() = addr.muxedAccount().ed25519;
+        return isIssuer(id, asset);
+    }
+
+    default:
+        return false;
+    }
+}
+
 SCVal
 makeSep0011AssetStringSCVal(Asset const& asset)
 {
-    return makeStringSCVal(assetToString(asset) + ":" +  KeyUtils::toStrKey(getIssuer(asset)));
+    return makeStringSCVal(assetToString(asset) + ":" +
+                           KeyUtils::toStrKey(getIssuer(asset)));
 }
 
 SCVal
@@ -2000,17 +2082,9 @@ makeClassicMemoSCVal(Memo const& memo)
 }
 
 SCVal
-makeMuxIDSCVal(MuxedAccount const& acc)
+makeMuxIDSCVal(MuxedEd25519Account const& acc)
 {
-    switch (acc.type())
-    {
-    case CryptoKeyType::KEY_TYPE_ED25519:
-        throw std::runtime_error("Not a muxed account");
-    case CryptoKeyType::KEY_TYPE_MUXED_ED25519:
-        return makeU64SCVal(acc.med25519().id);
-    default:
-        throw std::runtime_error("Unknown account type");
-    }
+    return makeU64SCVal(acc.id);
 }
 
 namespace detail

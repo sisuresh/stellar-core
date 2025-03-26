@@ -264,7 +264,7 @@ TransactionTestFrame::getSourceID() const
     return mTransactionFrame->getSourceID();
 }
 
-MuxedAccount 
+MuxedAccount
 TransactionTestFrame::getSourceAccount() const
 {
     return mTransactionFrame->getSourceAccount();

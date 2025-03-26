@@ -120,8 +120,6 @@ PathPaymentOpFrameBase::convert(
         throw std::runtime_error("unexpected convert result");
     }
 
-    // TODO: emit a transfer event between the source/des account and the owner of the offer
-    
     return true;
 }
 

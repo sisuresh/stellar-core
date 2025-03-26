@@ -2,12 +2,12 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "transactions/EventManager.h"
 #include "transactions/PathPaymentStrictReceiveOpFrame.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/TrustLineWrapper.h"
+#include "transactions/EventManager.h"
 #include "transactions/TransactionUtils.h"
 #include "util/ProtocolVersion.h"
 #include "util/XDROperators.h"
@@ -134,8 +134,14 @@ PathPaymentStrictReceiveOpFrame::doApply(
         return false;
     }
 
-    // emit the event here. 
-    eventManager.newTransferEvent(app.getNetworkID(), getSourceAsset(), getDestMuxedAccount(), getSourceAccount(), maxAmountRecv, mParentTx.getMemo());
+    // TODO: Gate on flags
+    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(), innerResult(res).success().offers, mParentTx.getMemo());
+
+    // Emit the final event between the source and destination account wrt the
+    // dest asset.
+    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), getDestAsset(),
+                                         accountToSCAddress(getSourceAccount()), accountToSCAddress(getDestMuxedAccount()), mPathPayment.destAmount, mParentTx.getMemo());
+
 
     return true;
 }

@@ -71,17 +71,17 @@ MergeOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     if (protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 ProtocolVersion::V_16))
     {
-        return doApplyBeforeV16(ltx, res);
+        return doApplyBeforeV16(ltx, res, eventManager, app.getNetworkID());
     }
     else
     {
-        return doApplyFromV16(ltx, res);
+        return doApplyFromV16(ltx, res, eventManager, app.getNetworkID());
     }
 }
 
 bool
 MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
-                               OperationResult& res) const
+                               OperationResult& res, EventManager& eventManager, Hash const& networkID) const
 {
     auto header = ltx.loadHeader();
 
@@ -183,13 +183,20 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx,
         ltx, header, sourceAccountEntry.current(), sourceAccountEntry);
     sourceAccountEntry.erase();
 
+    Asset native(ASSET_TYPE_NATIVE);
+    // TODO: Gate on flags
+    eventManager.newTransferEvent(
+        networkID, native, accountToSCAddress(getSourceAccount()),
+        accountToSCAddress(mOperation.body.destination()),
+        sourceBalance, mParentTx.getMemo());
+
     innerResult(res).code(ACCOUNT_MERGE_SUCCESS);
     innerResult(res).sourceAccountBalance() = sourceBalance;
     return true;
 }
 
 bool
-MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res) const
+MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res, EventManager& eventManager, Hash const& networkID) const
 {
     auto header = ltx.loadHeader();
 
@@ -257,6 +264,13 @@ MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res) const
     removeEntryWithPossibleSponsorship(
         ltx, header, sourceAccountEntry.current(), sourceAccountEntry);
     sourceAccountEntry.erase();
+
+    Asset native(ASSET_TYPE_NATIVE);
+    // TODO: Gate on flags
+    eventManager.newTransferEvent(
+        networkID, native, accountToSCAddress(getSourceAccount()),
+        accountToSCAddress(mOperation.body.destination()),
+        sourceBalance, mParentTx.getMemo());
 
     innerResult(res).code(ACCOUNT_MERGE_SUCCESS);
     innerResult(res).sourceAccountBalance() = sourceBalance;

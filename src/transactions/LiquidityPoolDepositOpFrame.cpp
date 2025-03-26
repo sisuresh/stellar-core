@@ -315,6 +315,14 @@ LiquidityPoolDepositOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         throw std::runtime_error("insufficient liquidity pool limit");
     }
 
+    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), cpp().assetA,
+                                            accountToSCAddress(getSourceAccount()), liquidityPoolIDToSCAddress(mLiquidityPoolDeposit.liquidityPoolID),
+                                            amountA, mParentTx.getMemo());
+
+    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), cpp().assetB,
+                                            accountToSCAddress(getSourceAccount()), liquidityPoolIDToSCAddress(mLiquidityPoolDeposit.liquidityPoolID),
+                                            amountB, mParentTx.getMemo());
+
     innerResult(res).code(LIQUIDITY_POOL_DEPOSIT_SUCCESS);
     return true;
 }

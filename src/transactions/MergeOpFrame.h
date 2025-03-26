@@ -19,8 +19,8 @@ class MergeOpFrame : public OperationFrame
         return res.tr().accountMergeResult();
     }
 
-    bool doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res) const;
-    bool doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res) const;
+    bool doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res, EventManager& eventManager, Hash const& networkID) const;
+    bool doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res, EventManager& eventManager, Hash const& networkID) const;
 
     ThresholdLevel getThresholdLevel() const override;
 

@@ -344,5 +344,13 @@ SCVal makeI128SCVal(int64_t v);
 SCVal makeAccountIDSCVal(AccountID const& id);
 SCVal makeSep0011AssetStringSCVal(Asset const& asset);
 SCVal makeClassicMemoSCVal(Memo const& memo);
-SCVal makeMuxIDSCVal(MuxedAccount const& acc);
+SCVal makeMuxIDSCVal(MuxedEd25519Account const& acc);
+
+SCAddress accountToSCAddress(MuxedAccount const& account);
+SCAddress accountToSCAddress(AccountID const& account);
+SCAddress claimableBalanceIDToSCAddress(ClaimableBalanceID const& id);
+SCAddress liquidityPoolIDToSCAddress(PoolID const& id);
+SCAddress getAddressWithDroppedMuxedInfo(SCAddress const& addr);
+bool isIssuer(SCAddress const& addr, Asset const& asset);
+
 }

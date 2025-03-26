@@ -71,6 +71,10 @@ ClawbackClaimableBalanceOpFrame::doApply(
     removeEntryWithPossibleSponsorship(
         ltx, header, claimableBalanceLtxEntry.current(), sourceAccount);
 
+    // TODO: Gate on flag
+    // Emit event before we erase the claimable balance 
+    eventManager.newClawbackEvent(app.getNetworkID(), asset(), claimableBalanceIDToSCAddress(mClawbackClaimableBalance.balanceID), claimableBalanceLtxEntry.current().data.claimableBalance().amount);
+
     claimableBalanceLtxEntry.erase();
 
     innerResult(res).code(CLAWBACK_CLAIMABLE_BALANCE_SUCCESS);

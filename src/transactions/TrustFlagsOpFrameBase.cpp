@@ -131,6 +131,10 @@ TrustFlagsOpFrameBase::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         }
     }
 
+    //TODO: Gate on flag
+    bool authorize = (expectedFlagValue & AUTHORIZED_FLAG) != 0;
+    eventManager.newSetAuthorizedEvent(app.getNetworkID(), getOpAsset(), getOpTrustor(), authorize);
+
     // Set value
     setFlagValue(ltx, key, expectedFlagValue);
     setResultSuccess(res);
