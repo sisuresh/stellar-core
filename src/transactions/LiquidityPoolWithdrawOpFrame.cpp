@@ -101,6 +101,16 @@ LiquidityPoolWithdrawOpFrame::doApply(
         throw std::runtime_error("insufficient reserveB");
     }
 
+    opEventManager.eventForTransferWithIssuerCheck(
+        app.getNetworkID(), constantProduct().params.assetA,
+        liquidityPoolIDToSCAddress(mLiquidityPoolWithdraw.liquidityPoolID),
+        accountToSCAddress(getSourceAccount()), amountA, mParentTx.getMemo());
+
+    opEventManager.eventForTransferWithIssuerCheck(
+        app.getNetworkID(), constantProduct().params.assetB,
+        liquidityPoolIDToSCAddress(mLiquidityPoolWithdraw.liquidityPoolID),
+        accountToSCAddress(getSourceAccount()), amountB, mParentTx.getMemo());
+
     innerResult(res).code(LIQUIDITY_POOL_WITHDRAW_SUCCESS);
     return true;
 }

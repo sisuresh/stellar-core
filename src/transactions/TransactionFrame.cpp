@@ -274,6 +274,18 @@ TransactionFrame::getSourceID() const
     return toAccountID(mEnvelope.v1().tx.sourceAccount);
 }
 
+MuxedAccount
+TransactionFrame::getSourceAccount() const
+{
+    if (mEnvelope.type() == ENVELOPE_TYPE_TX_V0)
+    {
+        MuxedAccount acc(CryptoKeyType::KEY_TYPE_ED25519);
+        acc.ed25519() = mEnvelope.v0().tx.sourceAccountEd25519;
+        return acc;
+    }
+    return mEnvelope.v1().tx.sourceAccount;
+}
+
 uint32_t
 TransactionFrame::getNumOperations() const
 {
@@ -624,6 +636,21 @@ TransactionFrame::extraSignersExist() const
     return mEnvelope.type() == ENVELOPE_TYPE_TX &&
            mEnvelope.v1().tx.cond.type() == PRECOND_V2 &&
            !mEnvelope.v1().tx.cond.v2().extraSigners.empty();
+}
+
+Memo
+TransactionFrame::getMemo() const
+{
+    switch (mEnvelope.type())
+    {
+    case ENVELOPE_TYPE_TX_V0:
+        return mEnvelope.v0().tx.memo;
+    case ENVELOPE_TYPE_TX:
+        return mEnvelope.v1().tx.memo;
+    case ENVELOPE_TYPE_TX_FEE_BUMP:
+    default:
+        abort();
+    }
 }
 
 bool

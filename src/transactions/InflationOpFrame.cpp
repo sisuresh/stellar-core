@@ -117,6 +117,15 @@ InflationOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         lh.totalCoins += inflationAmount;
     }
 
+    // TODO: Gate on flags
+    for (auto const& payout : payouts)
+    {
+        Asset native(ASSET_TYPE_NATIVE);
+        opEventManager.newMintEvent(app.getNetworkID(), native,
+                                    accountToSCAddress(payout.destination),
+                                    payout.amount);
+    }
+
     return true;
 }
 
