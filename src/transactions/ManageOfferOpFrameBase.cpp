@@ -542,7 +542,9 @@ ManageOfferOpFrameBase::doApply(AppConnector& app, AbstractLedgerTxn& ltxOuter,
     ltx.commit();
 
     // TODO: Gate on flags
-    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(), getSuccessResult(res).offersClaimed, mParentTx.getMemo());
+    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(),
+                                     getSuccessResult(res).offersClaimed,
+                                     mParentTx.getMemo());
 
     return true;
 }

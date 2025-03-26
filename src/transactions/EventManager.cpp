@@ -99,7 +99,9 @@ EventManager::pushValidationTimeDiagnosticError(EventManagerPtr const& ptr,
 }
 
 void
-EventManager::eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& source, xdr::xvector<stellar::ClaimAtom> const& claimAtoms, Memo const& memo)
+EventManager::eventsForClaimAtoms(
+    Hash const& networkID, MuxedAccount const& source,
+    xdr::xvector<stellar::ClaimAtom> const& claimAtoms, Memo const& memo)
 {
     auto sourceSCAddress = accountToSCAddress(source);
 
@@ -118,12 +120,12 @@ EventManager::eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& sou
             auto amountToSource = atom.v0().amountSold;
             auto assetToSource = atom.v0().assetSold;
 
-            eventForTransferWithIssuerCheck(
-                networkID, assetToSeller, sourceSCAddress, seller,
-                amountToSeller, memo);
-            eventForTransferWithIssuerCheck(
-                networkID, assetToSource, seller, sourceSCAddress,
-                amountToSource, memo);
+            eventForTransferWithIssuerCheck(networkID, assetToSeller,
+                                            sourceSCAddress, seller,
+                                            amountToSeller, memo);
+            eventForTransferWithIssuerCheck(networkID, assetToSource, seller,
+                                            sourceSCAddress, amountToSource,
+                                            memo);
         }
         case CLAIM_ATOM_TYPE_ORDER_BOOK:
         {
@@ -135,12 +137,12 @@ EventManager::eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& sou
             auto amountToSource = atom.orderBook().amountSold;
             auto assetToSource = atom.orderBook().assetSold;
 
-            eventForTransferWithIssuerCheck(
-                networkID, assetToSeller, sourceSCAddress, seller,
-                amountToSeller, memo);
-            eventForTransferWithIssuerCheck(
-                networkID, assetToSource, seller, sourceSCAddress,
-                amountToSource, memo);
+            eventForTransferWithIssuerCheck(networkID, assetToSeller,
+                                            sourceSCAddress, seller,
+                                            amountToSeller, memo);
+            eventForTransferWithIssuerCheck(networkID, assetToSource, seller,
+                                            sourceSCAddress, amountToSource,
+                                            memo);
         }
         case CLAIM_ATOM_TYPE_LIQUIDITY_POOL:
         {
@@ -153,12 +155,12 @@ EventManager::eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& sou
             auto amountFromPool = atom.liquidityPool().amountSold;
             auto assetFromPool = atom.liquidityPool().assetSold;
 
-            eventForTransferWithIssuerCheck(
-                networkID, assetToPool, sourceSCAddress, poolID,
-                amountToPool, memo);
-            eventForTransferWithIssuerCheck(
-                networkID, assetFromPool, poolID, sourceSCAddress,
-                amountFromPool, memo);
+            eventForTransferWithIssuerCheck(networkID, assetToPool,
+                                            sourceSCAddress, poolID,
+                                            amountToPool, memo);
+            eventForTransferWithIssuerCheck(networkID, assetFromPool, poolID,
+                                            sourceSCAddress, amountFromPool,
+                                            memo);
         }
         }
     }
@@ -301,7 +303,7 @@ EventManager::newBurnEvent(Hash const& networkID, Asset const& asset,
 
 void
 EventManager::newClawbackEvent(Hash const& networkID, Asset const& asset,
-                      SCAddress const& from, int64 amount)
+                               SCAddress const& from, int64 amount)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;

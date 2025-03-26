@@ -135,13 +135,17 @@ PathPaymentStrictReceiveOpFrame::doApply(
     }
 
     // TODO: Gate on flags
-    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(), innerResult(res).success().offers, mParentTx.getMemo());
+    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(),
+                                     innerResult(res).success().offers,
+                                     mParentTx.getMemo());
 
     // Emit the final event between the source and destination account wrt the
     // dest asset.
-    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), getDestAsset(),
-                                         accountToSCAddress(getSourceAccount()), accountToSCAddress(getDestMuxedAccount()), mPathPayment.destAmount, mParentTx.getMemo());
-
+    eventManager.eventForTransferWithIssuerCheck(
+        app.getNetworkID(), getDestAsset(),
+        accountToSCAddress(getSourceAccount()),
+        accountToSCAddress(getDestMuxedAccount()), mPathPayment.destAmount,
+        mParentTx.getMemo());
 
     return true;
 }

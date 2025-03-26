@@ -50,7 +50,9 @@ class EventManager
         EventManagerPtr const& ptr, SCErrorType ty, SCErrorCode code,
         std::string&& message, xdr::xvector<SCVal>&& args = {});
 
-    void eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& source, xdr::xvector<stellar::ClaimAtom> const& claimAtoms, Memo const& memo);
+    void eventsForClaimAtoms(Hash const& networkID, MuxedAccount const& source,
+                             xdr::xvector<stellar::ClaimAtom> const& claimAtoms,
+                             Memo const& memo);
 
     // This will check if the issuer is involved, and emit a mint/burn instead
     // of a transfer if so
@@ -79,10 +81,10 @@ class EventManager
     void newBurnEvent(Hash const& networkID, Asset const& asset,
                       SCAddress const& from, int64 amount);
 
-    // contract: asset, topics: ["clawback", from:Address, sep0011_asset:String],
-    // data: { amount:i128 }
+    // contract: asset, topics: ["clawback", from:Address,
+    // sep0011_asset:String], data: { amount:i128 }
     void newClawbackEvent(Hash const& networkID, Asset const& asset,
-                      SCAddress const& from, int64 amount);
+                          SCAddress const& from, int64 amount);
 
     // contract: asset, topics: ["set_authorized", id:Address,
     // sep0011_asset:String], data: { authorize:bool }

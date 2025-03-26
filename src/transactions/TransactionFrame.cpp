@@ -1791,7 +1791,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             if (!txRes)
             {
                 success = false;
-                // TODO: why don't we return early here?? why do we compute the remaining operations??                
+                // TODO: why don't we return early here?? why do we compute the
+                // remaining operations??
             }
 
             // The operation meta will be empty if the transaction
@@ -1799,7 +1800,8 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
             // case
             if (success)
             {
-                // This just checks the invariances and throw if they are not met. 
+                // This just checks the invariances and throw if they are not
+                // met.
                 app.checkOnOperationApply(op->getOperation(), opResult,
                                           ltxOp.getDelta());
 

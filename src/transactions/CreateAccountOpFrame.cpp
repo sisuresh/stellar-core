@@ -161,11 +161,14 @@ CreateAccountOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
         success = doApplyFromV14(ltx, res);
     }
 
-    if(success)
+    if (success)
     {
         Asset native(ASSET_TYPE_NATIVE);
         // TODO: Gate on flags
-        eventManager.newTransferEvent(app.getNetworkID(), native, accountToSCAddress(getSourceAccount()), accountToSCAddress(mCreateAccount.destination), mCreateAccount.startingBalance, mParentTx.getMemo());
+        eventManager.newTransferEvent(
+            app.getNetworkID(), native, accountToSCAddress(getSourceAccount()),
+            accountToSCAddress(mCreateAccount.destination),
+            mCreateAccount.startingBalance, mParentTx.getMemo());
     }
 
     return success;

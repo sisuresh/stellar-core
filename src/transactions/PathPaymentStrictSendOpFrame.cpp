@@ -131,13 +131,17 @@ PathPaymentStrictSendOpFrame::doApply(
 
     auto const& success = innerResult(res).success();
 
-    //TODO: Gate on flags
-    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(), success.offers, mParentTx.getMemo());
+    // TODO: Gate on flags
+    eventManager.eventsForClaimAtoms(app.getNetworkID(), getSourceAccount(),
+                                     success.offers, mParentTx.getMemo());
 
     // Emit the final event between the source and destination account wrt the
     // dest asset.
-    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), getDestAsset(),
-                                         accountToSCAddress(getSourceAccount()), accountToSCAddress(getDestMuxedAccount()), maxAmountSend, mParentTx.getMemo());
+    eventManager.eventForTransferWithIssuerCheck(
+        app.getNetworkID(), getDestAsset(),
+        accountToSCAddress(getSourceAccount()),
+        accountToSCAddress(getDestMuxedAccount()), maxAmountSend,
+        mParentTx.getMemo());
 
     return true;
 }

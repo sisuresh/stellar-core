@@ -250,10 +250,12 @@ CreateClaimableBalanceOpFrame::doApply(
     ltx.create(newClaimableBalance);
 
     // TODO: Gate on flag
-    // TODO: The tx memo will never be used in this call. Should we just forward MEMO_NONE?
-    eventManager.eventForTransferWithIssuerCheck(app.getNetworkID(), asset,
-                                         accountToSCAddress(getSourceAccount()), claimableBalanceIDToSCAddress(claimableBalanceEntry.balanceID), amount, mParentTx.getMemo());
-
+    // TODO: The tx memo will never be used in this call. Should we just forward
+    // MEMO_NONE?
+    eventManager.eventForTransferWithIssuerCheck(
+        app.getNetworkID(), asset, accountToSCAddress(getSourceAccount()),
+        claimableBalanceIDToSCAddress(claimableBalanceEntry.balanceID), amount,
+        mParentTx.getMemo());
 
     innerResult(res).code(CREATE_CLAIMABLE_BALANCE_SUCCESS);
     innerResult(res).balanceID() = claimableBalanceEntry.balanceID;

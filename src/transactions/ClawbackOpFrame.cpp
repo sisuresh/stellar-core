@@ -54,7 +54,9 @@ ClawbackOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     }
 
     // TODO: Gate on flag
-    eventManager.newClawbackEvent(app.getNetworkID(), mClawback.asset, accountToSCAddress(mClawback.from), mClawback.amount);
+    eventManager.newClawbackEvent(app.getNetworkID(), mClawback.asset,
+                                  accountToSCAddress(mClawback.from),
+                                  mClawback.amount);
 
     innerResult(res).code(CLAWBACK_SUCCESS);
     return true;
