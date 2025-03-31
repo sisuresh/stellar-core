@@ -2057,6 +2057,10 @@ isIssuer(SCAddress const& addr, Asset const& asset)
 SCVal
 makeSep0011AssetStringSCVal(Asset const& asset)
 {
+    if(asset.type() == ASSET_TYPE_NATIVE)
+    {
+        return makeStringSCVal("native");
+    }
     return makeStringSCVal(assetToString(asset) + ":" +
                            KeyUtils::toStrKey(getIssuer(asset)));
 }
