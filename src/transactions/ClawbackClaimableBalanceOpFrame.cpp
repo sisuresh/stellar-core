@@ -74,7 +74,7 @@ ClawbackClaimableBalanceOpFrame::doApply(
     // TODO: Gate on flag
     // Emit event before we erase the claimable balance
     opEventManager.newClawbackEvent(
-        app.getNetworkID(), asset(),
+        asset(),
         claimableBalanceIDToSCAddress(mClawbackClaimableBalance.balanceID),
         claimableBalanceLtxEntry.current().data.claimableBalance().amount);
 

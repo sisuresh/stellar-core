@@ -20,11 +20,9 @@ class MergeOpFrame : public OperationFrame
     }
 
     bool doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res,
-                          OpEventManager& opEventManager,
-                          Hash const& networkID) const;
+                          OpEventManager& opEventManager) const;
     bool doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res,
-                        OpEventManager& opEventManager,
-                        Hash const& networkID) const;
+                        OpEventManager& opEventManager) const;
 
     ThresholdLevel getThresholdLevel() const override;
 

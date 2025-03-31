@@ -71,18 +71,17 @@ MergeOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     if (protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 ProtocolVersion::V_16))
     {
-        return doApplyBeforeV16(ltx, res, opEventManager, app.getNetworkID());
+        return doApplyBeforeV16(ltx, res, opEventManager);
     }
     else
     {
-        return doApplyFromV16(ltx, res, opEventManager, app.getNetworkID());
+        return doApplyFromV16(ltx, res, opEventManager);
     }
 }
 
 bool
 MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res,
-                               OpEventManager& opEventManager,
-                               Hash const& networkID) const
+                               OpEventManager& opEventManager) const
 {
     auto header = ltx.loadHeader();
 
@@ -187,7 +186,7 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res,
     Asset native(ASSET_TYPE_NATIVE);
     // TODO: Gate on flags
     opEventManager.newTransferEvent(
-        networkID, native, accountToSCAddress(getSourceAccount()),
+        native, accountToSCAddress(getSourceAccount()),
         accountToSCAddress(mOperation.body.destination()), sourceBalance,
         mParentTx.getMemo());
 
@@ -198,8 +197,7 @@ MergeOpFrame::doApplyBeforeV16(AbstractLedgerTxn& ltx, OperationResult& res,
 
 bool
 MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res,
-                             OpEventManager& opEventManager,
-                             Hash const& networkID) const
+                             OpEventManager& opEventManager) const
 {
     auto header = ltx.loadHeader();
 
@@ -271,7 +269,7 @@ MergeOpFrame::doApplyFromV16(AbstractLedgerTxn& ltx, OperationResult& res,
     Asset native(ASSET_TYPE_NATIVE);
     // TODO: Gate on flags
     opEventManager.newTransferEvent(
-        networkID, native, accountToSCAddress(getSourceAccount()),
+        native, accountToSCAddress(getSourceAccount()),
         accountToSCAddress(mOperation.body.destination()), sourceBalance,
         mParentTx.getMemo());
 

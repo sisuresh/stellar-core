@@ -102,12 +102,12 @@ LiquidityPoolWithdrawOpFrame::doApply(
     }
 
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), constantProduct().params.assetA,
+        constantProduct().params.assetA,
         liquidityPoolIDToSCAddress(mLiquidityPoolWithdraw.liquidityPoolID),
         accountToSCAddress(getSourceAccount()), amountA, mParentTx.getMemo());
 
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), constantProduct().params.assetB,
+        constantProduct().params.assetB,
         liquidityPoolIDToSCAddress(mLiquidityPoolWithdraw.liquidityPoolID),
         accountToSCAddress(getSourceAccount()), amountB, mParentTx.getMemo());
 

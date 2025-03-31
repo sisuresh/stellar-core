@@ -121,9 +121,8 @@ InflationOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     for (auto const& payout : payouts)
     {
         Asset native(ASSET_TYPE_NATIVE);
-        opEventManager.newMintEvent(app.getNetworkID(), native,
-                                    accountToSCAddress(payout.destination),
-                                    payout.amount);
+        opEventManager.newMintEvent(
+            native, accountToSCAddress(payout.destination), payout.amount);
     }
 
     return true;

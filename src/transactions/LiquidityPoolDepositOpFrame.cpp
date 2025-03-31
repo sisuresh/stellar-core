@@ -316,14 +316,12 @@ LiquidityPoolDepositOpFrame::doApply(AppConnector& app, AbstractLedgerTxn& ltx,
     }
 
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), cpp().assetA,
-        accountToSCAddress(getSourceAccount()),
+        cpp().assetA, accountToSCAddress(getSourceAccount()),
         liquidityPoolIDToSCAddress(mLiquidityPoolDeposit.liquidityPoolID),
         amountA, mParentTx.getMemo());
 
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), cpp().assetB,
-        accountToSCAddress(getSourceAccount()),
+        cpp().assetB, accountToSCAddress(getSourceAccount()),
         liquidityPoolIDToSCAddress(mLiquidityPoolDeposit.liquidityPoolID),
         amountB, mParentTx.getMemo());
 

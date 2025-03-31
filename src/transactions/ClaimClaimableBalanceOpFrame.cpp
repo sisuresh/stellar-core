@@ -141,8 +141,7 @@ ClaimClaimableBalanceOpFrame::doApply(
     // TODO: Gate on flag
     // Emit event before we erase the claimable balance
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), asset,
-        claimableBalanceIDToSCAddress(mClaimClaimableBalance.balanceID),
+        asset, claimableBalanceIDToSCAddress(mClaimClaimableBalance.balanceID),
         accountToSCAddress(getSourceAccount()), amount, mParentTx.getMemo());
 
     claimableBalanceLtxEntry.erase();

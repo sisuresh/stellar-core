@@ -253,7 +253,7 @@ CreateClaimableBalanceOpFrame::doApply(
     // TODO: The tx memo will never be used in this call. Should we just forward
     // MEMO_NONE?
     opEventManager.eventForTransferWithIssuerCheck(
-        app.getNetworkID(), asset, accountToSCAddress(getSourceAccount()),
+        asset, accountToSCAddress(getSourceAccount()),
         claimableBalanceIDToSCAddress(claimableBalanceEntry.balanceID), amount,
         mParentTx.getMemo());
 

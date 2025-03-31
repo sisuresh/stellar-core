@@ -106,7 +106,7 @@ OpEventManager::OpEventManager(TxEventManager& parentTxEventManager,
 
 void
 OpEventManager::eventsForClaimAtoms(
-    Hash const& networkID, MuxedAccount const& source,
+    MuxedAccount const& source,
     xdr::xvector<stellar::ClaimAtom> const& claimAtoms, Memo const& memo)
 {
     auto sourceSCAddress = accountToSCAddress(source);
@@ -126,12 +126,10 @@ OpEventManager::eventsForClaimAtoms(
             auto amountToSource = atom.v0().amountSold;
             auto assetToSource = atom.v0().assetSold;
 
-            eventForTransferWithIssuerCheck(networkID, assetToSeller,
-                                            sourceSCAddress, seller,
-                                            amountToSeller, memo);
-            eventForTransferWithIssuerCheck(networkID, assetToSource, seller,
-                                            sourceSCAddress, amountToSource,
-                                            memo);
+            eventForTransferWithIssuerCheck(assetToSeller, sourceSCAddress,
+                                            seller, amountToSeller, memo);
+            eventForTransferWithIssuerCheck(
+                assetToSource, seller, sourceSCAddress, amountToSource, memo);
         }
         case CLAIM_ATOM_TYPE_ORDER_BOOK:
         {
@@ -143,12 +141,10 @@ OpEventManager::eventsForClaimAtoms(
             auto amountToSource = atom.orderBook().amountSold;
             auto assetToSource = atom.orderBook().assetSold;
 
-            eventForTransferWithIssuerCheck(networkID, assetToSeller,
-                                            sourceSCAddress, seller,
-                                            amountToSeller, memo);
-            eventForTransferWithIssuerCheck(networkID, assetToSource, seller,
-                                            sourceSCAddress, amountToSource,
-                                            memo);
+            eventForTransferWithIssuerCheck(assetToSeller, sourceSCAddress,
+                                            seller, amountToSeller, memo);
+            eventForTransferWithIssuerCheck(
+                assetToSource, seller, sourceSCAddress, amountToSource, memo);
         }
         case CLAIM_ATOM_TYPE_LIQUIDITY_POOL:
         {
@@ -161,20 +157,17 @@ OpEventManager::eventsForClaimAtoms(
             auto amountFromPool = atom.liquidityPool().amountSold;
             auto assetFromPool = atom.liquidityPool().assetSold;
 
-            eventForTransferWithIssuerCheck(networkID, assetToPool,
-                                            sourceSCAddress, poolID,
-                                            amountToPool, memo);
-            eventForTransferWithIssuerCheck(networkID, assetFromPool, poolID,
-                                            sourceSCAddress, amountFromPool,
-                                            memo);
+            eventForTransferWithIssuerCheck(assetToPool, sourceSCAddress,
+                                            poolID, amountToPool, memo);
+            eventForTransferWithIssuerCheck(
+                assetFromPool, poolID, sourceSCAddress, amountFromPool, memo);
         }
         }
     }
 }
 
 void
-OpEventManager::eventForTransferWithIssuerCheck(Hash const& networkID,
-                                                Asset const& asset,
+OpEventManager::eventForTransferWithIssuerCheck(Asset const& asset,
                                                 SCAddress const& from,
                                                 SCAddress const& to,
                                                 int64 amount, Memo const& memo)
@@ -184,30 +177,31 @@ OpEventManager::eventForTransferWithIssuerCheck(Hash const& networkID,
 
     if (fromIsIssuer && toIsIssuer)
     {
-        newTransferEvent(networkID, asset, from, to, amount, memo);
+        newTransferEvent(asset, from, to, amount, memo);
     }
     else if (fromIsIssuer)
     {
-        newMintEvent(networkID, asset, to, amount);
+        newMintEvent(asset, to, amount);
     }
     else if (toIsIssuer)
     {
-        newBurnEvent(networkID, asset, from, amount);
+        newBurnEvent(asset, from, amount);
     }
     else
     {
-        newTransferEvent(networkID, asset, from, to, amount, memo);
+        newTransferEvent(asset, from, to, amount, memo);
     }
 }
 
 void
-OpEventManager::newTransferEvent(Hash const& networkID, Asset const& asset,
-                                 SCAddress const& from, SCAddress const& to,
-                                 int64 amount, Memo const& memo)
+OpEventManager::newTransferEvent(Asset const& asset, SCAddress const& from,
+                                 SCAddress const& to, int64 amount,
+                                 Memo const& memo)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
-    ev.contractID.activate() = getAssetContractID(networkID, asset);
+    ev.contractID.activate() =
+        getAssetContractID(mParent.getNetworkID(), asset);
 
     SCVec topics = {makeSymbolSCVal("transfer"),
                     makeAddressSCVal(getAddressWithDroppedMuxedInfo(from)),
@@ -272,12 +266,13 @@ OpEventManager::newTransferEvent(Hash const& networkID, Asset const& asset,
 }
 
 void
-OpEventManager::newMintEvent(Hash const& networkID, Asset const& asset,
-                             SCAddress const& to, int64 amount)
+OpEventManager::newMintEvent(Asset const& asset, SCAddress const& to,
+                             int64 amount)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
-    ev.contractID.activate() = getAssetContractID(networkID, asset);
+    ev.contractID.activate() =
+        getAssetContractID(mParent.getNetworkID(), asset);
 
     SCVec topics = {makeSymbolSCVal("mint"),
                     makeAddressSCVal(getAddressWithDroppedMuxedInfo(to)),
@@ -290,12 +285,13 @@ OpEventManager::newMintEvent(Hash const& networkID, Asset const& asset,
 }
 
 void
-OpEventManager::newBurnEvent(Hash const& networkID, Asset const& asset,
-                             SCAddress const& from, int64 amount)
+OpEventManager::newBurnEvent(Asset const& asset, SCAddress const& from,
+                             int64 amount)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
-    ev.contractID.activate() = getAssetContractID(networkID, asset);
+    ev.contractID.activate() =
+        getAssetContractID(mParent.getNetworkID(), asset);
 
     SCVec topics = {makeSymbolSCVal("burn"),
                     makeAddressSCVal(getAddressWithDroppedMuxedInfo(from)),
@@ -308,12 +304,13 @@ OpEventManager::newBurnEvent(Hash const& networkID, Asset const& asset,
 }
 
 void
-OpEventManager::newClawbackEvent(Hash const& networkID, Asset const& asset,
-                                 SCAddress const& from, int64 amount)
+OpEventManager::newClawbackEvent(Asset const& asset, SCAddress const& from,
+                                 int64 amount)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
-    ev.contractID.activate() = getAssetContractID(networkID, asset);
+    ev.contractID.activate() =
+        getAssetContractID(mParent.getNetworkID(), asset);
 
     SCVec topics = {makeSymbolSCVal("clawback"),
                     makeAddressSCVal(getAddressWithDroppedMuxedInfo(from)),
@@ -326,12 +323,13 @@ OpEventManager::newClawbackEvent(Hash const& networkID, Asset const& asset,
 }
 
 void
-OpEventManager::newSetAuthorizedEvent(Hash const& networkID, Asset const& asset,
-                                      AccountID const& id, bool authorize)
+OpEventManager::newSetAuthorizedEvent(Asset const& asset, AccountID const& id,
+                                      bool authorize)
 {
     ContractEvent ev;
     ev.type = ContractEventType::CONTRACT;
-    ev.contractID.activate() = getAssetContractID(networkID, asset);
+    ev.contractID.activate() =
+        getAssetContractID(mParent.getNetworkID(), asset);
 
     SCVec topics = {makeSymbolSCVal("set_authorized"), makeAccountIDSCVal(id),
                     makeSep0011AssetStringSCVal(asset)};
@@ -394,5 +392,11 @@ TxEventManager::flushDiagnosticEvents(xdr::xvector<DiagnosticEvent>& buf)
 {
     mDiagnosticEvents.flush(buf);
 };
+
+Hash const&
+TxEventManager::getNetworkID() const
+{
+    return mNetworkID;
+}
 
 } // namespace stellar
