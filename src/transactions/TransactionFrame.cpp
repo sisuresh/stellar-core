@@ -1738,7 +1738,6 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
         uint64_t opNum{0};
         OperationMetaArray opMetas(getNumOperations());
-        xdr::xvector<DiagnosticEvent> txDiagnostics;
         for (size_t i = 0; i < mOperations.size(); ++i)
         {
             auto time = opTimer.TimeScope();
@@ -1802,6 +1801,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 ltxOp.commit();
             }
         }
+        xdr::xvector<DiagnosticEvent> txDiagnostics;
         txEventManager.flushDiagnosticEvents(txDiagnostics);
         outerMeta.maybePushDiagnosticEvents(std::move(txDiagnostics),
                                             this->isSoroban());
