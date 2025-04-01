@@ -133,14 +133,15 @@ InvariantManagerImpl::checkOnOperationApply(
     std::vector<ContractEvent> const&
         events /*TODO: This is a placeholder for the final format*/)
 {
-    if (protocolVersionIsBefore(ltxDelta.header.current.ledgerVersion,
-                                ProtocolVersion::V_8))
-    {
-        return;
-    }
-
     for (auto invariant : mEnabled)
     {
+        if (protocolVersionIsBefore(ltxDelta.header.current.ledgerVersion,
+                                    ProtocolVersion::V_8) &&
+            invariant->getName() != "EventsAreConsistentWithEntryDiffs")
+        {
+            return;
+        }
+
         auto result = invariant->checkOnOperationApply(operation, opres,
                                                        ltxDelta, events);
         if (result.empty())
