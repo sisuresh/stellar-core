@@ -119,6 +119,8 @@ class TxEventManager
 
     Hash const& getNetworkID() const;
 
+    bool shouldEmitClassicEvents() const;
+
 #ifdef BUILD_TESTS
     xdr::xvector<DiagnosticEvent> const&
     getDiagnosticEvents() const
