@@ -78,8 +78,10 @@ LumenEventReconciler::reconcileEvents(AccountID const& txSourceAccount,
     if (operation.body.type() == ACCOUNT_MERGE ||
         operation.body.type() == PAYMENT)
     {
+
         opEventManager.newMintEvent(native, accountToSCAddress(opSource),
-                                    deltaBalances);
+                                    deltaBalances,
+                                    true /*Insert mint at the beginning*/);
     }
     else if (operation.body.type() == PATH_PAYMENT_STRICT_RECEIVE)
     {
