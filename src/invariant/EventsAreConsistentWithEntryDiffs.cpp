@@ -317,75 +317,16 @@ aggregateEventDiffs(Hash const& networkID,
         }
         else
         {
-            if (topics.empty())
+            auto maybeAsset = isFromSAC(event, networkID);
+            if (maybeAsset)
             {
-                continue;
-            }
-
-            // The last topic will be the SEP-0011 asset string for the SAC
-            auto assetVal = topics.at(topics.size() - 1);
-            if (assetVal.type() != SCV_STRING)
-            {
-                continue;
-            }
-            auto const& assetStr = assetVal.str();
-            if (assetStr == "native")
-            {
-                asset.type(ASSET_TYPE_NATIVE);
+                asset = *maybeAsset;
+                res.mStellarAssetContractIDs.emplace(*event.contractID, asset);
             }
             else
             {
-                auto delimPos = assetStr.find(':');
-                if (delimPos == std::string::npos ||
-                    delimPos == assetStr.size() - 1)
-                {
-                    continue;
-                }
-                auto issuerStr = assetStr.substr(delimPos + 1, assetStr.size());
-
-                PublicKey issuer;
-
-                try
-                {
-                    issuer = KeyUtils::fromStrKey<PublicKey>(issuerStr);
-                }
-                catch (std::invalid_argument)
-                {
-                    continue;
-                }
-
-                auto assetName = assetStr.substr(0, delimPos);
-                if (assetName.size() <= 4)
-                {
-                    asset.type(ASSET_TYPE_CREDIT_ALPHANUM4);
-                    strToAssetCode(asset.alphaNum4().assetCode, assetName);
-                    asset.alphaNum4().issuer = issuer;
-                }
-                else if (assetName.size() <= 12)
-                {
-                    asset.type(ASSET_TYPE_CREDIT_ALPHANUM12);
-                    strToAssetCode(asset.alphaNum12().assetCode, assetName);
-                    asset.alphaNum12().issuer = issuer;
-                }
-                else
-                {
-                    continue;
-                }
-
-                // The protocol version check is only used for pooShareAssets,
-                // and we aren't passing one in here, so the value does not
-                // matter
-                if (!isAssetValid<Asset>(asset, 0))
-                {
-                    continue;
-                }
-            }
-            auto hash = getAssetContractID(networkID, asset);
-            if (hash != *event.contractID)
-            {
                 continue;
             }
-            res.mStellarAssetContractIDs.emplace(*event.contractID, asset);
         }
         // at this point, we have verified that this is an SAC event
 
@@ -416,19 +357,12 @@ aggregateEventDiffs(Hash const& networkID,
         }
         else if (eventNameVal.sym() == "mint")
         {
-            SCVal toVal;
-            if (topics.size() == 4)
-            {
-                toVal = topics.at(2);
-            }
-            else if (topics.size() == 3)
-            {
-                toVal = topics.at(1);
-            }
-            else
+            if (topics.size() != 3)
             {
                 continue;
             }
+
+            auto toVal = topics.at(1);
 
             auto toLk = addressToLedgerKey(toVal.address());
             auto amount = getAmountFromData(event.body.v0().data);
@@ -437,19 +371,12 @@ aggregateEventDiffs(Hash const& networkID,
         else if (eventNameVal.sym() == "burn" ||
                  eventNameVal.sym() == "clawback")
         {
-            SCVal fromVal;
-            if (topics.size() == 4)
-            {
-                fromVal = topics.at(2);
-            }
-            else if (topics.size() == 3)
-            {
-                fromVal = topics.at(1);
-            }
-            else
+            if (topics.size() != 3)
             {
                 continue;
             }
+
+            auto fromVal = topics.at(1);
 
             auto fromLk = addressToLedgerKey(fromVal.address());
             auto amount = getAmountFromData(event.body.v0().data);

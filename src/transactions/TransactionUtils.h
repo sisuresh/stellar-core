@@ -354,6 +354,8 @@ SCAddress claimableBalanceIDToSCAddress(ClaimableBalanceID const& id);
 SCAddress liquidityPoolIDToSCAddress(PoolID const& id);
 SCAddress getAddressWithDroppedMuxedInfo(SCAddress const& addr);
 bool isIssuer(SCAddress const& addr, Asset const& asset);
+std::optional<Asset> isFromSAC(ContractEvent const& event,
+                               Hash const& networkID);
 
 LedgerKey addressToLedgerKey(SCAddress const& address);
 }

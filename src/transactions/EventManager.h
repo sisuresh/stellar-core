@@ -119,6 +119,8 @@ class TxEventManager
     void flushDiagnosticEvents(xdr::xvector<DiagnosticEvent>& buf);
 
     Hash const& getNetworkID() const;
+    uint32_t getProtocolVersion() const;
+    Config const& getConfig() const;
 
     bool shouldEmitClassicEvents() const;
 

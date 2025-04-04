@@ -2215,4 +2215,88 @@ makeClaimAtom(uint32_t ledgerVersion, AccountID const& accountID,
     }
     return atom;
 }
+
+// If the event was emitted by an SAC, return the asset. Otherwise, return
+// nullopt
+std::optional<Asset>
+isFromSAC(ContractEvent const& event, Hash const& networkID)
+{
+    if (!event.contractID)
+    {
+        return std::nullopt;
+    }
+    auto const& topics = event.body.v0().topics;
+    if (topics.empty())
+    {
+        return std::nullopt;
+    }
+
+    // The last topic will be the SEP-0011 asset string for the SAC
+    auto assetVal = topics.at(topics.size() - 1);
+    if (assetVal.type() != SCV_STRING)
+    {
+        return std::nullopt;
+    }
+
+    Asset asset;
+    auto const& assetStr = assetVal.str();
+    if (assetStr == "native")
+    {
+        asset.type(ASSET_TYPE_NATIVE);
+    }
+    else
+    {
+        auto delimPos = assetStr.find(':');
+        if (delimPos == std::string::npos || delimPos == assetStr.size() - 1)
+        {
+            return std::nullopt;
+        }
+        auto issuerStr = assetStr.substr(delimPos + 1, assetStr.size());
+
+        PublicKey issuer;
+
+        try
+        {
+            issuer = KeyUtils::fromStrKey<PublicKey>(issuerStr);
+        }
+        catch (std::invalid_argument)
+        {
+            return std::nullopt;
+        }
+
+        auto assetName = assetStr.substr(0, delimPos);
+        if (assetName.size() <= 4)
+        {
+            asset.type(ASSET_TYPE_CREDIT_ALPHANUM4);
+            strToAssetCode(asset.alphaNum4().assetCode, assetName);
+            asset.alphaNum4().issuer = issuer;
+        }
+        else if (assetName.size() <= 12)
+        {
+            asset.type(ASSET_TYPE_CREDIT_ALPHANUM12);
+            strToAssetCode(asset.alphaNum12().assetCode, assetName);
+            asset.alphaNum12().issuer = issuer;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+
+        // The protocol version check is only used for pooShareAssets,
+        // and we aren't passing one in here, so the value does not
+        // matter
+        if (!isAssetValid<Asset>(asset, 0))
+        {
+            return std::nullopt;
+        }
+    }
+    auto hash = getAssetContractID(networkID, asset);
+    if (hash != *event.contractID)
+    {
+        return std::nullopt;
+    }
+
+    return asset;
+}
+
 } // namespace stellar
