@@ -290,10 +290,7 @@ ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
     LiabilitiesMatchOffers::registerInvariant(*this);
     SponsorshipCountIsValid::registerInvariant(*this);
     ConstantProductInvariant::registerInvariant(*this);
-
-#if defined(__SIZEOF_INT128__) || defined(_GLIBCXX_USE_INT128)
     EventsAreConsistentWithEntryDiffs::registerInvariant(*this);
-#endif
 
     enableInvariantsFromConfig();
 

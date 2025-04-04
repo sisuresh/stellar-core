@@ -4,8 +4,6 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#if defined(__SIZEOF_INT128__) || defined(_GLIBCXX_USE_INT128)
-
 #include "invariant/Invariant.h"
 #include "main/Config.h"
 #include "transactions/TransactionUtils.h"
@@ -35,5 +33,3 @@ class EventsAreConsistentWithEntryDiffs : public Invariant
                           std::vector<ContractEvent> const& events) override;
 };
 }
-
-#endif

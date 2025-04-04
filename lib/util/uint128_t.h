@@ -1113,7 +1113,6 @@ struct numeric_limits<large_int::int128_base<_Hi, _Low>>
 #endif /* INT128_SPECIALIZATION */
 
 #ifndef INT128_NO_EXPORT
-#define INT128_C(val) val##_L128
 #define UINT128_C(val) val##_U128
 // add space between ‘""’ and suffix identifier, or may compile failed
 using namespace large_int::literals;
