@@ -14,7 +14,6 @@ namespace stellar
 class TxEventManager;
 using TxEventManagerPtr = std::shared_ptr<TxEventManager>;
 class TransactionFrameBase;
-class OperationFrame;
 
 struct DiagnosticEventBuffer
 {
@@ -46,12 +45,10 @@ class OpEventManager
   private:
     xdr::xvector<ContractEvent> mContractEvents;
     TxEventManager& mParent;
-    OperationFrame const& mOp;
     Memo const mMemo;
 
   public:
-    OpEventManager(TxEventManager& parentTxEventManager,
-                   OperationFrame const& op, Memo const& memo);
+    OpEventManager(TxEventManager& parentTxEventManager, Memo const& memo);
 
     DiagnosticEventBuffer& getDiagnosticEventsBuffer();
 
@@ -111,8 +108,7 @@ class TxEventManager
     TxEventManager(uint32_t protocolVersion, Hash const& networkID,
                    Config const& config, TransactionFrameBase const& tx);
 
-    OpEventManager createNewOpEventManager(OperationFrame const& op,
-                                           Memo const& memo);
+    OpEventManager createNewOpEventManager(Memo const& memo);
 
     DiagnosticEventBuffer& getDiagnosticEventsBuffer();
 
