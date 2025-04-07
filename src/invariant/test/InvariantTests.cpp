@@ -224,9 +224,6 @@ TEST_CASE("onOperationApply fail succeed", "[invariant]")
     }
 }
 
-// The EventsAreConsistentWithEntryDiffs invariant currently depends on the
-// compiler to have int128 support
-#if defined(__SIZEOF_INT128__) || defined(_GLIBCXX_USE_INT128)
 TEST_CASE_VERSIONS("EventsAreConsistentWithEntryDiffs invariant", "[invariant]")
 {
     auto invariantTest = [](bool enableInvariant) {
@@ -269,4 +266,3 @@ TEST_CASE_VERSIONS("EventsAreConsistentWithEntryDiffs invariant", "[invariant]")
     invariantTest(true);
     invariantTest(false);
 }
-#endif
