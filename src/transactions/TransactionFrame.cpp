@@ -1795,7 +1795,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                 auto delta = ltxOp.getDelta();
 
                 if (protocolVersionIsBefore(ledgerVersion,
-                                            ProtocolVersion::V_8))
+                                            ProtocolVersion::V_8) &&
+                    app.getConfig().EMIT_CLASSIC_EVENTS &&
+                    app.getConfig().BACKFILL_STELLAR_ASSET_EVENTS)
                 {
                     LumenEventReconciler::reconcileEvents(
                         getSourceID(), op->getOperation(), opResult, delta,
