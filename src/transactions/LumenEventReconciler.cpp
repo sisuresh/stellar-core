@@ -86,7 +86,7 @@ LumenEventReconciler::reconcileEvents(AccountID const& txSourceAccount,
     else if (operation.body.type() == PATH_PAYMENT_STRICT_RECEIVE)
     {
         opEventManager.newBurnEvent(native, accountToSCAddress(opSource),
-                                    deltaBalances);
+                                    std::abs(deltaBalances));
     }
     else
     {
