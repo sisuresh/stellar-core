@@ -36,6 +36,10 @@ void AggregatedEvents::subtractAssetBalance(LedgerKey const& lk, Asset const& as
     mEventAmounts[lk][asset] = rust_bridge::i128_sub(mEventAmounts[lk][asset], amount);
 }
 
+static int64 asI64(CxxI128 const& val) {
+    return static_cast<int64>(val.lo);
+}
+
 static CxxI128
 getAmountFromData(SCVal const& data)
 {
@@ -138,7 +142,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.account().balance : 0) -
                          (previous ? previous->data.account().balance : 0);
 
-        return entryDiff == (int64)eventDiff.lo ? ""
+        return entryDiff == asI64(eventDiff) ? ""
                                       : "Account diff does not match events";
     }
     case TRUSTLINE:
@@ -175,7 +179,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.trustLine().balance : 0) -
                          (previous ? previous->data.trustLine().balance : 0);
 
-        return entryDiff == (int64) eventDiff.lo ? ""
+        return entryDiff == asI64(eventDiff) ? ""
                                       : "Trustline diff does not match events";
     }
     case OFFER:
@@ -192,7 +196,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
             (current ? current->data.claimableBalance().amount : 0) -
             (previous ? previous->data.claimableBalance().amount : 0);
 
-        return entryDiff == (int64) eventDiff.lo
+        return entryDiff == asI64(eventDiff)
                    ? ""
                    : "ClaimableBalance diff does not match events";
     }
@@ -219,7 +223,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto eventADiff = consumeAmount(lk, assetA, agg.mEventAmounts);
         auto eventBDiff = consumeAmount(lk, assetB, agg.mEventAmounts);
 
-        return entryADiff == (int64) eventADiff.lo && entryBDiff == (int64) eventBDiff.lo
+        return entryADiff == asI64(eventADiff) && entryBDiff == asI64(eventBDiff)
                    ? ""
                    : "LiquidityPool diff does not match events";
     }
