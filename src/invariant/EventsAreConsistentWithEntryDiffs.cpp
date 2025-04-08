@@ -74,6 +74,7 @@ THE SOFTWARE.
 #include <locale>
 #include <string>
 #include <type_traits>
+#include "rust/RustBridge.h"
 
 #ifndef __BYTE_ORDER__
 #error __BYTE_ORDER__ not defined
@@ -840,23 +841,34 @@ using large_int::int128_t;
 namespace stellar
 {
 
+static const CxxI128 I128ZERO{0, 0};
+
 struct AggregatedEvents
 {
-    mutable UnorderedMap<LedgerKey, UnorderedMap<Asset, int128_t>>
+    mutable UnorderedMap<LedgerKey, UnorderedMap<Asset, CxxI128>>
         mEventAmounts;
     UnorderedMap<Hash, Asset> mStellarAssetContractIDs;
+
+    void addAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount);
+
+    void subtractAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount);
 };
 
-static int128_t
+void AggregatedEvents::addAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount) {
+    mEventAmounts[lk][asset] = rust_bridge::i128_add(mEventAmounts[lk][asset], amount);
+}
+
+void AggregatedEvents::subtractAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount) {
+    mEventAmounts[lk][asset] = rust_bridge::i128_sub(mEventAmounts[lk][asset], amount);
+}
+
+static CxxI128
 getAmountFromData(SCVal const& data)
 {
-    int128_t amount = 0;
     if (data.type() == SCV_I128)
     {
         auto const& amountVal = data.i128();
-        amount = amountVal.hi;
-        amount <<= 64;
-        amount |= amountVal.lo;
+        return CxxI128{amountVal.hi, amountVal.lo};
     }
     else if (data.type() == SCV_MAP && data.map())
     {
@@ -866,20 +878,18 @@ getAmountFromData(SCVal const& data)
             if (entry.key.type() == SCV_SYMBOL && entry.key.sym() == "amount" &&
                 entry.val.type() == SCV_I128)
             {
-                amount = entry.val.i128().hi;
-                amount <<= 64;
-                amount |= entry.val.i128().lo;
+                auto const& amountVal = entry.val.i128();
+                return CxxI128{amountVal.hi, amountVal.lo};
             }
         }
     }
-
-    return amount;
+    return I128ZERO;
 }
 
-static int128_t
+static CxxI128
 consumeAmount(
     LedgerKey const& lk, Asset const& asset,
-    UnorderedMap<LedgerKey, UnorderedMap<Asset, int128_t>>& eventAmounts)
+    UnorderedMap<LedgerKey, UnorderedMap<Asset, CxxI128>>& eventAmounts)
 {
     // If the key is ContractData, then it is a balance entry. We need to
     // convert it to the ledger key for the address that the balance belongs
@@ -889,20 +899,20 @@ consumeAmount(
     {
         if (lk.contractData().key.type() != SCV_VEC)
         {
-            return 0;
+            return I128ZERO;
         }
 
         auto const& vec = lk.contractData().key.vec();
         if (!vec || vec->size() != 2)
         {
-            return 0;
+            return I128ZERO;
         }
 
         auto const& addr = vec->at(1);
 
         if (addr.type() != SCV_ADDRESS)
         {
-            return 0;
+            return I128ZERO;
         }
 
         ledgerKeyToLookup = addressToLedgerKey(addr.address());
@@ -915,17 +925,17 @@ consumeAmount(
     auto lkAssetMapIt = eventAmounts.find(ledgerKeyToLookup);
     if (lkAssetMapIt == eventAmounts.end())
     {
-        return 0;
+        return I128ZERO;
     }
 
     auto& lkAssetMap = lkAssetMapIt->second;
     auto assetAmountIt = lkAssetMap.find(asset);
     if (assetAmountIt == lkAssetMap.end())
     {
-        return 0;
+        return I128ZERO;
     }
 
-    int128_t res = assetAmountIt->second;
+    auto res = assetAmountIt->second;
 
     // Now remove this value from the map
     lkAssetMap.erase(assetAmountIt);
@@ -954,7 +964,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.account().balance : 0) -
                          (previous ? previous->data.account().balance : 0);
 
-        return entryDiff == eventDiff ? ""
+        return entryDiff == (int64)eventDiff.lo ? ""
                                       : "Account diff does not match events";
     }
     case TRUSTLINE:
@@ -991,7 +1001,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.trustLine().balance : 0) -
                          (previous ? previous->data.trustLine().balance : 0);
 
-        return entryDiff == eventDiff ? ""
+        return entryDiff == (int64) eventDiff.lo ? ""
                                       : "Trustline diff does not match events";
     }
     case OFFER:
@@ -1008,7 +1018,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
             (current ? current->data.claimableBalance().amount : 0) -
             (previous ? previous->data.claimableBalance().amount : 0);
 
-        return entryDiff == eventDiff
+        return entryDiff == (int64) eventDiff.lo
                    ? ""
                    : "ClaimableBalance diff does not match events";
     }
@@ -1035,7 +1045,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto eventADiff = consumeAmount(lk, assetA, agg.mEventAmounts);
         auto eventBDiff = consumeAmount(lk, assetB, agg.mEventAmounts);
 
-        return entryADiff == eventADiff && entryBDiff == eventBDiff
+        return entryADiff == (int64) eventADiff.lo && entryBDiff == (int64) eventBDiff.lo
                    ? ""
                    : "LiquidityPool diff does not match events";
     }
@@ -1058,10 +1068,10 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
 
         auto const& asset = assetIt->second;
 
-        auto getAmount = [](LedgerEntry const* entry) -> int128_t {
+        auto getAmount = [](LedgerEntry const* entry) -> CxxI128 {
             if (!entry)
             {
-                return 0;
+                return I128ZERO;
             }
 
             // Make sure this is the balance entry and not an allowance
@@ -1069,12 +1079,12 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
             if (dataKey.type() != SCV_VEC || !dataKey.vec() ||
                 dataKey.vec()->size() != 2)
             {
-                return 0;
+                return I128ZERO;
             }
             auto const& name = dataKey.vec()->at(0);
             if (name.type() != SCV_SYMBOL || name.sym() != "Balance")
             {
-                return 0;
+                return I128ZERO;
             }
 
             // The amount should be the first entry in the SCMap
@@ -1084,12 +1094,11 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
                 auto const& amountEntry = val.map()->at(0);
                 return getAmountFromData(amountEntry.val);
             }
-            return 0;
+            return I128ZERO;
         };
 
         auto eventDiff = consumeAmount(lk, asset, agg.mEventAmounts);
-        auto entryDiff = getAmount(current) - getAmount(previous);
-
+        auto entryDiff = rust_bridge::i128_sub(getAmount(current), getAmount(previous));
         return entryDiff == eventDiff
                    ? ""
                    : "ContractData diff does not match events";
@@ -1176,8 +1185,8 @@ aggregateEventDiffs(Hash const& networkID,
 
             // If the events are sane, we should never overflow.
             // TODO: Handle the overflow case anyways?
-            res.mEventAmounts[fromLk][asset] -= amount;
-            res.mEventAmounts[toLk][asset] += amount;
+            res.subtractAssetBalance(fromLk, asset, amount);
+            res.addAssetBalance(toLk, asset, amount);
         }
         else if (eventNameVal.sym() == "mint")
         {
@@ -1190,7 +1199,7 @@ aggregateEventDiffs(Hash const& networkID,
 
             auto toLk = addressToLedgerKey(toVal.address());
             auto amount = getAmountFromData(event.body.v0().data);
-            res.mEventAmounts[toLk][asset] += amount;
+            res.addAssetBalance(toLk, asset, amount);
         }
         else if (eventNameVal.sym() == "burn" ||
                  eventNameVal.sym() == "clawback")
@@ -1204,7 +1213,7 @@ aggregateEventDiffs(Hash const& networkID,
 
             auto fromLk = addressToLedgerKey(fromVal.address());
             auto amount = getAmountFromData(event.body.v0().data);
-            res.mEventAmounts[fromLk][asset] -= amount;
+            res.subtractAssetBalance(fromLk, asset, amount);
         }
     }
     return res;
@@ -1253,7 +1262,7 @@ EventsAreConsistentWithEntryDiffs::checkOnOperationApply(
     {
         for (auto const& kvp2 : kvp.second)
         {
-            if (kvp2.second != 0)
+            if (kvp2.second != I128ZERO)
             {
                 return "Some event diffs not consumed";
             }
