@@ -7,10 +7,10 @@
 #include "invariant/InvariantManager.h"
 #include "ledger/LedgerTxn.h"
 #include "main/Application.h"
+#include "rust/RustBridge.h"
 #include "util/GlobalChecks.h"
 #include <fmt/format.h>
 #include <numeric>
-#include "rust/RustBridge.h"
 
 namespace stellar
 {
@@ -19,25 +19,30 @@ static const CxxI128 I128ZERO{0, 0};
 
 struct AggregatedEvents
 {
-    mutable UnorderedMap<LedgerKey, UnorderedMap<Asset, CxxI128>>
-        mEventAmounts;
+    mutable UnorderedMap<LedgerKey, UnorderedMap<Asset, CxxI128>> mEventAmounts;
     UnorderedMap<Hash, Asset> mStellarAssetContractIDs;
 
-    void addAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount);
+    void addAssetBalance(LedgerKey const& lk, Asset const& asset,
+                         CxxI128 const& amount);
 
-    void subtractAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount);
+    void subtractAssetBalance(LedgerKey const& lk, Asset const& asset,
+                              CxxI128 const& amount);
 };
 
-void AggregatedEvents::addAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount) {
-    mEventAmounts[lk][asset] = rust_bridge::i128_add(mEventAmounts[lk][asset], amount);
+void
+AggregatedEvents::addAssetBalance(LedgerKey const& lk, Asset const& asset,
+                                  CxxI128 const& amount)
+{
+    mEventAmounts[lk][asset] =
+        rust_bridge::i128_add(mEventAmounts[lk][asset], amount);
 }
 
-void AggregatedEvents::subtractAssetBalance(LedgerKey const& lk, Asset const& asset, CxxI128 const& amount) {
-    mEventAmounts[lk][asset] = rust_bridge::i128_sub(mEventAmounts[lk][asset], amount);
-}
-
-static int64 asI64(CxxI128 const& val) {
-    return static_cast<int64>(val.lo);
+void
+AggregatedEvents::subtractAssetBalance(LedgerKey const& lk, Asset const& asset,
+                                       CxxI128 const& amount)
+{
+    mEventAmounts[lk][asset] =
+        rust_bridge::i128_sub(mEventAmounts[lk][asset], amount);
 }
 
 static CxxI128
@@ -142,8 +147,9 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.account().balance : 0) -
                          (previous ? previous->data.account().balance : 0);
 
-        return entryDiff == asI64(eventDiff) ? ""
-                                      : "Account diff does not match events";
+        return rust_bridge::i128_from_i64(entryDiff) == eventDiff
+                   ? ""
+                   : "Account diff does not match events";
     }
     case TRUSTLINE:
     {
@@ -179,8 +185,9 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto entryDiff = (current ? current->data.trustLine().balance : 0) -
                          (previous ? previous->data.trustLine().balance : 0);
 
-        return entryDiff == asI64(eventDiff) ? ""
-                                      : "Trustline diff does not match events";
+        return rust_bridge::i128_from_i64(entryDiff) == eventDiff
+                   ? ""
+                   : "Trustline diff does not match events";
     }
     case OFFER:
         break;
@@ -196,7 +203,7 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
             (current ? current->data.claimableBalance().amount : 0) -
             (previous ? previous->data.claimableBalance().amount : 0);
 
-        return entryDiff == asI64(eventDiff)
+        return rust_bridge::i128_from_i64(entryDiff) == eventDiff
                    ? ""
                    : "ClaimableBalance diff does not match events";
     }
@@ -223,7 +230,8 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         auto eventADiff = consumeAmount(lk, assetA, agg.mEventAmounts);
         auto eventBDiff = consumeAmount(lk, assetB, agg.mEventAmounts);
 
-        return entryADiff == asI64(eventADiff) && entryBDiff == asI64(eventBDiff)
+        return rust_bridge::i128_from_i64(entryADiff) == eventADiff &&
+                       rust_bridge::i128_from_i64(entryBDiff) == eventBDiff
                    ? ""
                    : "LiquidityPool diff does not match events";
     }
@@ -276,7 +284,8 @@ calculateDeltaBalance(AggregatedEvents const& agg, LedgerEntry const* current,
         };
 
         auto eventDiff = consumeAmount(lk, asset, agg.mEventAmounts);
-        auto entryDiff = rust_bridge::i128_sub(getAmount(current), getAmount(previous));
+        auto entryDiff =
+            rust_bridge::i128_sub(getAmount(current), getAmount(previous));
         return entryDiff == eventDiff
                    ? ""
                    : "ContractData diff does not match events";

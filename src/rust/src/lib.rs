@@ -273,6 +273,8 @@ mod rust_bridge {
         fn i128_add(lhs: &CxxI128, rhs: &CxxI128) -> Result<CxxI128>;
 
         fn i128_sub(lhs: &CxxI128, rhs: &CxxI128) -> Result<CxxI128>;
+
+        fn i128_from_i64(val: i64) -> Result<CxxI128>;
     }
 
     // And the extern "C++" block declares C++ stuff we're going to import to
@@ -1046,7 +1048,7 @@ pub(crate) fn i128_add(
     let rhs: i128 = i128_from_pieces(rhs.hi, rhs.lo);
     let res = lhs + rhs;
     Ok(CxxI128 {
-        hi: i128_hi(res.clone()),
+        hi: i128_hi(res),
         lo: i128_lo(res),
     })
 }
@@ -1060,7 +1062,16 @@ pub(crate) fn i128_sub(
     let rhs: i128 = i128_from_pieces(rhs.hi, rhs.lo);
     let res = lhs - rhs;
     Ok(CxxI128 {
-        hi: i128_hi(res.clone()),
+        hi: i128_hi(res),
+        lo: i128_lo(res),
+    })
+}
+
+pub(crate) fn i128_from_i64(val: i64) -> Result<CxxI128, Box<dyn std::error::Error>> {
+    use soroban_curr::soroban_env_host::xdr::int128_helpers::{i128_hi, i128_lo};
+    let res = i128::from(val);
+    Ok(CxxI128 {
+        hi: i128_hi(res),
         lo: i128_lo(res),
     })
 }
