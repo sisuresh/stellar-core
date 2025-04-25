@@ -127,6 +127,15 @@ TransactionTestFrame::processPostApply(AppConnector& app,
     mTransactionFrame->processPostApply(app, ltx, meta, mTransactionTxResult);
 }
 
+LedgerEntryChanges
+TransactionTestFrame::processPostTxApplyFeeProcessing(
+    AppConnector& app, AbstractLedgerTxn& ltx,
+    MutableTxResultPtr txResult) const
+{
+    return mTransactionFrame->processPostTxApplyFeeProcessing(app, ltx,
+                                                              txResult);
+}
+
 bool
 TransactionTestFrame::checkValidForTesting(AppConnector& app,
                                            AbstractLedgerTxn& ltxOuter,
@@ -288,6 +297,38 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
                                            LedgerKeyMeter* lkMeter) const
 {
     mTransactionFrame->insertKeysForTxApply(keys, lkMeter);
+}
+
+void
+TransactionTestFrame::preloadEntriesForParallelApply(
+    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
+    ThreadEntryMap& entryMap, MutableTxResultPtr txResult) const
+{
+    mTransactionFrame->preloadEntriesForParallelApply(app, sorobanMetrics, ltx,
+                                                      entryMap, txResult);
+}
+
+void
+TransactionTestFrame::preParallelApply(AppConnector& app,
+                                       AbstractLedgerTxn& ltx,
+                                       TransactionMetaFrame& meta,
+                                       MutableTxResultPtr resPayload) const
+{
+    mTransactionFrame->preParallelApply(app, ltx, meta, resPayload);
+}
+
+ParallelTxReturnVal
+TransactionTestFrame::parallelApply(
+    AppConnector& app,
+    ThreadEntryMap const& entryMap, // Must not be shared between threads!,
+    Config const& config, SorobanNetworkConfig const& sorobanConfig,
+    ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
+    TxEffects& effects) const
+{
+    return mTransactionFrame->parallelApply(
+        app, entryMap, config, sorobanConfig, ledgerInfo, resPayload,
+        sorobanMetrics, txPrngSeed, effects);
 }
 
 MutableTxResultPtr

@@ -213,6 +213,7 @@ class TransactionFrame : public TransactionFrameBase
         AppConnector& app, LedgerSnapshot const& ls, SequenceNumber current,
         bool chargeFee, uint64_t lowerBoundCloseTimeOffset,
         uint64_t upperBoundCloseTimeOffset) const;
+
     MutableTxResultPtr
     checkValid(AppConnector& app, LedgerSnapshot const& ls,
                SequenceNumber current, uint64_t lowerBoundCloseTimeOffset,
@@ -238,6 +239,27 @@ class TransactionFrame : public TransactionFrameBase
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
 
+    void preloadEntriesForParallelApply(
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
+        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
+        MutableTxResultPtr txResult) const override;
+
+    void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          MutableTxResultPtr resPayload, bool chargeFee) const;
+
+    void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
+                          TransactionMetaFrame& meta,
+                          MutableTxResultPtr resPayload) const override;
+
+    ParallelTxReturnVal parallelApply(
+        AppConnector& app,
+        ThreadEntryMap const& entryMap, // Must not be shared between threads!,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
+        ParallelLedgerInfo const& ledgerInfo, MutableTxResultPtr resPayload,
+        SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
+        TxEffects& effects) const override;
+
     // apply this transaction to the current ledger
     // returns true if successfully applied
     bool apply(AppConnector& app, AbstractLedgerTxn& ltx,
@@ -255,13 +277,18 @@ class TransactionFrame : public TransactionFrameBase
                           TransactionMetaFrame& meta,
                           MutableTxResultPtr txResult) const override;
 
+    // After all transactions have been applied. Currently only used
+    // for refunds in parallel Soroban.
+    LedgerEntryChanges
+    processPostTxApplyFeeProcessing(AppConnector& app, AbstractLedgerTxn& ltx,
+                                    MutableTxResultPtr txResult) const override;
+
     // TransactionFrame specific function that allows fee bumps to forward a
-    // different account for the refund. It also returns the refund so
-    // FeeBumpTransactionFrame can adjust feeCharged.
-    int64_t processRefund(AppConnector& app, AbstractLedgerTxn& ltx,
-                          TransactionMetaFrame& meta,
-                          AccountID const& feeSource,
-                          MutableTransactionResultBase& txResult) const;
+    // different account for the refund.
+    LedgerEntryChanges
+    processRefund(AppConnector& app, AbstractLedgerTxn& ltx,
+                  AccountID const& feeSource,
+                  MutableTransactionResultBase& txResult) const;
 
     // version without meta
     bool apply(AppConnector& app, AbstractLedgerTxn& ltx,
