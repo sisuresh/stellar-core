@@ -24,4 +24,84 @@ TransactionFrameBase::makeTransactionFromWire(Hash const& networkID,
         abort();
     }
 }
+
+ApplyStage::Iterator::Iterator(std::vector<Thread> const& threads,
+                               size_t clusterIndex)
+    : mThreads(threads), mClusterIndex(clusterIndex)
+{
+}
+
+TxBundle const&
+ApplyStage::Iterator::operator*() const
+{
+
+    if (mClusterIndex >= mThreads.size() ||
+        mTxIndex >= mThreads[mClusterIndex].size())
+    {
+        throw std::runtime_error("TxPhase iterator out of bounds");
+    }
+    return mThreads[mClusterIndex][mTxIndex];
+}
+
+ApplyStage::Iterator&
+ApplyStage::Iterator::operator++()
+{
+    if (mClusterIndex >= mThreads.size())
+    {
+        throw std::runtime_error("TxPhase iterator out of bounds");
+    }
+    ++mTxIndex;
+    if (mTxIndex >= mThreads[mClusterIndex].size())
+    {
+        mTxIndex = 0;
+        ++mClusterIndex;
+    }
+    return *this;
+}
+
+ApplyStage::Iterator
+ApplyStage::Iterator::operator++(int)
+{
+    auto it = *this;
+    ++(*this);
+    return it;
+}
+
+bool
+ApplyStage::Iterator::operator==(Iterator const& other) const
+{
+    return mClusterIndex == other.mClusterIndex && mTxIndex == other.mTxIndex &&
+           &mThreads == &other.mThreads;
+}
+
+bool
+ApplyStage::Iterator::operator!=(Iterator const& other) const
+{
+    return !(*this == other);
+}
+
+ApplyStage::Iterator
+ApplyStage::begin() const
+{
+    return ApplyStage::Iterator(mThreads, 0);
+}
+
+ApplyStage::Iterator
+ApplyStage::end() const
+{
+    return ApplyStage::Iterator(mThreads, mThreads.size());
+}
+
+Thread const&
+ApplyStage::getThread(size_t i) const
+{
+    return mThreads.at(i);
+}
+
+size_t
+ApplyStage::numThreads() const
+{
+    return mThreads.size();
+}
+
 }

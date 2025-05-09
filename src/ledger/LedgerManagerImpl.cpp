@@ -1767,18 +1767,15 @@ LedgerManagerImpl::getReadWriteKeysForStage(ApplyStage const& stage)
 {
     UnorderedSet<LedgerKey> res;
 
-    for (auto const& txs : stage)
+    for (auto const& txBundle : stage)
     {
-        for (auto const& txBundle : txs)
+        for (auto const& lk :
+             txBundle.getTx()->sorobanResources().footprint.readWrite)
         {
-            for (auto const& lk :
-                 txBundle.getTx()->sorobanResources().footprint.readWrite)
+            res.emplace(lk);
+            if (isSorobanEntry(lk))
             {
-                res.emplace(lk);
-                if (isSorobanEntry(lk))
-                {
-                    res.emplace(getTTLKey(lk));
-                }
+                res.emplace(getTTLKey(lk));
             }
         }
     }
@@ -1985,17 +1982,13 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                                      ApplyStage const& stage,
                                      Hash const& sorobanBasePrngSeed)
 {
-    for (auto const& thread : stage)
+    for (auto const& txBundle : stage)
     {
-        for (auto const& txBundle : thread)
-        {
-            // This can mark a tx as failed due to validation.
-            // Make sure results are checked.
-            txBundle.getTx()->preParallelApply(
-                app, ltx, txBundle.getEffects().getMeta(),
-                txBundle.getResPayload(),
-                txBundle.getEffects().getTxEventManager());
-        }
+        // This can mark a tx as failed due to validation.
+        // Make sure results are checked.
+        txBundle.getTx()->preParallelApply(
+            app, ltx, txBundle.getEffects().getMeta(), txBundle.getResPayload(),
+            txBundle.getEffects().getTxEventManager());
     }
 
     auto const& config = app.getConfig();
@@ -2007,9 +2000,9 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
     auto ledgerInfo = getParallelLedgerInfo(app, ltx);
     std::vector<std::thread> threads;
-    for (size_t i = 0; i < stage.size(); ++i)
+    for (size_t i = 0; i < stage.numThreads(); ++i)
     {
-        auto const& thread = stage.at(i);
+        auto const& thread = stage.getThread(i);
 
         auto entryMapPtr = collectEntries(app, ltx, thread);
 
@@ -2049,46 +2042,42 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
             }
         }
     }
-    for (auto const& thread : stage)
+    for (auto const& txBundle : stage)
     {
-        for (auto const& txBundle : thread)
+        // First check the invariants
+        if (txBundle.getResPayload()->isSuccess())
         {
-            // First check the invariants
-            if (txBundle.getResPayload()->isSuccess())
+            try
             {
-                try
-                {
-                    // Soroban transactions don't have access to the ledger
-                    // header, so they can't modify it. Pass in the current
-                    // header as both current and previous.
-                    txBundle.getEffects().getDelta().header.current =
-                        ltxInner.loadHeader().current();
-                    txBundle.getEffects().getDelta().header.previous =
-                        ltxInner.loadHeader().current();
-                    app.checkOnOperationApply(
-                        txBundle.getTx()->getRawOperations().at(0),
-                        txBundle.getResPayload()->getOpResultAt(0),
-                        txBundle.getEffects().getDelta(),
-                        txBundle.getEffects().getMeta().getOpEventsAtOp(0));
-                }
-                catch (InvariantDoesNotHold& e)
-                {
-                    printErrorAndAbort(
-                        "Invariant failure while applying operations: ",
-                        e.what());
-                }
+                // Soroban transactions don't have access to the ledger
+                // header, so they can't modify it. Pass in the current
+                // header as both current and previous.
+                txBundle.getEffects().getDelta().header.current =
+                    ltxInner.loadHeader().current();
+                txBundle.getEffects().getDelta().header.previous =
+                    ltxInner.loadHeader().current();
+                app.checkOnOperationApply(
+                    txBundle.getTx()->getRawOperations().at(0),
+                    txBundle.getResPayload()->getOpResultAt(0),
+                    txBundle.getEffects().getDelta(),
+                    txBundle.getEffects().getMeta().getOpEventsAtOp(0));
             }
+            catch (InvariantDoesNotHold& e)
+            {
+                printErrorAndAbort(
+                    "Invariant failure while applying operations: ", e.what());
+            }
+        }
 
-            // We only increase the internal-error metric count if the
-            // ledger is a newer version.
-            if (txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR &&
-                ledgerInfo.getLedgerVersion() >=
-                    config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
-            {
-                auto& internalErrorCounter = app.getMetrics().NewCounter(
-                    {"ledger", "transaction", "internal-error"});
-                internalErrorCounter.inc();
-            }
+        // We only increase the internal-error metric count if the
+        // ledger is a newer version.
+        if (txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR &&
+            ledgerInfo.getLedgerVersion() >=
+                config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
+        {
+            auto& internalErrorCounter = app.getMetrics().NewCounter(
+                {"ledger", "transaction", "internal-error"});
+            internalErrorCounter.inc();
         }
     }
 
@@ -2150,15 +2139,12 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
     // update an account entry that was updated during apply.
 
     // TODO: Change this so the refund is observable after a transaction.
-    for (auto const& thread : stage)
+    for (auto const& txBundle : stage)
     {
-        for (auto const& txBundle : thread)
-        {
-            txBundle.getTx()->processPostApply(
-                mApp.getAppConnector(), ltxInner,
-                txBundle.getEffects().getMeta(), txBundle.getResPayload(),
-                txBundle.getEffects().getTxEventManager());
-        }
+        txBundle.getTx()->processPostApply(
+            mApp.getAppConnector(), ltxInner, txBundle.getEffects().getMeta(),
+            txBundle.getResPayload(),
+            txBundle.getEffects().getTxEventManager());
     }
 
     ltxInner.commit();
@@ -2221,18 +2207,18 @@ LedgerManagerImpl::applyTransactions(
             auto txSetStages = phase.getParallelStages();
 
             std::vector<ApplyStage> applyStages;
-            applyStages.resize(txSetStages.size());
 
             for (size_t i = 0; i < txSetStages.size(); ++i)
             {
                 auto const& stage = txSetStages[i];
-                auto& applyStage = applyStages[i];
-                applyStage.resize(stage.size());
+
+                std::vector<Thread> applyThreads;
 
                 for (size_t j = 0; j < stage.size(); ++j)
                 {
                     auto const& thread = stage[j];
-                    auto& applyThread = applyStage[j];
+                    Thread applyThread;
+                    applyThread.reserve(thread.size());
 
                     for (auto const& tx : thread)
                     {
@@ -2243,7 +2229,9 @@ LedgerManagerImpl::applyTransactions(
                             mApp.getNetworkID(),
                             ltx.loadHeader().current().ledgerVersion, num);
                     }
+                    applyThreads.emplace_back(std::move(applyThread));
                 }
+                applyStages.emplace_back(std::move(applyThreads));
             }
 
             applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
@@ -2251,52 +2239,49 @@ LedgerManagerImpl::applyTransactions(
 
             for (auto const& stage : applyStages)
             {
-                for (auto const& thread : stage)
+                for (auto const& txBundle : stage)
                 {
-                    for (auto const& txBundle : thread)
+                    // Push the fee event meta
+                    xdr::xvector<ContractEvent> feeEvents;
+                    txBundle.getEffects().getTxEventManager().flushTxEvents(
+                        feeEvents);
+                    txBundle.getEffects().getMeta().pushTxContractEvents(
+                        std::move(feeEvents));
+
+                    TransactionResultPair results;
+                    results.transactionHash =
+                        txBundle.getTx()->getContentsHash();
+                    results.result = txBundle.getResPayload()->getResult();
+                    if (results.result.result.code() ==
+                        TransactionResultCode::txSUCCESS)
                     {
-                        // Push the fee event meta
-                        xdr::xvector<ContractEvent> feeEvents;
-                        txBundle.getEffects().getTxEventManager().flushTxEvents(
-                            feeEvents);
-                        txBundle.getEffects().getMeta().pushTxContractEvents(
-                            std::move(feeEvents));
-
-                        TransactionResultPair results;
-                        results.transactionHash =
-                            txBundle.getTx()->getContentsHash();
-                        results.result = txBundle.getResPayload()->getResult();
-                        if (results.result.result.code() ==
-                            TransactionResultCode::txSUCCESS)
+                        if (txBundle.getTx()->isSoroban())
                         {
-                            if (txBundle.getTx()->isSoroban())
-                            {
-                                ++sorobanTxSucceeded;
-                            }
-                            ++txSucceeded;
+                            ++sorobanTxSucceeded;
                         }
-                        else
+                        ++txSucceeded;
+                    }
+                    else
+                    {
+                        if (txBundle.getTx()->isSoroban())
                         {
-                            if (txBundle.getTx()->isSoroban())
-                            {
-                                ++sorobanTxFailed;
-                            }
-                            ++txFailed;
+                            ++sorobanTxFailed;
                         }
+                        ++txFailed;
+                    }
 
-                        txResultSet.results.emplace_back(results);
+                    txResultSet.results.emplace_back(results);
 
 #ifdef BUILD_TESTS
-                        mLastLedgerTxMeta.push_back(
-                            txBundle.getEffects().getMeta());
+                    mLastLedgerTxMeta.push_back(
+                        txBundle.getEffects().getMeta());
 #endif
 
-                        if (ledgerCloseMeta)
-                        {
-                            ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                                txBundle.getEffects().getMeta().getXDR(),
-                                std::move(results), txBundle.getTxNum());
-                        }
+                    if (ledgerCloseMeta)
+                    {
+                        ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+                            txBundle.getEffects().getMeta().getXDR(),
+                            std::move(results), txBundle.getTxNum());
                     }
                 }
             }

@@ -212,8 +212,49 @@ class TxBundle
 };
 
 typedef std::vector<TxBundle> Thread;
-typedef std::vector<Thread> ApplyStage;
 typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
+
+class ApplyStage
+{
+  public:
+    ApplyStage(std::vector<Thread>&& threads) : mThreads(std::move(threads))
+    {
+    }
+
+    class Iterator
+    {
+      public:
+        using value_type = TxBundle;
+        using difference_type = std::ptrdiff_t;
+        using pointer = value_type*;
+        using reference = value_type&;
+        using iterator_category = std::forward_iterator_tag;
+
+        TxBundle const& operator*() const;
+
+        Iterator& operator++();
+        Iterator operator++(int);
+
+        bool operator==(Iterator const& other) const;
+        bool operator!=(Iterator const& other) const;
+
+      private:
+        friend class ApplyStage;
+
+        Iterator(std::vector<Thread> const& threads, size_t threadIndex);
+        std::vector<Thread> const& mThreads;
+        size_t mClusterIndex = 0;
+        size_t mTxIndex = 0;
+    };
+    Iterator begin() const;
+    Iterator end() const;
+
+    Thread const& getThread(size_t i) const;
+    size_t numThreads() const;
+
+  private:
+    std::vector<Thread> mThreads;
+};
 
 class TransactionFrameBase
 {
