@@ -211,13 +211,13 @@ class TxBundle
     std::unique_ptr<TxEffects> mEffects;
 };
 
-typedef std::vector<TxBundle> Thread;
+typedef std::vector<TxBundle> Cluster;
 typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
 
 class ApplyStage
 {
   public:
-    ApplyStage(std::vector<Thread>&& threads) : mThreads(std::move(threads))
+    ApplyStage(std::vector<Cluster>&& clusters) : mClusters(std::move(clusters))
     {
     }
 
@@ -241,19 +241,19 @@ class ApplyStage
       private:
         friend class ApplyStage;
 
-        Iterator(std::vector<Thread> const& threads, size_t threadIndex);
-        std::vector<Thread> const& mThreads;
+        Iterator(std::vector<Cluster> const& clusters, size_t clusterIndex);
+        std::vector<Cluster> const& mClusters;
         size_t mClusterIndex = 0;
         size_t mTxIndex = 0;
     };
     Iterator begin() const;
     Iterator end() const;
 
-    Thread const& getThread(size_t i) const;
-    size_t numThreads() const;
+    Cluster const& getCluster(size_t i) const;
+    size_t numClusters() const;
 
   private:
-    std::vector<Thread> mThreads;
+    std::vector<Cluster> mClusters;
 };
 
 class TransactionFrameBase

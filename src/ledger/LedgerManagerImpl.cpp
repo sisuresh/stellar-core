@@ -1784,11 +1784,11 @@ LedgerManagerImpl::getReadWriteKeysForStage(ApplyStage const& stage)
 
 std::unique_ptr<ThreadEntryMap>
 LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
-                                  Thread const& txs)
+                                  Cluster const& cluster)
 {
     std::unique_ptr<ThreadEntryMap> entryMap =
         std::make_unique<ThreadEntryMap>();
-    for (auto const& txBundle : txs)
+    for (auto const& txBundle : cluster)
     {
         if (txBundle.getResPayload()->isSuccess())
         {
@@ -1807,7 +1807,7 @@ LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
 std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
 LedgerManagerImpl::applyThread(AppConnector& app,
                                std::unique_ptr<ThreadEntryMap> entryMap,
-                               Thread const& thread, Config const& config,
+                               Cluster const& cluster, Config const& config,
                                SorobanNetworkConfig const& sorobanConfig,
                                ParallelLedgerInfo const& ledgerInfo,
                                Hash const& sorobanBasePrngSeed,
@@ -1818,7 +1818,7 @@ LedgerManagerImpl::applyThread(AppConnector& app,
     UnorderedMap<LedgerKey, uint32_t> readOnlyTtlExtensions;
 
     RestoredKeys threadRestoredKeys;
-    for (auto const& txBundle : thread)
+    for (auto const& txBundle : cluster)
     {
         // Apply timer
         auto txTime = mApplyState.mMetrics.mTransactionApply.TimeScope();
@@ -1999,32 +1999,26 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
         threadFutures;
 
     auto ledgerInfo = getParallelLedgerInfo(app, ltx);
-    std::vector<std::thread> threads;
-    for (size_t i = 0; i < stage.numThreads(); ++i)
+    for (size_t i = 0; i < stage.numClusters(); ++i)
     {
-        auto const& thread = stage.getThread(i);
+        auto const& cluster = stage.getCluster(i);
 
-        auto entryMapPtr = collectEntries(app, ltx, thread);
+        auto entryMapPtr = collectEntries(app, ltx, cluster);
 
         threadFutures.emplace_back(std::async(
             std::launch::async, &LedgerManagerImpl::applyThread, this,
-            std::ref(app), std::move(entryMapPtr), std::ref(thread), config,
+            std::ref(app), std::move(entryMapPtr), std::ref(cluster), config,
             sorobanConfig, std::ref(ledgerInfo), sorobanBasePrngSeed,
             std::ref(getSorobanMetrics())));
     }
 
-    for (auto& thread : threads)
-    {
-        thread.join();
-    }
-
     std::vector<RestoredKeys> threadRestoredKeys;
-    std::vector<std::unique_ptr<ThreadEntryMap>> entryMapsByThread;
+    std::vector<std::unique_ptr<ThreadEntryMap>> entryMapsByCluster;
     for (auto& restoredKeysFutures : threadFutures)
     {
         auto futureResult = restoredKeysFutures.get();
         threadRestoredKeys.emplace_back(futureResult.first);
-        entryMapsByThread.emplace_back(std::move(futureResult.second));
+        entryMapsByCluster.emplace_back(std::move(futureResult.second));
     }
 
     LedgerTxn ltxInner(ltx);
@@ -2083,7 +2077,7 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
     auto isInReadWriteSet = getReadWriteKeysForStage(stage);
 
-    for (auto const& threadEntryMap : entryMapsByThread)
+    for (auto const& threadEntryMap : entryMapsByCluster)
     {
         for (auto const& entry : *threadEntryMap)
         {
@@ -2212,26 +2206,26 @@ LedgerManagerImpl::applyTransactions(
             {
                 auto const& stage = txSetStages[i];
 
-                std::vector<Thread> applyThreads;
+                std::vector<Cluster> applyClusters;
 
                 for (size_t j = 0; j < stage.size(); ++j)
                 {
-                    auto const& thread = stage[j];
-                    Thread applyThread;
-                    applyThread.reserve(thread.size());
+                    auto const& cluster = stage[j];
+                    Cluster applyCluster;
+                    applyCluster.reserve(cluster.size());
 
-                    for (auto const& tx : thread)
+                    for (auto const& tx : cluster)
                     {
                         auto num = txNum++;
                         auto mutableTxResult = mutableTxResults.at(num);
-                        applyThread.emplace_back(
+                        applyCluster.emplace_back(
                             tx, mutableTxResult, mApp.getConfig(),
                             mApp.getNetworkID(),
                             ltx.loadHeader().current().ledgerVersion, num);
                     }
-                    applyThreads.emplace_back(std::move(applyThread));
+                    applyClusters.emplace_back(std::move(applyCluster));
                 }
-                applyStages.emplace_back(std::move(applyThreads));
+                applyStages.emplace_back(std::move(applyClusters));
             }
 
             applySorobanStages(mApp.getAppConnector(), ltx, applyStages,

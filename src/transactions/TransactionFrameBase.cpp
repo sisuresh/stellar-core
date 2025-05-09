@@ -25,9 +25,9 @@ TransactionFrameBase::makeTransactionFromWire(Hash const& networkID,
     }
 }
 
-ApplyStage::Iterator::Iterator(std::vector<Thread> const& threads,
+ApplyStage::Iterator::Iterator(std::vector<Cluster> const& clusters,
                                size_t clusterIndex)
-    : mThreads(threads), mClusterIndex(clusterIndex)
+    : mClusters(clusters), mClusterIndex(clusterIndex)
 {
 }
 
@@ -35,23 +35,23 @@ TxBundle const&
 ApplyStage::Iterator::operator*() const
 {
 
-    if (mClusterIndex >= mThreads.size() ||
-        mTxIndex >= mThreads[mClusterIndex].size())
+    if (mClusterIndex >= mClusters.size() ||
+        mTxIndex >= mClusters[mClusterIndex].size())
     {
         throw std::runtime_error("TxPhase iterator out of bounds");
     }
-    return mThreads[mClusterIndex][mTxIndex];
+    return mClusters[mClusterIndex][mTxIndex];
 }
 
 ApplyStage::Iterator&
 ApplyStage::Iterator::operator++()
 {
-    if (mClusterIndex >= mThreads.size())
+    if (mClusterIndex >= mClusters.size())
     {
         throw std::runtime_error("TxPhase iterator out of bounds");
     }
     ++mTxIndex;
-    if (mTxIndex >= mThreads[mClusterIndex].size())
+    if (mTxIndex >= mClusters[mClusterIndex].size())
     {
         mTxIndex = 0;
         ++mClusterIndex;
@@ -71,7 +71,7 @@ bool
 ApplyStage::Iterator::operator==(Iterator const& other) const
 {
     return mClusterIndex == other.mClusterIndex && mTxIndex == other.mTxIndex &&
-           &mThreads == &other.mThreads;
+           &mClusters == &other.mClusters;
 }
 
 bool
@@ -83,25 +83,25 @@ ApplyStage::Iterator::operator!=(Iterator const& other) const
 ApplyStage::Iterator
 ApplyStage::begin() const
 {
-    return ApplyStage::Iterator(mThreads, 0);
+    return ApplyStage::Iterator(mClusters, 0);
 }
 
 ApplyStage::Iterator
 ApplyStage::end() const
 {
-    return ApplyStage::Iterator(mThreads, mThreads.size());
+    return ApplyStage::Iterator(mClusters, mClusters.size());
 }
 
-Thread const&
-ApplyStage::getThread(size_t i) const
+Cluster const&
+ApplyStage::getCluster(size_t i) const
 {
-    return mThreads.at(i);
+    return mClusters.at(i);
 }
 
 size_t
-ApplyStage::numThreads() const
+ApplyStage::numClusters() const
 {
-    return mThreads.size();
+    return mClusters.size();
 }
 
 }

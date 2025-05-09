@@ -179,11 +179,11 @@ class LedgerManagerImpl : public LedgerManager
 
     std::unique_ptr<ThreadEntryMap> collectEntries(AppConnector& app,
                                                    AbstractLedgerTxn& ltx,
-                                                   Thread const& txs);
+                                                   Cluster const& cluster);
 
     std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>> applyThread(
         AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMapByCluster,
-        Thread const& thread, Config const& config,
+        Cluster const& cluster, Config const& config,
         SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo, Hash const& sorobanBasePrngSeed,
         SorobanMetrics& sorobanMetrics);
