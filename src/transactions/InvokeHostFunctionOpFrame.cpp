@@ -29,6 +29,7 @@
 #include "rust/RustBridge.h"
 #include "transactions/InvokeHostFunctionOpFrame.h"
 #include "transactions/MutableTransactionResult.h"
+#include "transactions/ParallelApplyUtils.h"
 #include <Tracy.hpp>
 #include <crypto/SHA.h>
 

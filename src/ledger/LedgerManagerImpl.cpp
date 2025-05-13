@@ -35,6 +35,7 @@
 #include "rust/RustBridge.h"
 #include "transactions/MutableTransactionResult.h"
 #include "transactions/OperationFrame.h"
+#include "transactions/ParallelApplyUtils.h"
 #include "transactions/TransactionFrameBase.h"
 #include "transactions/TransactionMetaFrame.h"
 #include "transactions/TransactionSQL.h"
@@ -1762,56 +1763,13 @@ LedgerManagerImpl::prefetchTransactionData(AbstractLedgerTxnParent& ltx,
     }
 }
 
-UnorderedSet<LedgerKey>
-LedgerManagerImpl::getReadWriteKeysForStage(ApplyStage const& stage)
-{
-    UnorderedSet<LedgerKey> res;
-
-    for (auto const& txBundle : stage)
-    {
-        for (auto const& lk :
-             txBundle.getTx()->sorobanResources().footprint.readWrite)
-        {
-            res.emplace(lk);
-            if (isSorobanEntry(lk))
-            {
-                res.emplace(getTTLKey(lk));
-            }
-        }
-    }
-    return res;
-}
-
-std::unique_ptr<ThreadEntryMap>
-LedgerManagerImpl::collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
-                                  Cluster const& cluster)
-{
-    std::unique_ptr<ThreadEntryMap> entryMap =
-        std::make_unique<ThreadEntryMap>();
-    for (auto const& txBundle : cluster)
-    {
-        if (txBundle.getResPayload()->isSuccess())
-        {
-            txBundle.getTx()->preloadEntriesForParallelApply(
-                app, getSorobanMetrics(), ltx, *entryMap,
-                txBundle.getResPayload(),
-                txBundle.getEffects()
-                    .getTxEventManager()
-                    .getDiagnosticEventsBuffer());
-        }
-    }
-
-    return entryMap;
-}
-
 std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
-LedgerManagerImpl::applyThread(AppConnector& app,
-                               std::unique_ptr<ThreadEntryMap> entryMap,
-                               Cluster const& cluster, Config const& config,
-                               SorobanNetworkConfig const& sorobanConfig,
-                               ParallelLedgerInfo const& ledgerInfo,
-                               Hash const& sorobanBasePrngSeed,
-                               SorobanMetrics& sorobanMetrics)
+LedgerManagerImpl::applyThread(
+    AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMap,
+    Cluster const& cluster, Config const& config,
+    SorobanNetworkConfig const& sorobanConfig,
+    std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
+    Hash const& sorobanBasePrngSeed, SorobanMetrics& sorobanMetrics)
 {
     // RO extensions should only be observed when the entry is modified, so
     // we accumulate the RO extensions until we need to apply them.
@@ -1863,7 +1821,7 @@ LedgerManagerImpl::applyThread(AppConnector& app,
         }
 
         auto res = txBundle.getTx()->parallelApply(
-            app, *entryMap, config, sorobanConfig, ledgerInfo,
+            app, *entryMap, config, sorobanConfig, *ledgerInfo,
             txBundle.getResPayload(), sorobanMetrics, txSubSeed,
             txBundle.getEffects());
 
@@ -1969,12 +1927,13 @@ LedgerManagerImpl::applyThread(AppConnector& app,
     return {threadRestoredKeys, std::move(entryMap)};
 }
 
-ParallelLedgerInfo
+std::shared_ptr<ParallelLedgerInfo const>
 getParallelLedgerInfo(AppConnector& app, AbstractLedgerTxn& ltx)
 {
     auto const& lh = ltx.loadHeader().current();
-    return {lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve,
-            lh.scpValue.closeTime, app.getNetworkID()};
+    return std::make_shared<ParallelLedgerInfo>(
+        lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve, lh.scpValue.closeTime,
+        app.getNetworkID());
 }
 
 void
@@ -2005,11 +1964,11 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
         auto entryMapPtr = collectEntries(app, ltx, cluster);
 
-        threadFutures.emplace_back(std::async(
-            std::launch::async, &LedgerManagerImpl::applyThread, this,
-            std::ref(app), std::move(entryMapPtr), std::ref(cluster), config,
-            sorobanConfig, std::ref(ledgerInfo), sorobanBasePrngSeed,
-            std::ref(getSorobanMetrics())));
+        threadFutures.emplace_back(
+            std::async(std::launch::async, &LedgerManagerImpl::applyThread,
+                       this, std::ref(app), std::move(entryMapPtr),
+                       std::ref(cluster), config, sorobanConfig, ledgerInfo,
+                       sorobanBasePrngSeed, std::ref(getSorobanMetrics())));
     }
 
     std::vector<RestoredKeys> threadRestoredKeys;
@@ -2066,7 +2025,7 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
         // We only increase the internal-error metric count if the
         // ledger is a newer version.
         if (txBundle.getResPayload()->getResultCode() == txINTERNAL_ERROR &&
-            ledgerInfo.getLedgerVersion() >=
+            ledgerInfo->getLedgerVersion() >=
                 config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
         {
             auto& internalErrorCounter = app.getMetrics().NewCounter(

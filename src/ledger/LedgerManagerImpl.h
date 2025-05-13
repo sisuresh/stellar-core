@@ -40,6 +40,7 @@ class Application;
 class Database;
 class LedgerTxnHeader;
 class BasicWork;
+class ParallelLedgerInfo;
 
 class LedgerManagerImpl : public LedgerManager
 {
@@ -175,18 +176,12 @@ class LedgerManagerImpl : public LedgerManager
         AbstractLedgerTxn& ltx,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
 
-    UnorderedSet<LedgerKey> getReadWriteKeysForStage(ApplyStage const& stage);
-
-    std::unique_ptr<ThreadEntryMap> collectEntries(AppConnector& app,
-                                                   AbstractLedgerTxn& ltx,
-                                                   Cluster const& cluster);
-
     std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>> applyThread(
         AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMapByCluster,
         Cluster const& cluster, Config const& config,
         SorobanNetworkConfig const& sorobanConfig,
-        ParallelLedgerInfo const& ledgerInfo, Hash const& sorobanBasePrngSeed,
-        SorobanMetrics& sorobanMetrics);
+        std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
+        Hash const& sorobanBasePrngSeed, SorobanMetrics& sorobanMetrics);
 
     void applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                            ApplyStage const& stage,

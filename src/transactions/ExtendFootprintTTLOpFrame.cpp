@@ -9,6 +9,7 @@
 #include "medida/meter.h"
 #include "medida/timer.h"
 #include "transactions/MutableTransactionResult.h"
+#include "transactions/ParallelApplyUtils.h"
 #include "util/GlobalChecks.h"
 #include <Tracy.hpp>
 

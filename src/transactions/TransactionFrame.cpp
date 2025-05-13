@@ -26,6 +26,7 @@
 #include "transactions/LumenEventReconciler.h"
 #include "transactions/MutableTransactionResult.h"
 #include "transactions/OperationMetaArray.h"
+#include "transactions/ParallelApplyUtils.h"
 #include "transactions/SignatureChecker.h"
 #include "transactions/SignatureUtils.h"
 #include "transactions/SponsorshipUtils.h"

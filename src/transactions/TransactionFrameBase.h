@@ -28,6 +28,7 @@ class OperationFrame;
 class TransactionFrame;
 class FeeBumpTransactionFrame;
 class AppConnector;
+class ParallelLedgerInfo;
 
 class MutableTransactionResultBase;
 using MutableTxResultPtr = std::shared_ptr<MutableTransactionResultBase>;
@@ -88,54 +89,6 @@ class ParallelTxReturnVal
     // This will contain a key for every entry modified by a transaction
     ModifiedEntryMap mModifiedEntryMap;
     RestoredKeys mRestoredKeys;
-};
-
-class ParallelLedgerInfo
-{
-
-  public:
-    ParallelLedgerInfo(uint32_t version, uint32_t seq, uint32_t reserve,
-                       TimePoint time, Hash id)
-        : ledgerVersion(version)
-        , ledgerSeq(seq)
-        , baseReserve(reserve)
-        , closeTime(time)
-        , networkID(id)
-    {
-    }
-
-    uint32_t
-    getLedgerVersion() const
-    {
-        return ledgerVersion;
-    }
-    uint32_t
-    getLedgerSeq() const
-    {
-        return ledgerSeq;
-    }
-    uint32_t
-    getBaseReserve() const
-    {
-        return baseReserve;
-    }
-    TimePoint
-    getCloseTime() const
-    {
-        return closeTime;
-    }
-    Hash
-    getNetworkID() const
-    {
-        return networkID;
-    }
-
-  private:
-    uint32_t ledgerVersion;
-    uint32_t ledgerSeq;
-    uint32_t baseReserve;
-    TimePoint closeTime;
-    Hash networkID;
 };
 
 class TxEffects
