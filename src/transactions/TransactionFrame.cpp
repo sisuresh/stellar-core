@@ -1967,7 +1967,7 @@ TransactionFrame::parallelApply(
                 effects.getDelta().entry[lk] = entryDelta;
                 // Note that we don't set delta.header here because Soroban
                 // transactions don't modify the header. The header will be set
-                // right before we cal into the invariants.
+                // right before we call into the invariants.
             }
 
             // Now we need to insert all the LEDGER_ENTRY_RESTORED changes for

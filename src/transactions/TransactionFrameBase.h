@@ -41,8 +41,13 @@ using TransactionFrameBasePtr = std::shared_ptr<TransactionFrameBase const>;
 using TransactionFrameBaseConstPtr =
     std::shared_ptr<TransactionFrameBase const>;
 
-using ModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
+// Tracks entry updates within an operation. If the transaction succeeds, the
+// ThreadEntryMap should be updated with the entries from the
+// OpModifiedEntryMap.
+using OpModifiedEntryMap = UnorderedMap<LedgerKey, std::optional<LedgerEntry>>;
 
+// Used to track the current state of an entry within a thread. Can be updated
+// by successful transactions.
 struct ThreadEntry
 {
     // Will not be set if the entry doesn't exist, or if no tx was able to load
@@ -51,16 +56,23 @@ struct ThreadEntry
     bool isDirty;
 };
 
+// This is a map of all entries that will be read and/or written within a
+// specific thread. applyThread can modify the entries in this map to reflect
+// changes made by the transactions applied by that thread. Once all threads
+// return, the updates from each threads entry map should be commited to
+// LedgerTxn.
 using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
 
 class ParallelTxReturnVal
 {
   public:
-    ParallelTxReturnVal(bool success, ModifiedEntryMap const&& modifiedEntryMap)
+    ParallelTxReturnVal(bool success,
+                        OpModifiedEntryMap const&& modifiedEntryMap)
         : mSuccess(success), mModifiedEntryMap(std::move(modifiedEntryMap))
     {
     }
-    ParallelTxReturnVal(bool success, ModifiedEntryMap const&& modifiedEntryMap,
+    ParallelTxReturnVal(bool success,
+                        OpModifiedEntryMap const&& modifiedEntryMap,
                         RestoredKeys const&& restoredKeys)
         : mSuccess(success)
         , mModifiedEntryMap(std::move(modifiedEntryMap))
@@ -73,7 +85,7 @@ class ParallelTxReturnVal
     {
         return mSuccess;
     }
-    ModifiedEntryMap const&
+    OpModifiedEntryMap const&
     getModifiedEntryMap() const
     {
         return mModifiedEntryMap;
@@ -87,7 +99,7 @@ class ParallelTxReturnVal
   private:
     bool mSuccess;
     // This will contain a key for every entry modified by a transaction
-    ModifiedEntryMap mModifiedEntryMap;
+    OpModifiedEntryMap mModifiedEntryMap;
     RestoredKeys mRestoredKeys;
 };
 

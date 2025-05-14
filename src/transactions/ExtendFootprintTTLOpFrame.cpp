@@ -140,7 +140,7 @@ ExtendFootprintTTLOpFrame::doParallelApply(
     auto const& footprint = resources.footprint;
 
     // Keep track of LedgerEntry updates we need to make
-    ModifiedEntryMap opEntryMap;
+    OpModifiedEntryMap opEntryMap;
 
     rust::Vec<CxxLedgerEntryRentChange> rustEntryRentChanges;
     rustEntryRentChanges.reserve(footprint.readOnly.size());

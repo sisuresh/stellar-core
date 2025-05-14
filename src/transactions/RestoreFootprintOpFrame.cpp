@@ -138,7 +138,7 @@ RestoreFootprintOpFrame::doParallelApply(
     auto hotArchive = app.copySearchableHotArchiveBucketListSnapshot();
 
     // Keep track of LedgerEntry updates we need to make
-    ModifiedEntryMap opEntryMap;
+    OpModifiedEntryMap opEntryMap;
 
     RestoredKeys restoredKeys;
 

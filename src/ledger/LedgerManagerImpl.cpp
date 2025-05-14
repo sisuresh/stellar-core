@@ -1769,7 +1769,7 @@ LedgerManagerImpl::applyThread(
     Cluster const& cluster, Config const& config,
     SorobanNetworkConfig const& sorobanConfig,
     std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
-    Hash const& sorobanBasePrngSeed, SorobanMetrics& sorobanMetrics)
+    Hash sorobanBasePrngSeed)
 {
     // RO extensions should only be observed when the entry is modified, so
     // we accumulate the RO extensions until we need to apply them.
@@ -1822,7 +1822,7 @@ LedgerManagerImpl::applyThread(
 
         auto res = txBundle.getTx()->parallelApply(
             app, *entryMap, config, sorobanConfig, *ledgerInfo,
-            txBundle.getResPayload(), sorobanMetrics, txSubSeed,
+            txBundle.getResPayload(), getSorobanMetrics(), txSubSeed,
             txBundle.getEffects());
 
         if (res.getSuccess())
@@ -1964,21 +1964,22 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
         auto entryMapPtr = collectEntries(app, ltx, cluster);
 
-        threadFutures.emplace_back(
-            std::async(std::launch::async, &LedgerManagerImpl::applyThread,
-                       this, std::ref(app), std::move(entryMapPtr),
-                       std::ref(cluster), config, sorobanConfig, ledgerInfo,
-                       sorobanBasePrngSeed, std::ref(getSorobanMetrics())));
+        threadFutures.emplace_back(std::async(
+            std::launch::async, &LedgerManagerImpl::applyThread, this,
+            std::ref(app), std::move(entryMapPtr), std::ref(cluster), config,
+            sorobanConfig, ledgerInfo, sorobanBasePrngSeed));
     }
 
     std::vector<RestoredKeys> threadRestoredKeys;
     std::vector<std::unique_ptr<ThreadEntryMap>> entryMapsByCluster;
     for (auto& restoredKeysFutures : threadFutures)
     {
+        releaseAssert(restoredKeysFutures.valid());
         auto futureResult = restoredKeysFutures.get();
         threadRestoredKeys.emplace_back(futureResult.first);
         entryMapsByCluster.emplace_back(std::move(futureResult.second));
     }
+    threadFutures.clear();
 
     LedgerTxn ltxInner(ltx);
     for (auto const& restoredKeys : threadRestoredKeys)

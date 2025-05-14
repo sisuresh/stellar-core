@@ -176,12 +176,13 @@ class LedgerManagerImpl : public LedgerManager
         AbstractLedgerTxn& ltx,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
 
-    std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>> applyThread(
-        AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMapByCluster,
-        Cluster const& cluster, Config const& config,
-        SorobanNetworkConfig const& sorobanConfig,
-        std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
-        Hash const& sorobanBasePrngSeed, SorobanMetrics& sorobanMetrics);
+    std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
+    applyThread(AppConnector& app,
+                std::unique_ptr<ThreadEntryMap> entryMapByCluster,
+                Cluster const& cluster, Config const& config,
+                SorobanNetworkConfig const& sorobanConfig,
+                std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
+                Hash sorobanBasePrngSeed);
 
     void applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
                            ApplyStage const& stage,

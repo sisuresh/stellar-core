@@ -708,7 +708,7 @@ InvokeHostFunctionOpFrame::doParallelApply(
     }
 
     // Keep track of updates we need to make
-    ModifiedEntryMap opEntryMap;
+    OpModifiedEntryMap opEntryMap;
 
     // Create or update every entry returned.
     UnorderedSet<LedgerKey> createdAndModifiedKeys;
