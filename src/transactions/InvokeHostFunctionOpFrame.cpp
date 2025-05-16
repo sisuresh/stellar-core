@@ -336,6 +336,7 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
     ThreadEntryMap& entryMap, OperationResult& res,
     DiagnosticEventBuffer& buffer) const
 {
+    releaseAssert(threadIsMain() || app.threadIsType(Application::ThreadType::APPLY));
     ReadEntryCounters readEntryCounters;
 
     auto const& resources = mParentTx.sorobanResources();

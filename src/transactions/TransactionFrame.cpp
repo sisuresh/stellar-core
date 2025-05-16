@@ -1726,6 +1726,7 @@ TransactionFrame::preloadEntriesForParallelApply(
     ThreadEntryMap& entryMap, MutableTxResultPtr txResult,
     DiagnosticEventBuffer& buffer) const
 {
+    releaseAssert(threadIsMain() || app.threadIsType(Application::ThreadType::APPLY));
     releaseAssert(isSoroban());
     releaseAssert(mOperations.size() == 1);
 
