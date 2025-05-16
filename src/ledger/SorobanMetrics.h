@@ -25,13 +25,13 @@ namespace stellar
 class SorobanMetrics
 {
   private:
-    uint64_t mCounterLedgerTxCount{0};
-    uint64_t mCounterLedgerCpuInsn{0};
-    uint64_t mCounterLedgerTxsSizeByte{0};
-    uint64_t mCounterLedgerReadEntry{0};
-    uint64_t mCounterLedgerReadByte{0};
-    uint64_t mCounterLedgerWriteEntry{0};
-    uint64_t mCounterLedgerWriteByte{0};
+    std::atomic<uint64_t> mCounterLedgerTxCount{0};
+    std::atomic<uint64_t> mCounterLedgerCpuInsn{0};
+    std::atomic<uint64_t> mCounterLedgerTxsSizeByte{0};
+    std::atomic<uint64_t> mCounterLedgerReadEntry{0};
+    std::atomic<uint64_t> mCounterLedgerReadByte{0};
+    std::atomic<uint64_t> mCounterLedgerWriteEntry{0};
+    std::atomic<uint64_t> mCounterLedgerWriteByte{0};
 
     // These are modified within InvokeHostFunctionOp
     std::atomic<uint64_t> mLedgerInsnsCount{0};
