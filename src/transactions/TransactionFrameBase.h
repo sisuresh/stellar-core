@@ -63,6 +63,9 @@ struct ThreadEntry
 // LedgerTxn.
 using ThreadEntryMap = UnorderedMap<LedgerKey, ThreadEntry>;
 
+// Returned by each parallel transaction. It will contain the entries modified
+// by the transaction, the success status of the transaction, and the keys
+// restored.
 class ParallelTxReturnVal
 {
   public:
@@ -103,6 +106,11 @@ class ParallelTxReturnVal
     RestoredKeys mRestoredKeys;
 };
 
+// This class is used during parallel transaction application to manage the
+// state and effects of each individual transaction as it is validated and
+// applied to the ledger. It serves as a container that keeps all
+// transaction-related components together as a single unit.
+
 class TxEffects
 {
   public:
@@ -135,6 +143,9 @@ class TxEffects
     TxEventManager mEventManager;
 };
 
+// TxBundle contains a transaction, its associated result payload, and its
+// effects. It provides a convenient way to group and manage transaction-related
+// data during processing and application to the ledger.
 class TxBundle
 {
   public:

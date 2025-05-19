@@ -1726,7 +1726,8 @@ TransactionFrame::preloadEntriesForParallelApply(
     ThreadEntryMap& entryMap, MutableTxResultPtr txResult,
     DiagnosticEventBuffer& buffer) const
 {
-    releaseAssert(threadIsMain() || app.threadIsType(Application::ThreadType::APPLY));
+    releaseAssert(threadIsMain() ||
+                  app.threadIsType(Application::ThreadType::APPLY));
     releaseAssert(isSoroban());
     releaseAssert(mOperations.size() == 1);
 
@@ -1758,6 +1759,8 @@ TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                                    bool chargeFee) const
 {
     ZoneScoped;
+    releaseAssert(threadIsMain() ||
+                  app.threadIsType(Application::ThreadType::APPLY));
     try
     {
         releaseAssertOrThrow(isSoroban());

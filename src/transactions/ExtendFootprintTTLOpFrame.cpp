@@ -56,7 +56,8 @@ ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
     ThreadEntryMap& entryMap, OperationResult& res,
     DiagnosticEventBuffer& buffer) const
 {
-    releaseAssert(threadIsMain() || app.threadIsType(Application::ThreadType::APPLY));
+    releaseAssert(threadIsMain() ||
+                  app.threadIsType(Application::ThreadType::APPLY));
 
     ExtendFootprintTTLMetrics metrics(sorobanMetrics);
 
