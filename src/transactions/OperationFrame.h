@@ -62,7 +62,8 @@ class OperationFrame
         AppConnector& app, ThreadEntryMap const& entryMap, Config const& config,
         SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
         ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
-        OperationResult& res, std::optional<RefundableFeeTracker>& refundableFeeTracker,
+        OperationResult& res,
+        std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta) const;
 
     // returns the threshold this operation requires
@@ -108,19 +109,18 @@ class OperationFrame
                std::optional<RefundableFeeTracker>& refundableFeeTracker,
                OperationMetaBuilder& opMeta) const;
 
-    bool preloadEntriesForParallelApply(AppConnector& app,
-                                        SorobanMetrics& sorobanMetrics,
-                                        AbstractLedgerTxn& ltx,
-                                        ThreadEntryMap& entryMap,
-                                        OperationResult& res,
-                                        DiagnosticEventManager& diagnosticEvents) const;
+    bool preloadEntriesForParallelApply(
+        AppConnector& app, SorobanMetrics& sorobanMetrics,
+        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
+        DiagnosticEventManager& diagnosticEvents) const;
 
     ParallelTxReturnVal applyParallel(
         AppConnector& app,
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
-        OperationResult& res, std::optional<RefundableFeeTracker>& refundableFeeTracker,
+        OperationResult& res,
+        std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta, Hash const& sorobanBasePrngSeed) const;
 
     Operation const&

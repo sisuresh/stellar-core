@@ -342,7 +342,7 @@ modifySorobanNetworkConfig(Application& app,
         app.getLedgerManager().getLastClosedLedgerNum(), std::nullopt,
         wasmBytes, contractCodeLedgerKey, std::nullopt);
     closeWithTx(createUploadWasmTxnPair.second);
-    
+
     bool instanceExists = false;
     {
         // Step 1: Check if instance already exists.
@@ -353,13 +353,14 @@ modifySorobanNetworkConfig(Application& app,
         }
     }
 
-    if(!instanceExists)
+    if (!instanceExists)
     {
         // Step 2: Create instance txn
         auto contractOverhead = 160 + wasmBytes.size();
         auto instanceTxPair = txGenerator.createContractTransaction(
             app.getLedgerManager().getLastClosedLedgerNum(), std::nullopt,
-            contractCodeLedgerKey, contractOverhead, instanceSalt, std::nullopt);
+            contractCodeLedgerKey, contractOverhead, instanceSalt,
+            std::nullopt);
         closeWithTx(instanceTxPair.second);
     }
 

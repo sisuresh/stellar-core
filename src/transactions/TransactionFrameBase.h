@@ -122,16 +122,19 @@ class TransactionFrameBase
     virtual void preloadEntriesForParallelApply(
         AppConnector& app, SorobanMetrics& sorobanMetrics,
         AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        MutableTransactionResultBase& txResult, DiagnosticEventManager& diagnosticEvents) const = 0;
-    virtual void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
-                                    TransactionMetaBuilder& meta,
-                                    MutableTransactionResultBase& resPayload) const = 0;
+        MutableTransactionResultBase& txResult,
+        DiagnosticEventManager& diagnosticEvents) const = 0;
+    virtual void
+    preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
+                     TransactionMetaBuilder& meta,
+                     MutableTransactionResultBase& resPayload) const = 0;
 
     virtual ParallelTxReturnVal parallelApply(
         AppConnector& app,
         ThreadEntryMap const& entryMap, // Must not be shared between threads!,
         Config const& config, SorobanNetworkConfig const& sorobanConfig,
-        ParallelLedgerInfo const& ledgerInfo, MutableTransactionResultBase& resPayload,
+        ParallelLedgerInfo const& ledgerInfo,
+        MutableTransactionResultBase& resPayload,
         SorobanMetrics& sorobanMetrics, Hash const& sorobanBasePrngSeed,
         TxEffects& effects) const = 0;
 

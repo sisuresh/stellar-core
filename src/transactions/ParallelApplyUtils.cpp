@@ -40,9 +40,7 @@ collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
             txBundle.getTx()->preloadEntriesForParallelApply(
                 app, app.getSorobanMetrics(), ltx, *entryMap,
                 txBundle.getResPayload(),
-                txBundle.getEffects()
-                    .getMeta()
-                    .getDiagnosticEventManager());
+                txBundle.getEffects().getMeta().getDiagnosticEventManager());
         }
     }
 

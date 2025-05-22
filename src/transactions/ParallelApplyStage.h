@@ -4,13 +4,12 @@
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "transactions/TransactionMeta.h"
 #include "ledger/LedgerTxn.h"
+#include "transactions/TransactionMeta.h"
 
 namespace stellar
 {
 class AppConnector;
-
 
 // This class is used during parallel transaction application to manage the
 // state and effects of each individual transaction as it is validated and
@@ -20,7 +19,8 @@ class AppConnector;
 class TxEffects
 {
   public:
-    TxEffects(bool enableTxMeta, TransactionFrameBase const& tx, uint32_t ledgerVersion, AppConnector const& app)
+    TxEffects(bool enableTxMeta, TransactionFrameBase const& tx,
+              uint32_t ledgerVersion, AppConnector const& app)
         : mMeta(enableTxMeta, tx, ledgerVersion, app)
     {
     }
@@ -37,7 +37,7 @@ class TxEffects
     }
 
   private:
-  TransactionMetaBuilder mMeta;
+    TransactionMetaBuilder mMeta;
     LedgerTxnDelta mDelta;
 };
 
@@ -47,8 +47,9 @@ class TxEffects
 class TxBundle
 {
   public:
-    TxBundle(AppConnector const& app, TransactionFrameBasePtr tx, MutableTransactionResultBase& resPayload,
-             uint32_t ledgerVersion, uint64_t txNum, bool enableTxMeta)
+    TxBundle(AppConnector const& app, TransactionFrameBasePtr tx,
+             MutableTransactionResultBase& resPayload, uint32_t ledgerVersion,
+             uint64_t txNum, bool enableTxMeta)
         : mTx(tx)
         , mResPayload(resPayload)
         , mTxNum(txNum)
@@ -79,7 +80,7 @@ class TxBundle
 
   private:
     TransactionFrameBasePtr mTx;
-    //Holding a reference to the results is somewhat of a footgun
+    // Holding a reference to the results is somewhat of a footgun
     MutableTransactionResultBase& mResPayload;
     uint64_t mTxNum;
     std::unique_ptr<TxEffects> mEffects;

@@ -105,14 +105,14 @@ RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
         {
             innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
 
-                diagnosticEvents.pushError(
+            diagnosticEvents.pushError(
                 SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
                 "operation byte-read mresources exceeds amount specified",
                 {makeU64SCVal(ledgerReadByte),
-                makeU64SCVal(resources.diskReadBytes)});
+                 makeU64SCVal(resources.diskReadBytes)});
 
-            // Only mark on failure because we'll also count read bytes during apply
-            // to also count anything read from the hot archive.
+            // Only mark on failure because we'll also count read bytes during
+            // apply to also count anything read from the hot archive.
             sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
             return false;
         }
@@ -128,7 +128,7 @@ RestoreFootprintOpFrame::doParallelApply(
     Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
     SorobanMetrics& sorobanMetrics, OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
-        OperationMetaBuilder& opMeta) const
+    OperationMetaBuilder& opMeta) const
 {
     releaseAssertOrThrow(refundableFeeTracker);
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);

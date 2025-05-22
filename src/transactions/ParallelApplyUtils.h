@@ -5,8 +5,8 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/LedgerTypeUtils.h"
-#include "transactions/TransactionFrameBase.h"
 #include "transactions/ParallelApplyStage.h"
+#include "transactions/TransactionFrameBase.h"
 #include <unordered_set>
 
 namespace stellar

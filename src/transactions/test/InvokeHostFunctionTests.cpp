@@ -6472,8 +6472,8 @@ readParallelMeta(std::string const& metaPath)
     LedgerCloseMeta lcm;
     while (in.readOne(lcm))
     {
-        // We make the assumption this is only used for parallel soroban, so meta version
-        // should be v2
+        // We make the assumption this is only used for parallel soroban, so
+        // meta version should be v2
         REQUIRE(lcm.v() == 2);
         auto ledgerSeq = lcm.v2().ledgerHeader.header.ledgerSeq;
 
@@ -6694,7 +6694,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
             // Just verify that a refund happened
             REQUIRE(refundChanges.size() == 2);
             REQUIRE(refundChanges[1].updated().data.account().balance >
-            refundChanges[0].state().data.account().balance);
+                    refundChanges[0].state().data.account().balance);
         }
 
         // One tx will fail
@@ -6705,7 +6705,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
                     2); // -2 because one tx is expected to fail, and the other
                         // is a extend op not covered by the hostFnSuccessMeter
         REQUIRE(hostFnFailureMeter.count() == 1);
-        
+
         REQUIRE(r.results[10]
                     .result.result.results()[0]
                     .tr()
@@ -7064,9 +7064,11 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
 
     SECTION("invoke")
     {
-        // tx1 will fast fail due to hitting the readBytes limit when loading the classic account entry
+        // tx1 will fast fail due to hitting the readBytes limit when loading
+        // the classic account entry
         auto i1Spec =
-            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY).extendReadOnlyFootprint({accountKey(a1.getPublicKey())})
+            client.writeKeySpec("key1", ContractDataDurability::TEMPORARY)
+                .extendReadOnlyFootprint({accountKey(a1.getPublicKey())})
                 .setReadBytes(5);
         auto i1 = client.getContract().prepareInvocation(
             "put_temporary", {makeSymbolSCVal("key1"), makeU64SCVal(123)},
@@ -7248,7 +7250,8 @@ TEST_CASE("apply generated parallel tx sets", "[tx][soroban][parallelapply]")
             auto tx = invocation.withExactNonRefundableResourceFee().createTx(
                 &account);
 
-            if (!anyGreater(tx->getResources(false, test.getLedgerVersion()), resources))
+            if (!anyGreater(tx->getResources(false, test.getLedgerVersion()),
+                            resources))
             {
                 resources -= tx->getResources(false, test.getLedgerVersion());
             }

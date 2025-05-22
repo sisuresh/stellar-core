@@ -113,7 +113,7 @@ ExtendFootprintTTLOpFrame::doParallelApply(
     Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
     SorobanMetrics& sorobanMetrics, OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
-                 OperationMetaBuilder& opMeta) const
+    OperationMetaBuilder& opMeta) const
 {
     releaseAssertOrThrow(refundableFeeTracker);
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame doParallelApply", true);
