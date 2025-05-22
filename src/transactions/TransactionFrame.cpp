@@ -1749,7 +1749,7 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 void
 TransactionFrame::preloadEntriesForParallelApply(
     AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap,  MutableTransactionResultBase& txResult,
+    ThreadEntryMap& entryMap, MutableTransactionResultBase& txResult,
     DiagnosticEventManager& diagnosticEvents) const
 {
     releaseAssert(threadIsMain() ||
@@ -1769,8 +1769,8 @@ TransactionFrame::preloadEntriesForParallelApply(
 }
 
 void
-TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
-    TransactionMetaBuilder& meta,
+TransactionFrame::preParallelApply(
+    AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
     MutableTransactionResultBase& resPayload) const
 {
     preParallelApply(app, ltx, meta, resPayload, true);
@@ -1778,8 +1778,8 @@ TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
 
 void
 TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
-    TransactionMetaBuilder& meta,
-    MutableTransactionResultBase& txResult,
+                                   TransactionMetaBuilder& meta,
+                                   MutableTransactionResultBase& txResult,
                                    bool chargeFee) const
 {
     ZoneScoped;
@@ -1793,10 +1793,9 @@ TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
         uint32_t ledgerVersion = ltx.loadHeader().current().ledgerVersion;
         SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
                                           getSignatures(mEnvelope)};
-        //TODO: Add code for catchup in skip mode
+        // TODO: Add code for catchup in skip mode
 
         auto const& sorobanCfg = app.getSorobanNetworkConfigForApply();
-
 
         //  when applying, a failure during tx validation means that
         //  we'll skip trying to apply operations but we'll still
@@ -1804,14 +1803,13 @@ TransactionFrame::preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
 
         auto const& sorobanConfig = app.getSorobanNetworkConfigForApply();
         auto sorobanResourceFee = computePreApplySorobanResourceFee(
-                ledgerVersion, sorobanConfig, app.getConfig());
+            ledgerVersion, sorobanConfig, app.getConfig());
 
-        meta.setNonRefundableResourceFee(
-            sorobanResourceFee.non_refundable_fee);
+        meta.setNonRefundableResourceFee(sorobanResourceFee.non_refundable_fee);
         int64_t initialFeeRefund = declaredSorobanResourceFee() -
-                                    sorobanResourceFee.non_refundable_fee;
+                                   sorobanResourceFee.non_refundable_fee;
         txResult.initializeRefundableFeeTracker(initialFeeRefund);
-        
+
         LedgerTxn ltxTx(ltx);
         LedgerSnapshot lsTx(ltxTx);
         auto cv = commonValid(app, sorobanCfg, signatureChecker, lsTx, 0, true,
@@ -1869,12 +1867,12 @@ TransactionFrame::parallelApply(
     AppConnector& app,
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    ParallelLedgerInfo const& ledgerInfo,  MutableTransactionResultBase& txResult,
-    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
-    TxEffects& effects) const
+    ParallelLedgerInfo const& ledgerInfo,
+    MutableTransactionResultBase& txResult, SorobanMetrics& sorobanMetrics,
+    Hash const& txPrngSeed, TxEffects& effects) const
 {
     ZoneScoped;
-    //TODO: Add txResult.adoptFailedReplayResult() block
+    // TODO: Add txResult.adoptFailedReplayResult() block
     bool reportInternalErrOnException = true;
     try
     {
@@ -1884,7 +1882,7 @@ TransactionFrame::parallelApply(
         reportInternalErrOnException =
             ledgerInfo.getLedgerVersion() >=
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
-        
+
         // Is this safe/will the values make sense?
         auto& opTimer =
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
@@ -1901,9 +1899,9 @@ TransactionFrame::parallelApply(
         auto& opResult = txResult.getOpResultAt(0);
         auto& opMeta = effects.getMeta().getOperationMetaBuilderAt(0);
 
-        auto res = op->applyParallel(app, entryMap, config, sorobanConfig,
-                                     ledgerInfo, sorobanMetrics, opResult,
-                                     txResult.getRefundableFeeTracker(), opMeta, txPrngSeed);
+        auto res = op->applyParallel(
+            app, entryMap, config, sorobanConfig, ledgerInfo, sorobanMetrics,
+            opResult, txResult.getRefundableFeeTracker(), opMeta, txPrngSeed);
 
 #ifdef BUILD_TESTS
         maybeTriggerTestInternalError(mEnvelope);
@@ -1936,8 +1934,9 @@ TransactionFrame::parallelApply(
                         changes.emplace_back(LEDGER_ENTRY_UPDATED);
                         changes.back().updated() = *le;
                         // TODO: Find a better way to set lastModifiedLedgerSeq
-                        // lastModifiedLedgerSeq will be set by the ltx commit later
-                        // but we need to do this here so meta is generated correctly.
+                        // lastModifiedLedgerSeq will be set by the ltx commit
+                        // later but we need to do this here so meta is
+                        // generated correctly.
                         changes.back().updated().lastModifiedLedgerSeq =
                             ledgerInfo.getLedgerSeq();
                     }
@@ -1957,7 +1956,7 @@ TransactionFrame::parallelApply(
                     changes.emplace_back(LEDGER_ENTRY_CREATED);
                     changes.back().created() = *le;
                     changes.back().created().lastModifiedLedgerSeq =
-                        ledgerInfo.getLedgerSeq();   
+                        ledgerInfo.getLedgerSeq();
                 }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
@@ -1982,7 +1981,9 @@ TransactionFrame::parallelApply(
                 // right before we call into the invariants.
             }
 
-            opMeta.setLedgerChanges(changes, res.getRestoredKeys().hotArchive, res.getRestoredKeys().liveBucketList, ledgerInfo.getLedgerSeq());
+            opMeta.setLedgerChanges(changes, res.getRestoredKeys().hotArchive,
+                                    res.getRestoredKeys().liveBucketList,
+                                    ledgerInfo.getLedgerSeq());
         }
         else
         {
@@ -2113,7 +2114,9 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
                 app.checkOnOperationApply(op->getOperation(), opResult, delta,
                                           opEventManager.getEvents());
-                opMeta.setLedgerChanges(ltxOp.getChanges(), ltxOp.getRestoredHotArchiveKeys(), ltxOp.getRestoredLiveBucketListKeys(), ledgerSeq);
+                opMeta.setLedgerChanges(
+                    ltxOp.getChanges(), ltxOp.getRestoredHotArchiveKeys(),
+                    ltxOp.getRestoredLiveBucketListKeys(), ledgerSeq);
             }
 
             if (txRes ||

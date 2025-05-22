@@ -88,8 +88,8 @@ FeeBumpTransactionFrame::preloadEntriesForParallelApply(
 {
     try
     {
-        mInnerTx->preloadEntriesForParallelApply(app, sorobanMetrics, ltx,
-                                                 entryMap, txResult, diagnosticEvents);
+        mInnerTx->preloadEntriesForParallelApply(
+            app, sorobanMetrics, ltx, entryMap, txResult, diagnosticEvents);
     }
     catch (std::exception& e)
     {
@@ -104,10 +104,9 @@ FeeBumpTransactionFrame::preloadEntriesForParallelApply(
 }
 
 void
-FeeBumpTransactionFrame::preParallelApply(AppConnector& app,
-                                          AbstractLedgerTxn& ltx,
-                                          TransactionMetaBuilder& meta,
-                                          MutableTransactionResultBase& txResult) const
+FeeBumpTransactionFrame::preParallelApply(
+    AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
+    MutableTransactionResultBase& txResult) const
 {
     try
     {
@@ -127,8 +126,7 @@ FeeBumpTransactionFrame::preParallelApply(AppConnector& app,
 
     try
     {
-        mInnerTx->preParallelApply(app, ltx, meta, txResult,
-                                   false);
+        mInnerTx->preParallelApply(app, ltx, meta, txResult, false);
     }
     catch (std::exception& e)
     {
@@ -145,9 +143,9 @@ FeeBumpTransactionFrame::parallelApply(
     AppConnector& app,
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    ParallelLedgerInfo const& ledgerInfo, MutableTransactionResultBase& txResult,
-    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
-    TxEffects& effects) const
+    ParallelLedgerInfo const& ledgerInfo,
+    MutableTransactionResultBase& txResult, SorobanMetrics& sorobanMetrics,
+    Hash const& txPrngSeed, TxEffects& effects) const
 {
     try
     {

@@ -316,10 +316,9 @@ TransactionTestFrame::preloadEntriesForParallelApply(
 }
 
 void
-TransactionTestFrame::preParallelApply(AppConnector& app,
-                                       AbstractLedgerTxn& ltx,
-                                       TransactionMetaBuilder& meta,
-                                       MutableTransactionResultBase& resPayload) const
+TransactionTestFrame::preParallelApply(
+    AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
+    MutableTransactionResultBase& resPayload) const
 {
     mTransactionFrame->preParallelApply(app, ltx, meta, resPayload);
 }
@@ -329,9 +328,9 @@ TransactionTestFrame::parallelApply(
     AppConnector& app,
     ThreadEntryMap const& entryMap, // Must not be shared between threads!,
     Config const& config, SorobanNetworkConfig const& sorobanConfig,
-    ParallelLedgerInfo const& ledgerInfo, MutableTransactionResultBase& resPayload,
-    SorobanMetrics& sorobanMetrics, Hash const& txPrngSeed,
-    TxEffects& effects) const
+    ParallelLedgerInfo const& ledgerInfo,
+    MutableTransactionResultBase& resPayload, SorobanMetrics& sorobanMetrics,
+    Hash const& txPrngSeed, TxEffects& effects) const
 {
     return mTransactionFrame->parallelApply(
         app, entryMap, config, sorobanConfig, ledgerInfo, resPayload,

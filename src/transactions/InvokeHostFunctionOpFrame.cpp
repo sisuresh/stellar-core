@@ -362,8 +362,10 @@ class ApplyHelper
     meterDiskReadResource(LedgerKey const& lk, uint32_t keySize,
                           uint32_t entrySize)
     {
-        mMetrics.mReadEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk), keySize, entrySize);
-        if (mResources.diskReadBytes < mMetrics.mReadEntryCounters.mLedgerReadByte)
+        mMetrics.mReadEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk),
+                                                      keySize, entrySize);
+        if (mResources.diskReadBytes <
+            mMetrics.mReadEntryCounters.mLedgerReadByte)
         {
             mDiagnosticEvents.pushError(
                 SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
@@ -645,9 +647,9 @@ class ApplyHelper
                 toCxxBuf(mResources), toCxxBuf(mOpFrame.getResourcesExt()),
                 toCxxBuf(mOpFrame.getSourceID()), authEntryCxxBufs,
                 getLedgerInfo(mSorobanConfig, lh.ledgerVersion, lh.ledgerSeq,
-                    lh.baseReserve, lh.scpValue.closeTime,
-                    mApp.getNetworkID()), mLedgerEntryCxxBufs,
-                mTtlEntryCxxBufs, basePrngSeedBuf,
+                              lh.baseReserve, lh.scpValue.closeTime,
+                              mApp.getNetworkID()),
+                mLedgerEntryCxxBufs, mTtlEntryCxxBufs, basePrngSeedBuf,
                 mSorobanConfig.rustBridgeRentFeeConfiguration(), *moduleCache);
             mMetrics.mCpuInsn = out.cpu_insns;
             mMetrics.mMemByte = out.mem_bytes;
@@ -891,25 +893,26 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
                 auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
                 if (ttlLtxe)
                 {
-                    if(!isLive(ttlLtxe.current(), ledgerSeq) && isTemporaryEntry(lk))
+                    if (!isLive(ttlLtxe.current(), ledgerSeq) &&
+                        isTemporaryEntry(lk))
                     {
                         meterReads = true;
                         // Temp entry is expired, so treat the TTL as if it
                         // doesn't exist
                         entryMap.emplace(ttlKey,
-                                ThreadEntry{std::nullopt, false});
+                                         ThreadEntry{std::nullopt, false});
                         entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
                     }
                     else
                     {
                         entryMap.emplace(ttlKey,
-                            ThreadEntry{ttlLtxe.current(), false});
+                                         ThreadEntry{ttlLtxe.current(), false});
 
                         auto ltxe = ltx.loadWithoutRecord(lk);
                         entrySize = static_cast<uint32_t>(
                             xdr::xdr_size(ltxe.current()));
                         entryMap.emplace(lk,
-                                            ThreadEntry{ltxe.current(), false});
+                                         ThreadEntry{ltxe.current(), false});
                     }
                 }
                 else
@@ -931,14 +934,14 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
                 }
             }
 
-            if(!meterReads)
+            if (!meterReads)
             {
                 continue;
             }
 
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
-            readEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk), keySize,
-                                            entrySize);
+            readEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk),
+                                                keySize, entrySize);
 
             if (resources.diskReadBytes < readEntryCounters.mLedgerReadByte)
             {
@@ -1018,8 +1021,10 @@ class ParallelApplyHelper
     // the operation should fail and populates result code and diagnostic
     // events. Returns true if no failure occurred.
     bool
-    handleArchivedEntry(LedgerKey const& lk, LedgerEntry const& le, OpModifiedEntryMap& opEntryMap, RestoredKeys& restoredKeys, 
-                        bool isReadOnly, uint32_t restoredLiveUntilLedger,
+    handleArchivedEntry(LedgerKey const& lk, LedgerEntry const& le,
+                        OpModifiedEntryMap& opEntryMap,
+                        RestoredKeys& restoredKeys, bool isReadOnly,
+                        uint32_t restoredLiveUntilLedger,
                         bool isHotArchiveEntry, uint32_t index)
     {
         // autorestore support started in p23. Entry must be in the read write
@@ -1056,13 +1061,14 @@ class ParallelApplyHelper
             if (isHotArchiveEntry)
             {
                 opEntryMap.emplace(lk, le);
-                
+
                 ttlEntry.data.type(TTL);
-                ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
+                ttlEntry.data.ttl().liveUntilLedgerSeq =
+                    restoredLiveUntilLedger;
                 ttlEntry.data.ttl().keyHash = ttlKey.ttl().keyHash;
-    
+
                 opEntryMap.emplace(ttlKey, ttlEntry);
-    
+
                 restoredKeys.hotArchive.emplace(lk, le);
                 restoredKeys.hotArchive.emplace(ttlKey, ttlEntry);
             }
@@ -1072,10 +1078,11 @@ class ParallelApplyHelper
 
                 auto ttlLe = mEntryMap.find(ttlKey);
                 releaseAssertOrThrow(ttlLe != mEntryMap.end() &&
-                                    ttlLe->second.mLedgerEntry);
+                                     ttlLe->second.mLedgerEntry);
 
                 ttlEntry = *ttlLe->second.mLedgerEntry;
-                ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
+                ttlEntry.data.ttl().liveUntilLedgerSeq =
+                    restoredLiveUntilLedger;
                 opEntryMap.emplace(ttlKey, ttlEntry);
 
                 restoredKeys.liveBucketList.emplace(lk, le);
@@ -1119,8 +1126,10 @@ class ParallelApplyHelper
     meterDiskReadResource(LedgerKey const& lk, uint32_t keySize,
                           uint32_t entrySize)
     {
-        mMetrics.mReadEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk), keySize, entrySize);
-        if (mResources.diskReadBytes < mMetrics.mReadEntryCounters.mLedgerReadByte)
+        mMetrics.mReadEntryCounters.noteDiskReadEntry(isContractCodeEntry(lk),
+                                                      keySize, entrySize);
+        if (mResources.diskReadBytes <
+            mMetrics.mReadEntryCounters.mLedgerReadByte)
         {
             mDiagnosticEvents.pushError(
                 SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
@@ -1160,7 +1169,9 @@ class ParallelApplyHelper
     // result code and diagnostic events. Returns true
     // if no failure occurred.
     bool
-    addReads(xdr::xvector<LedgerKey> const& footprintKeys, OpModifiedEntryMap& opEntryMap, RestoredKeys& restoredKeys, bool isReadOnly)
+    addReads(xdr::xvector<LedgerKey> const& footprintKeys,
+             OpModifiedEntryMap& opEntryMap, RestoredKeys& restoredKeys,
+             bool isReadOnly)
     {
         auto ledgerSeq = mLedgerInfo.getLedgerSeq();
         auto ledgerVersion = mLedgerInfo.getLedgerVersion();
@@ -1196,9 +1207,12 @@ class ParallelApplyHelper
                         if (!isTemporaryEntry(lk))
                         {
                             auto entryIter = mEntryMap.find(lk);
-                            releaseAssertOrThrow(entryIter != mEntryMap.end() && entryIter->second.mLedgerEntry);
+                            releaseAssertOrThrow(
+                                entryIter != mEntryMap.end() &&
+                                entryIter->second.mLedgerEntry);
                             if (!handleArchivedEntry(
-                                    lk, *entryIter->second.mLedgerEntry, opEntryMap, restoredKeys, isReadOnly,
+                                    lk, *entryIter->second.mLedgerEntry,
+                                    opEntryMap, restoredKeys, isReadOnly,
                                     restoredLiveUntilLedger,
                                     /*isHotArchiveEntry=*/false, i))
                             {
@@ -1226,7 +1240,8 @@ class ParallelApplyHelper
                             archiveEntry->type() ==
                             HotArchiveBucketEntryType::HOT_ARCHIVE_ARCHIVED);
                         if (!handleArchivedEntry(
-                                lk, archiveEntry->archivedEntry(), opEntryMap, restoredKeys, isReadOnly,
+                                lk, archiveEntry->archivedEntry(), opEntryMap,
+                                restoredKeys, isReadOnly,
                                 restoredLiveUntilLedger,
                                 /*isHotArchiveEntry=*/true, i))
                         {
@@ -1297,11 +1312,12 @@ class ParallelApplyHelper
     }
 
   public:
-    ParallelApplyHelper(AppConnector& app, ThreadEntryMap const& entryMap, ParallelLedgerInfo const& ledgerInfo,
-                Hash const& sorobanBasePrngSeed, OperationResult& res,
-                std::optional<RefundableFeeTracker>& refundableFeeTracker,
-                OperationMetaBuilder& opMeta,
-                InvokeHostFunctionOpFrame const& opFrame)
+    ParallelApplyHelper(
+        AppConnector& app, ThreadEntryMap const& entryMap,
+        ParallelLedgerInfo const& ledgerInfo, Hash const& sorobanBasePrngSeed,
+        OperationResult& res,
+        std::optional<RefundableFeeTracker>& refundableFeeTracker,
+        OperationMetaBuilder& opMeta, InvokeHostFunctionOpFrame const& opFrame)
         : mApp(app)
         , mEntryMap(entryMap)
         , mLedgerInfo(ledgerInfo)
@@ -1361,13 +1377,15 @@ class ParallelApplyHelper
         OpModifiedEntryMap opEntryMap;
         RestoredKeys restoredKeys;
 
-        if (!addReads(footprint.readOnly, opEntryMap, restoredKeys, /*isReadOnly=*/true))
+        if (!addReads(footprint.readOnly, opEntryMap, restoredKeys,
+                      /*isReadOnly=*/true))
         {
             // Error code set in addReads
             return {false, {}};
         }
 
-        if (!addReads(footprint.readWrite, opEntryMap, restoredKeys, /*isReadOnly=*/false))
+        if (!addReads(footprint.readWrite, opEntryMap, restoredKeys,
+                      /*isReadOnly=*/false))
         {
             // Error code set in addReads
             return {false, {}};
@@ -1498,7 +1516,7 @@ class ParallelApplyHelper
             auto opEntryIter = opEntryMap.emplace(lk, le);
             // addReads can add restored entries to opEntryMap, so check if
             // we need to update the entry.
-            if(opEntryIter.second == false)
+            if (opEntryIter.second == false)
             {
                 opEntryIter.first->second = le;
             }
@@ -1535,7 +1553,8 @@ class ParallelApplyHelper
             if (createdAndModifiedKeys.find(lk) == createdAndModifiedKeys.end())
             {
                 auto entryIter = mEntryMap.find(lk);
-                if (entryIter != mEntryMap.end() && entryIter->second.mLedgerEntry)
+                if (entryIter != mEntryMap.end() &&
+                    entryIter->second.mLedgerEntry)
                 {
                     releaseAssertOrThrow(isSorobanEntry(lk));
                     opEntryMap.emplace(lk, std::nullopt);
@@ -1599,8 +1618,8 @@ class ParallelApplyHelper
 
         if (!mRefundableFeeTracker->consumeRefundableSorobanResources(
                 mMetrics.mEmitEventByte, out.rent_fee,
-                mLedgerInfo.getLedgerVersion(), mSorobanConfig,
-                mAppConfig, mOpFrame.mParentTx, mDiagnosticEvents))
+                mLedgerInfo.getLedgerVersion(), mSorobanConfig, mAppConfig,
+                mOpFrame.mParentTx, mDiagnosticEvents))
         {
             mOpFrame.innerResult(mRes).code(
                 INVOKE_HOST_FUNCTION_INSUFFICIENT_REFUNDABLE_FEE);
@@ -1649,24 +1668,27 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
         }
 
         // add additional diagnostic events for metrics
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "read_entry", metrics.mReadEntryCounters.mReadEntry));
+        buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_entry",
+                                      metrics.mReadEntryCounters.mReadEntry));
         buffer.pushEvent(
             metricsEvent(metrics.mSuccess, "write_entry", metrics.mWriteEntry));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "ledger_read_byte",
-                                      metrics.mReadEntryCounters.mLedgerReadByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "ledger_read_byte",
+                         metrics.mReadEntryCounters.mLedgerReadByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "ledger_write_byte",
                                       metrics.mLedgerWriteByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_key_byte",
                                       metrics.mReadEntryCounters.mReadKeyByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_key_byte",
                                       metrics.mWriteKeyByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_data_byte",
-                                      metrics.mReadEntryCounters.mReadDataByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "read_data_byte",
+                         metrics.mReadEntryCounters.mReadDataByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_data_byte",
                                       metrics.mWriteDataByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_code_byte",
-                                      metrics.mReadEntryCounters.mReadCodeByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "read_code_byte",
+                         metrics.mReadEntryCounters.mReadCodeByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_code_byte",
                                       metrics.mWriteCodeByte));
         buffer.pushEvent(
@@ -1681,12 +1703,15 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
                                       metrics.mInvokeTimeNsecs));
         // skip publishing `cpu_insn_excl_vm` and `invoke_time_nsecs_excl_vm`,
         // we are mostly interested in those internally
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_rw_key_byte",
-                                      metrics.mReadEntryCounters.mMaxReadWriteKeyByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_rw_data_byte",
-                                      metrics.mReadEntryCounters.mMaxReadWriteDataByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_rw_code_byte",
-                                      metrics.mReadEntryCounters.mMaxReadWriteCodeByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "max_rw_key_byte",
+                         metrics.mReadEntryCounters.mMaxReadWriteKeyByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "max_rw_data_byte",
+                         metrics.mReadEntryCounters.mMaxReadWriteDataByte));
+        buffer.pushEvent(
+            metricsEvent(metrics.mSuccess, "max_rw_code_byte",
+                         metrics.mReadEntryCounters.mMaxReadWriteCodeByte));
         buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_emit_event_byte",
                                       metrics.mMaxEmitEventByte));
     }
@@ -1708,7 +1733,8 @@ InvokeHostFunctionOpFrame::doApply(
     return helper.apply();
 }
 
-ParallelTxReturnVal InvokeHostFunctionOpFrame::doParallelApply(
+ParallelTxReturnVal
+InvokeHostFunctionOpFrame::doParallelApply(
     AppConnector& app,
     ThreadEntryMap const& entryMap, // Must not be shared between threads!
     Config const& appConfig, SorobanNetworkConfig const& sorobanConfig,
@@ -1717,12 +1743,11 @@ ParallelTxReturnVal InvokeHostFunctionOpFrame::doParallelApply(
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
     OperationMetaBuilder& opMeta) const
 {
-    ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doParallelApply", true);   
+    ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doParallelApply", true);
     releaseAssertOrThrow(refundableFeeTracker);
 
-    ParallelApplyHelper helper(
-        app, entryMap, ledgerInfo, txPrngSeed, res, refundableFeeTracker,
-        opMeta, *this);
+    ParallelApplyHelper helper(app, entryMap, ledgerInfo, txPrngSeed, res,
+                               refundableFeeTracker, opMeta, *this);
 
     return helper.parallelApply();
 }

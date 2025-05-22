@@ -51,7 +51,7 @@ class ExtendFootprintTTLOpFrame : public OperationFrame
         Hash const& txPrngSeed, ParallelLedgerInfo const& ledgerInfo,
         SorobanMetrics& sorobanMetrics, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
-                 OperationMetaBuilder& opMeta) const override;
+        OperationMetaBuilder& opMeta) const override;
 
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;

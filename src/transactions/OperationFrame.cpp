@@ -243,22 +243,21 @@ OperationFrame::doPreloadEntriesForParallelApply(
 }
 
 ParallelTxReturnVal
-OperationFrame::applyParallel(AppConnector& app, ThreadEntryMap const& entryMap,
-                              Config const& config,
-                              SorobanNetworkConfig const& sorobanConfig,
-                              ParallelLedgerInfo const& ledgerInfo,
-                              SorobanMetrics& sorobanMetrics,
-                              OperationResult& res, std::optional<RefundableFeeTracker>& refundableFeeTracker,
-                              OperationMetaBuilder& opMeta,
-                              Hash const& txPrngSeed) const
+OperationFrame::applyParallel(
+    AppConnector& app, ThreadEntryMap const& entryMap, Config const& config,
+    SorobanNetworkConfig const& sorobanConfig,
+    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    OperationResult& res,
+    std::optional<RefundableFeeTracker>& refundableFeeTracker,
+    OperationMetaBuilder& opMeta, Hash const& txPrngSeed) const
 {
     ZoneScoped;
     CLOG_TRACE(Tx, "{}", xdrToCerealString(mOperation, "Operation"));
     // checkValid is called earlier in preParallelApply
 
     return doParallelApply(app, entryMap, config, sorobanConfig, txPrngSeed,
-                           ledgerInfo, sorobanMetrics, res, refundableFeeTracker,
-                           opMeta);
+                           ledgerInfo, sorobanMetrics, res,
+                           refundableFeeTracker, opMeta);
 }
 
 ParallelTxReturnVal
@@ -266,7 +265,8 @@ OperationFrame::doParallelApply(
     AppConnector& app, ThreadEntryMap const& entryMap, Config const& appConfig,
     SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
     ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
-    OperationResult& res, std::optional<RefundableFeeTracker>& refundableFeeTracker,
+    OperationResult& res,
+    std::optional<RefundableFeeTracker>& refundableFeeTracker,
     OperationMetaBuilder& opMeta) const
 {
     throw std::runtime_error(

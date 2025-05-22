@@ -37,10 +37,14 @@ vecAppend(xdr::xvector<T>& a, xdr::xvector<T>&& b)
 // stellar-core as a whole, but this change type is reclassified to
 // LEDGER_ENTRY_RESTORED for easier consumption downstream.
 LedgerEntryChanges
-processOpLedgerEntryChanges(Config const& cfg, OperationFrame const& op,
-                            LedgerEntryChanges const& initialChanges, stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const& hotArchiveRestores,
-                            stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const& liveRestores,
-                            uint32_t protocolVersion, uint32_t ledgerSeq)
+processOpLedgerEntryChanges(
+    Config const& cfg, OperationFrame const& op,
+    LedgerEntryChanges const& initialChanges,
+    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
+        hotArchiveRestores,
+    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
+        liveRestores,
+    uint32_t protocolVersion, uint32_t ledgerSeq)
 {
     auto changes = initialChanges;
     bool needToProcess =
@@ -272,14 +276,21 @@ processOpLedgerEntryChanges(Config const& cfg, OperationFrame const& op,
 } // namespace
 
 void
-OperationMetaBuilder::setLedgerChanges(LedgerEntryChanges const& initialChanges, stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const& hotArchiveRestores,stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const& liveRestores, uint32_t ledgerSeq)
+OperationMetaBuilder::setLedgerChanges(
+    LedgerEntryChanges const& initialChanges,
+    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
+        hotArchiveRestores,
+    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
+        liveRestores,
+    uint32_t ledgerSeq)
 {
     if (!mEnabled)
     {
         return;
     }
     std::visit(
-        [&initialChanges, &hotArchiveRestores, &liveRestores, ledgerSeq, this](auto&& meta) {
+        [&initialChanges, &hotArchiveRestores, &liveRestores, ledgerSeq,
+         this](auto&& meta) {
             meta.get().changes = processOpLedgerEntryChanges(
                 mConfig, mOp, initialChanges, hotArchiveRestores, liveRestores,
                 mProtocolVersion, ledgerSeq);

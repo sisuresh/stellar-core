@@ -825,13 +825,15 @@ LedgerTxn::Impl::erase(InternalLedgerKey const& key)
 }
 
 void
-LedgerTxn::addRestoredFromHotArchive(LedgerEntry const& ledgerEntry, LedgerEntry const& ttlEntry)
+LedgerTxn::addRestoredFromHotArchive(LedgerEntry const& ledgerEntry,
+                                     LedgerEntry const& ttlEntry)
 {
     getImpl()->addRestoredFromHotArchive(ledgerEntry, ttlEntry);
 }
 
 void
-LedgerTxn::Impl::addRestoredFromHotArchive(LedgerEntry const& ledgerEntry, LedgerEntry const& ttlEntry)
+LedgerTxn::Impl::addRestoredFromHotArchive(LedgerEntry const& ledgerEntry,
+                                           LedgerEntry const& ttlEntry)
 {
     throwIfSealed();
     throwIfChild();
@@ -843,7 +845,8 @@ LedgerTxn::Impl::addRestoredFromHotArchive(LedgerEntry const& ledgerEntry, Ledge
 
     // Mark the keys as restored
     auto addKey = [this](LedgerEntry const& entry) {
-        auto [_, inserted] = mRestoredKeys.hotArchive.emplace(LedgerEntryKey(entry), entry);
+        auto [_, inserted] =
+            mRestoredKeys.hotArchive.emplace(LedgerEntryKey(entry), entry);
         if (!inserted)
         {
             throw std::runtime_error("Key already removed from hot archive");
