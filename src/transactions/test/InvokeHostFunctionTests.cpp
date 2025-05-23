@@ -34,6 +34,7 @@
 #include "transactions/test/SorobanTxTestUtils.h"
 #include "transactions/test/SponsorshipTestUtils.h"
 #include "util/Decoder.h"
+#include "util/MetaUtils.h"
 #include "util/TmpDir.h"
 #include "util/XDRCereal.h"
 #include "xdr/Stellar-contract.h"
@@ -6808,7 +6809,8 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
         auto metaMap = readParallelMeta(metaPath);
         REQUIRE(metaMap.count(test.getLCLSeq()));
 
-        auto const& lcm = metaMap[test.getLCLSeq()];
+        auto& lcm = metaMap[test.getLCLSeq()];
+        normalizeMeta(lcm);
         REQUIRE(lcm.v2().txProcessing.size() == 2);
 
         // Make sure meta looks looks correct
