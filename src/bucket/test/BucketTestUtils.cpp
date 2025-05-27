@@ -244,8 +244,7 @@ LedgerManagerForBucketTests::sealLedgerTxnAndTransferEntriesToBucketList(
                             FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
                 {
                     std::vector<LedgerKey> restoredKeys;
-                    auto restoredKeysMap =
-                        ltxEvictions.getRestoredHotArchiveKeys();
+                    auto restoredKeysMap = ltx.getRestoredHotArchiveKeys();
                     for (auto const& [key, entry] : restoredKeysMap)
                     {
                         // Hot Archive does not track TTLs
