@@ -1907,6 +1907,8 @@ buildRoTTLMap(TxBundle const& txBundle)
         }
         isReadOnlyTTLMap.emplace(getTTLKey(rw), false);
     }
+
+    return isReadOnlyTTLMap;
 }
 
 // Look up a key in the RO TTL map built above. If the key is either not a TTL,
@@ -1926,7 +1928,7 @@ updateMaxOfRoTTLBump(UnorderedMap<LedgerKey, uint32_t>& roTTLBumps,
                      LedgerKey const& lk,
                      std::optional<LedgerEntry> const& updatedLe)
 {
-    auto [it, emplaced] = roTTLBumps.emplace(ttl(updatedLe));
+    auto [it, emplaced] = roTTLBumps.emplace(lk, ttl(updatedLe));
     if (!emplaced)
     {
         it->second = std::max(it->second, ttl(updatedLe));
