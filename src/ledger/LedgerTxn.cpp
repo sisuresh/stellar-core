@@ -1624,8 +1624,6 @@ LedgerTxn::getRestoredHotArchiveKeys() const
 UnorderedMap<LedgerKey, LedgerEntry> const&
 LedgerTxn::Impl::getRestoredHotArchiveKeys() const
 {
-    throwIfChild();
-
     return mRestoredKeys.hotArchive;
 }
 
@@ -1638,8 +1636,6 @@ LedgerTxn::getRestoredLiveBucketListKeys() const
 UnorderedMap<LedgerKey, LedgerEntry> const&
 LedgerTxn::Impl::getRestoredLiveBucketListKeys() const
 {
-    throwIfChild();
-
     return mRestoredKeys.liveBucketList;
 }
 

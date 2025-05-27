@@ -2526,8 +2526,7 @@ LedgerManagerImpl::sealLedgerTxnAndTransferEntriesToBucketList(
                     LiveBucket::FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
             {
                 std::vector<LedgerKey> restoredKeys;
-                auto const& restoredKeyMap =
-                    ltxEvictions.getRestoredHotArchiveKeys();
+                auto const& restoredKeyMap = ltx.getRestoredHotArchiveKeys();
                 for (auto const& [key, entry] : restoredKeyMap)
                 {
                     // TTL keys are not recorded in the hot archive BucketList
