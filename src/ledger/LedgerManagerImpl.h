@@ -171,6 +171,14 @@ class LedgerManagerImpl : public LedgerManager
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
         LedgerCloseData const& ledgerData);
 
+    void processResultAndMeta(
+        std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
+        uint32_t txIndex, TransactionMetaBuilder& txMetaBuilder,
+        TransactionFrameBase const& tx,
+        MutableTransactionResultBase const& result,
+        TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+        uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed);
+
     TransactionResultSet applyTransactions(
         ApplicableTxSetFrame const& txSet,
         std::vector<MutableTxResultPtr> const& mutableTxResults,
