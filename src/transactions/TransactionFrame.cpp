@@ -1975,7 +1975,7 @@ TransactionFrame::parallelApply(
                         std::make_shared<InternalLedgerEntry>(deltaLe);
                 }
 
-                effects.getDelta().entry[lk] = entryDelta;
+                effects.setDeltaEntry(lk, entryDelta);
                 // Note that we don't set delta.header here because Soroban
                 // transactions don't modify the header. The header will be set
                 // right before we call into the invariants.

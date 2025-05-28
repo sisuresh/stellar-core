@@ -2026,9 +2026,8 @@ LedgerManagerImpl::applyThread(
 }
 
 std::shared_ptr<ParallelLedgerInfo const>
-getParallelLedgerInfo(AppConnector& app, AbstractLedgerTxn& ltx)
+getParallelLedgerInfo(AppConnector& app, LedgerHeader const& lh)
 {
-    auto const& lh = ltx.loadHeader().current();
     return std::make_shared<ParallelLedgerInfo>(
         lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve, lh.scpValue.closeTime,
         app.getNetworkID());
@@ -2057,8 +2056,9 @@ LedgerManagerImpl::applySorobanStageClustersInParallel(
 
         threadFutures.emplace_back(std::async(
             std::launch::async, &LedgerManagerImpl::applyThread, this,
-            std::ref(app), std::move(entryMapPtr), std::ref(cluster), config,
-            sorobanConfig, ledgerInfo, sorobanBasePrngSeed));
+            std::ref(app), std::move(entryMapPtr), std::cref(cluster),
+            std::cref(config), std::cref(sorobanConfig), std::cref(ledgerInfo),
+            std::cref(sorobanBasePrngSeed)));
     }
 
     for (auto& restoredKeysFutures : threadFutures)
@@ -2109,10 +2109,9 @@ LedgerManagerImpl::checkAllTxBundleInvariantsAndCallProcessPostApply(
                 // Soroban transactions don't have access to the ledger
                 // header, so they can't modify it. Pass in the current
                 // header as both current and previous.
-                txBundle.getEffects().getDelta().header.current =
-                    ltxInner.loadHeader().current();
-                txBundle.getEffects().getDelta().header.previous =
-                    ltxInner.loadHeader().current();
+                txBundle.getEffects().setDeltaHeader(
+                    ltxInner.loadHeader().current());
+
                 app.checkOnOperationApply(
                     txBundle.getTx()->getRawOperations().at(0),
                     txBundle.getResPayload().getOpResultAt(0),
@@ -2220,7 +2219,7 @@ LedgerManagerImpl::applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
 
     auto const& config = app.getConfig();
     auto const& sorobanConfig = getSorobanNetworkConfigForApply();
-    auto ledgerInfo = getParallelLedgerInfo(app, ltx);
+    auto ledgerInfo = getParallelLedgerInfo(app, ltx.loadHeader().current());
 
     auto [threadRestoredKeys, entryMapsByCluster] =
         applySorobanStageClustersInParallel(app, ltx, stage,
@@ -2308,19 +2307,18 @@ LedgerManagerImpl::applyTransactions(
     {
         if (phase.isParallel())
         {
-            auto txSetStages = phase.getParallelStages();
+            auto const& txSetStages = phase.getParallelStages();
 
             std::vector<ApplyStage> applyStages;
+            applyStages.reserve(txSetStages.size());
 
-            for (size_t i = 0; i < txSetStages.size(); ++i)
+            for (auto const& stage : txSetStages)
             {
-                auto const& stage = txSetStages[i];
-
                 std::vector<Cluster> applyClusters;
+                applyClusters.reserve(stage.size());
 
-                for (size_t j = 0; j < stage.size(); ++j)
+                for (auto const& cluster : stage)
                 {
-                    auto const& cluster = stage[j];
                     Cluster applyCluster;
                     applyCluster.reserve(cluster.size());
 
