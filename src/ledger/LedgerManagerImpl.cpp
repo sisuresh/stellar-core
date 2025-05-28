@@ -2252,6 +2252,58 @@ LedgerManagerImpl::applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,
     }
 }
 
+void
+LedgerManagerImpl::processResultAndMeta(
+    std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
+    uint32_t txIndex, TransactionMetaBuilder& txMetaBuilder,
+    TransactionFrameBase const& tx, MutableTransactionResultBase const& result,
+    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+{
+    TransactionResultPair resultPair;
+    resultPair.transactionHash = tx.getContentsHash();
+    resultPair.result = result.getXDR();
+
+    if (result.isSuccess())
+    {
+        if (tx.isSoroban())
+        {
+            ++sorobanTxSucceeded;
+        }
+        ++txSucceeded;
+    }
+    else
+    {
+        if (tx.isSoroban())
+        {
+            ++sorobanTxFailed;
+        }
+        ++txFailed;
+    }
+
+    // First gather the TransactionResultPair into the TxResultSet
+    // for hashing into the ledger header.
+    txResultSet.results.emplace_back(resultPair);
+
+    if (ledgerCloseMeta)
+    {
+        auto metaXDR = txMetaBuilder.finalize(result.isSuccess());
+#ifdef BUILD_TESTS
+        mLastLedgerTxMeta.emplace_back(metaXDR);
+#endif
+
+        ledgerCloseMeta->setTxProcessingMetaAndResultPair(
+            std::move(metaXDR), std::move(resultPair), txIndex);
+    }
+    else
+    {
+#ifdef BUILD_TESTS
+        mLastLedgerTxMeta.emplace_back(
+            txMetaBuilder.finalize(result.isSuccess()));
+#endif
+    }
+}
+
 TransactionResultSet
 LedgerManagerImpl::applyTransactions(
     ApplicableTxSetFrame const& txSet,
@@ -2384,50 +2436,11 @@ LedgerManagerImpl::applyTransactions(
 
                     // setPostTxApplyFeeProcessing can update the feeCharged in
                     // the result, so this needs to be done after
-                    TransactionResultPair resultPair;
-                    resultPair.transactionHash =
-                        txBundle.getTx()->getContentsHash();
-                    resultPair.result = txBundle.getResPayload().getXDR();
-                    if (resultPair.result.result.code() ==
-                        TransactionResultCode::txSUCCESS)
-                    {
-                        if (txBundle.getTx()->isSoroban())
-                        {
-                            ++sorobanTxSucceeded;
-                        }
-                        ++txSucceeded;
-                    }
-                    else
-                    {
-                        if (txBundle.getTx()->isSoroban())
-                        {
-                            ++sorobanTxFailed;
-                        }
-                        ++txFailed;
-                    }
-
-                    txResultSet.results.emplace_back(resultPair);
-
-                    if (ledgerCloseMeta)
-                    {
-                        auto metaXDR = txBundle.getEffects().getMeta().finalize(
-                            txBundle.getResPayload().isSuccess());
-#ifdef BUILD_TESTS
-                        mLastLedgerTxMeta.emplace_back(metaXDR);
-#endif
-
-                        ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                            std::move(metaXDR), std::move(resultPair),
-                            txBundle.getTxNum());
-                    }
-                    else
-                    {
-#ifdef BUILD_TESTS
-                        mLastLedgerTxMeta.emplace_back(
-                            txBundle.getEffects().getMeta().finalize(
-                                txBundle.getResPayload().isSuccess()));
-#endif
-                    }
+                    processResultAndMeta(
+                        ledgerCloseMeta, index, txBundle.getEffects().getMeta(),
+                        *txBundle.getTx(), txBundle.getResPayload(),
+                        txResultSet, sorobanTxSucceeded, sorobanTxFailed,
+                        txSucceeded, txFailed);
 
                     ++index;
                 }
@@ -2469,56 +2482,15 @@ LedgerManagerImpl::applyTransactions(
                 }
                 ++txNum;
 
-                TransactionResultPair resultPair;
-                resultPair.transactionHash = tx->getContentsHash();
-
                 tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
                           subSeed);
                 tx->processPostApply(mApp.getAppConnector(), ltx, tm,
                                      mutableTxResult);
 
-                resultPair.result = mutableTxResult.getXDR();
-                if (mutableTxResult.isSuccess())
-                {
-                    if (tx->isSoroban())
-                    {
-                        ++sorobanTxSucceeded;
-                    }
-                    ++txSucceeded;
-                }
-                else
-                {
-                    if (tx->isSoroban())
-                    {
-                        ++sorobanTxFailed;
-                    }
-                    ++txFailed;
-                }
-
-                // First gather the TransactionResultPair into the TxResultSet
-                // for hashing into the ledger header.
-                txResultSet.results.emplace_back(resultPair);
-
-                // Then potentially add that TRP and its associated
-                // TransactionMeta into the associated slot of any
-                // LedgerCloseMeta we're collecting.
-                if (ledgerCloseMeta)
-                {
-                    auto metaXDR = tm.finalize(mutableTxResult.isSuccess());
-#ifdef BUILD_TESTS
-                    mLastLedgerTxMeta.emplace_back(metaXDR);
-#endif
-
-                    ledgerCloseMeta->setTxProcessingMetaAndResultPair(
-                        std::move(metaXDR), std::move(resultPair), index);
-                }
-                else
-                {
-#ifdef BUILD_TESTS
-                    mLastLedgerTxMeta.emplace_back(
-                        tm.finalize(mutableTxResult.isSuccess()));
-#endif
-                }
+                processResultAndMeta(ledgerCloseMeta, index, tm, *tx,
+                                     mutableTxResult, txResultSet,
+                                     sorobanTxSucceeded, sorobanTxFailed,
+                                     txSucceeded, txFailed);
 
                 ++index;
             }
