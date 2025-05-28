@@ -1647,7 +1647,8 @@ LedgerManagerImpl::processFeesSeqNums(
                                   tx->getContentsHash());
 
                     // https://github.com/stellar/stellar-core/issues/4741
-                    if (tx->getEnvelope().type() != ENVELOPE_TYPE_TX_FEE_BUMP)
+                    if (tx->getEnvelope().type() != ENVELOPE_TYPE_TX_FEE_BUMP &&
+                        !tx->isSoroban())
                     {
                         txResults.back()->setReplayTransactionResult(
                             (*expectedResultsIter)->result);
