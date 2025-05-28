@@ -30,10 +30,23 @@ class TxEffects
     {
         return mMeta;
     }
-    LedgerTxnDelta&
+    LedgerTxnDelta const&
     getDelta()
     {
         return mDelta;
+    }
+
+    void
+    setDeltaEntry(LedgerKey const& key, LedgerTxnDelta::EntryDelta const& delta)
+    {
+        mDelta.entry.emplace(key, delta);
+    }
+
+    void
+    setDeltaHeader(LedgerHeader const& header)
+    {
+        mDelta.header.current = header;
+        mDelta.header.previous = header;
     }
 
   private:

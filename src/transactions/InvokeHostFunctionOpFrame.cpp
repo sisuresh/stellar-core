@@ -918,13 +918,13 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
                 }
                 else
                 {
-                    meterReads = true;
                     entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
                     entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
                 }
             }
             else
             {
+                // We always meter classic entries
                 meterReads = true;
                 auto ltxe = ltx.loadWithoutRecord(lk);
                 if (ltxe)
@@ -1081,7 +1081,6 @@ class ParallelApplyHelper
             return true;
         }
 
-        // Before p23, archived entries are never valid
         if (lk.type() == CONTRACT_CODE)
         {
             mDiagnosticEvents.pushError(
