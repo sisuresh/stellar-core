@@ -597,6 +597,7 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
         TransactionMetaBuilder txmBuilder(true, *tx, test.getLedgerVersion(),
                                           test.getApp().getAppConnector());
         auto timerBefore = hostFnExecTimer.count();
+        // TODO:This doesn't work post v22
         bool success = tx->apply(test.getApp().getAppConnector(), rootLtx,
                                  txmBuilder, *result);
         REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
@@ -4801,13 +4802,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto const& rawTx = TransactionFrameBase::makeTransactionFromWire(
             app->getNetworkID(), txEnv);
         auto tx = TransactionTestFrame::fromTxFrame(rawTx);
-        LedgerTxn ltx(app->getLedgerTxnRoot());
-        TransactionMetaBuilder txm(true, *tx,
-                                   ltx.loadHeader().current().ledgerVersion,
-                                   app->getAppConnector());
-        REQUIRE(tx->checkValidForTesting(app->getAppConnector(), ltx, 0, 0, 0));
-        REQUIRE(tx->apply(app->getAppConnector(), ltx, txm));
-        ltx.commit();
+        closeLedger(*app, {tx});
     }
 
     auto& commandHandler = app->getCommandHandler();
@@ -4876,14 +4871,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto const& txRaw = TransactionFrameBase::makeTransactionFromWire(
             app->getNetworkID(), invokeRes2.first);
         auto txRevertSettings = TransactionTestFrame::fromTxFrame(txRaw);
-        LedgerTxn ltx(app->getLedgerTxnRoot());
-        TransactionMetaBuilder txm(true, *txRevertSettings,
-                                   ltx.loadHeader().current().ledgerVersion,
-                                   app->getAppConnector());
-        REQUIRE(txRevertSettings->checkValidForTesting(app->getAppConnector(),
-                                                       ltx, 0, 0, 0));
-        REQUIRE(txRevertSettings->apply(app->getAppConnector(), ltx, txm));
-        ltx.commit();
+        closeLedger(*app, {txRevertSettings});
 
         std::string command2 = "mode=set&configupgradesetkey=";
         command2 += decoder::encode_b64(xdr::xdr_to_opaque(upgradeSetKey2));

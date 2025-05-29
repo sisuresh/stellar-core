@@ -130,8 +130,11 @@ RestoreFootprintOpFrame::doParallelApply(
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
     OperationMetaBuilder& opMeta) const
 {
-    releaseAssertOrThrow(refundableFeeTracker);
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
+    releaseAssertOrThrow(
+        protocolVersionStartsFrom(ledgerInfo.getLedgerVersion(),
+                                  PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
+    releaseAssertOrThrow(refundableFeeTracker);
 
     RestoreFootprintMetrics metrics(sorobanMetrics);
     auto timeScope = metrics.getExecTimer();
@@ -163,20 +166,8 @@ RestoreFootprintOpFrame::doParallelApply(
             auto ttlLtxe = entryMap.find(ttlKey);
             if (ttlLtxe == entryMap.end() || !ttlLtxe->second.mLedgerEntry)
             {
-                // Next check the hot archive if protocol >= 23
-                if (protocolVersionStartsFrom(
-                        ledgerInfo.getLedgerVersion(),
-                        HotArchiveBucket::
-                            FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
-                {
-                    hotArchiveEntry = hotArchive->load(lk);
-                    if (!hotArchiveEntry)
-                    {
-                        // Entry doesn't exist, skip
-                        continue;
-                    }
-                }
-                else
+                hotArchiveEntry = hotArchive->load(lk);
+                if (!hotArchiveEntry)
                 {
                     // Entry doesn't exist, skip
                     continue;
@@ -253,20 +244,17 @@ RestoreFootprintOpFrame::doParallelApply(
         rustChange.old_live_until_ledger = 0;
 
         uint32_t entrySizeForRent = entrySize;
-        if (protocolVersionStartsFrom(ledgerInfo.getLedgerVersion(),
-                                      ProtocolVersion::V_23))
+
+        if (isContractCodeEntry(lk))
         {
-            if (isContractCodeEntry(lk))
-            {
-                entrySizeForRent =
-                    rust_bridge::contract_code_memory_size_for_rent(
-                        app.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION,
-                        ledgerInfo.getLedgerVersion(),
-                        toCxxBuf(entry.data.contractCode()),
-                        toCxxBuf(sorobanConfig.cpuCostParams()),
-                        toCxxBuf(sorobanConfig.memCostParams()));
-            }
+            entrySizeForRent = rust_bridge::contract_code_memory_size_for_rent(
+                app.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION,
+                ledgerInfo.getLedgerVersion(),
+                toCxxBuf(entry.data.contractCode()),
+                toCxxBuf(sorobanConfig.cpuCostParams()),
+                toCxxBuf(sorobanConfig.memCostParams()));
         }
+
         rustChange.new_size_bytes = entrySizeForRent;
 
         rustChange.new_live_until_ledger = restoredLiveUntilLedger;
@@ -326,6 +314,9 @@ RestoreFootprintOpFrame::doApply(
 {
     ZoneNamedN(applyZone, "RestoreFootprintOpFrame apply", true);
     releaseAssertOrThrow(refundableFeeTracker);
+    releaseAssertOrThrow(
+        protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
+                                PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
 
     RestoreFootprintMetrics metrics(app.getSorobanMetrics());
     auto timeScope = metrics.getExecTimer();
@@ -355,24 +346,8 @@ RestoreFootprintOpFrame::doApply(
             auto constTTLLtxe = ltx.loadWithoutRecord(ttlKey);
             if (!constTTLLtxe)
             {
-                // Next check the hot archive if protocol >= 23
-                if (protocolVersionStartsFrom(
-                        ltx.loadHeader().current().ledgerVersion,
-                        HotArchiveBucket::
-                            FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
-                {
-                    hotArchiveEntry = hotArchive->load(lk);
-                    if (!hotArchiveEntry)
-                    {
-                        // Entry doesn't exist, skip
-                        continue;
-                    }
-                }
-                else
-                {
-                    // Entry doesn't exist, skip
-                    continue;
-                }
+                // Entry doesn't exist, skip
+                continue;
             }
             // Skip entry if it's already live.
             else if (isLive(constTTLLtxe.current(), ledgerSeq))
@@ -443,18 +418,6 @@ RestoreFootprintOpFrame::doApply(
         rustChange.old_live_until_ledger = 0;
 
         uint32_t entrySizeForRent = entrySize;
-        if (protocolVersionStartsFrom(ledgerVersion, ProtocolVersion::V_23))
-        {
-            if (isContractCodeEntry(lk))
-            {
-                entrySizeForRent =
-                    rust_bridge::contract_code_memory_size_for_rent(
-                        app.getConfig().CURRENT_LEDGER_PROTOCOL_VERSION,
-                        ledgerVersion, toCxxBuf(entry.data.contractCode()),
-                        toCxxBuf(sorobanConfig.cpuCostParams()),
-                        toCxxBuf(sorobanConfig.memCostParams()));
-            }
-        }
         rustChange.new_size_bytes = entrySizeForRent;
         rustChange.new_live_until_ledger = restoredLiveUntilLedger;
 

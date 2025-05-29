@@ -19,7 +19,7 @@ ApplyStage::Iterator::operator*() const
     if (mClusterIndex >= mClusters.size() ||
         mTxIndex >= mClusters[mClusterIndex].size())
     {
-        throw std::runtime_error("TxPhase iterator out of bounds");
+        throw std::runtime_error("ApplyStage iterator out of bounds");
     }
     return mClusters[mClusterIndex][mTxIndex];
 }
@@ -29,7 +29,7 @@ ApplyStage::Iterator::operator++()
 {
     if (mClusterIndex >= mClusters.size())
     {
-        throw std::runtime_error("TxPhase iterator out of bounds");
+        throw std::runtime_error("ApplyStage iterator out of bounds");
     }
     ++mTxIndex;
     if (mTxIndex >= mClusters[mClusterIndex].size())
