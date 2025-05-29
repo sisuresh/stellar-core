@@ -597,6 +597,7 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
         TransactionMetaBuilder txmBuilder(true, *tx, test.getLedgerVersion(),
                                           test.getApp().getAppConnector());
         auto timerBefore = hostFnExecTimer.count();
+        // TODO:This doesn't work post v22
         bool success = tx->apply(test.getApp().getAppConnector(), rootLtx,
                                  txmBuilder, *result);
         REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
@@ -4827,13 +4828,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto const& rawTx = TransactionFrameBase::makeTransactionFromWire(
             app->getNetworkID(), txEnv);
         auto tx = TransactionTestFrame::fromTxFrame(rawTx);
-        LedgerTxn ltx(app->getLedgerTxnRoot());
-        TransactionMetaBuilder txm(true, *tx,
-                                   ltx.loadHeader().current().ledgerVersion,
-                                   app->getAppConnector());
-        REQUIRE(tx->checkValidForTesting(app->getAppConnector(), ltx, 0, 0, 0));
-        REQUIRE(tx->apply(app->getAppConnector(), ltx, txm));
-        ltx.commit();
+        closeLedger(*app, {tx});
     }
 
     auto& commandHandler = app->getCommandHandler();
@@ -4902,14 +4897,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto const& txRaw = TransactionFrameBase::makeTransactionFromWire(
             app->getNetworkID(), invokeRes2.first);
         auto txRevertSettings = TransactionTestFrame::fromTxFrame(txRaw);
-        LedgerTxn ltx(app->getLedgerTxnRoot());
-        TransactionMetaBuilder txm(true, *txRevertSettings,
-                                   ltx.loadHeader().current().ledgerVersion,
-                                   app->getAppConnector());
-        REQUIRE(txRevertSettings->checkValidForTesting(app->getAppConnector(),
-                                                       ltx, 0, 0, 0));
-        REQUIRE(txRevertSettings->apply(app->getAppConnector(), ltx, txm));
-        ltx.commit();
+        closeLedger(*app, {txRevertSettings});
 
         std::string command2 = "mode=set&configupgradesetkey=";
         command2 += decoder::encode_b64(xdr::xdr_to_opaque(upgradeSetKey2));
@@ -6698,16 +6686,17 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
                     refundChanges[0].state().data.account().balance);
         }
 
-        // One tx will fail
-        checkResults(r, sorobanTxs.size() - 1, 1);
+        // Two tx's will fail
+        checkResults(r, sorobanTxs.size() - 2, 1);
 
-        REQUIRE(hostFnSuccessMeter.count() - successesBefore ==
-                sorobanTxs.size() -
-                    2); // -2 because one tx is expected to fail, and the other
-                        // is a extend op not covered by the hostFnSuccessMeter
-        REQUIRE(hostFnFailureMeter.count() == 1);
+        REQUIRE(
+            hostFnSuccessMeter.count() - successesBefore ==
+            sorobanTxs.size() -
+                3); // -3 because two txs are expected to fail, and the other
+                    // is a extend op not covered by the hostFnSuccessMeter
+        REQUIRE(hostFnFailureMeter.count() == 2);
 
-        REQUIRE(r.results[10]
+        REQUIRE(r.results[8]
                     .result.result.results()[0]
                     .tr()
                     .invokeHostFunctionResult()
@@ -6798,7 +6787,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
             {makeSymbolSCVal("recreate"), makeU64SCVal(5)}, writeSpec);
         auto tx2 = i2.withExactNonRefundableResourceFee().createTx(&a3);
 
-        auto r = closeLedger(test.getApp(), {tx1, tx2});
+        auto r = closeLedger(test.getApp(), {tx1, tx2}, true);
         REQUIRE(r.results.size() == 2);
 
         // Make sure the del_temporary tx is first

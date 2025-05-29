@@ -528,18 +528,13 @@ class ApplyHelper
                 return false;
             }
 
-            // Archived entries are metered already via handleArchivedEntry.
-            // Here, we only need to meter classic reads. Prior to protocol 23,
+            // Prior to protocol 23,
             // all entries are metered.
-            if (!isSorobanEntry(lk) ||
-                protocolVersionIsBefore(ledgerVersion,
-                                        AUTO_RESTORE_PROTOCOL_VERSION))
+            if (!meterDiskReadResource(lk, keySize, entrySize))
             {
-                if (!meterDiskReadResource(lk, keySize, entrySize))
-                {
-                    return false;
-                }
+                return false;
             }
+
             // Still mark the readEntry for in-memory soroban entries for
             // diagnostic purposes
             else if (isSorobanEntry(lk))
@@ -1273,11 +1268,8 @@ class ParallelApplyHelper
             }
 
             // Archived entries are metered already via handleArchivedEntry.
-            // Here, we only need to meter classic reads. Prior to protocol 23,
-            // all entries are metered.
-            if (!isSorobanEntry(lk) ||
-                protocolVersionIsBefore(ledgerVersion,
-                                        AUTO_RESTORE_PROTOCOL_VERSION))
+            // Here, we only need to meter classic reads.
+            if (!isSorobanEntry(lk))
             {
                 if (!meterDiskReadResource(lk, keySize, entrySize))
                 {
@@ -1709,6 +1701,9 @@ InvokeHostFunctionOpFrame::doApply(
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame apply", true);
     releaseAssertOrThrow(refundableFeeTracker);
+    releaseAssertOrThrow(
+        protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
+                                PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
 
     // Create ApplyHelper and delegate processing to it
     ApplyHelper helper(app, ltx, sorobanBasePrngSeed, res, refundableFeeTracker,
@@ -1727,6 +1722,9 @@ InvokeHostFunctionOpFrame::doParallelApply(
     OperationMetaBuilder& opMeta) const
 {
     ZoneNamedN(applyZone, "InvokeHostFunctionOpFrame doParallelApply", true);
+    releaseAssertOrThrow(
+        protocolVersionStartsFrom(ledgerInfo.getLedgerVersion(),
+                                  PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
     releaseAssertOrThrow(refundableFeeTracker);
 
     ParallelApplyHelper helper(app, entryMap, ledgerInfo, txPrngSeed, res,
