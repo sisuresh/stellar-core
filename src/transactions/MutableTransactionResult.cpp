@@ -58,9 +58,7 @@ RefundableFeeTracker::consumeRefundableSorobanResources(
     }
 
     FeePair consumedFee = TransactionFrame::computeSorobanResourceFee(
-        protocolVersion, tx.sorobanResources(),
-        static_cast<uint32>(tx.getResources(false, protocolVersion)
-                                .getVal(Resource::Type::TX_BYTE_SIZE)),
+        protocolVersion, tx.getResources(false, protocolVersion),
         mConsumedContractEventsSizeBytes, sorobanConfig, cfg);
     mConsumedRefundableFee = mConsumedRentFee + consumedFee.refundable_fee;
 

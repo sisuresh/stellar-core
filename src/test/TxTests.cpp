@@ -951,9 +951,17 @@ sorobanResourceFee(Application& app, SorobanResources const& resources,
                    size_t txSize, uint32_t eventsSize)
 {
     releaseAssert(txSize <= INT32_MAX);
+
+    // TODO: We should set the number of read entries using the logic in
+    // TransactionFrame::getResources so we can test the fee logic.
+    auto txResources =
+        Resource({1, resources.instructions, static_cast<int64_t>(txSize),
+                  resources.diskReadBytes, resources.writeBytes,
+                  static_cast<int64_t>(resources.footprint.readOnly.size()),
+                  static_cast<int64_t>(resources.footprint.readWrite.size())});
     auto feePair = TransactionFrame::computeSorobanResourceFee(
         app.getLedgerManager().getLastClosedLedgerHeader().header.ledgerVersion,
-        resources, static_cast<uint32>(txSize), eventsSize,
+        txResources, eventsSize,
         app.getLedgerManager().getLastClosedSorobanNetworkConfig(),
         app.getConfig());
     return feePair.non_refundable_fee + feePair.refundable_fee;

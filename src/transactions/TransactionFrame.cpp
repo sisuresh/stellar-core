@@ -896,27 +896,27 @@ TransactionFrame::updateSorobanMetrics(AppConnector& app) const
 
 FeePair
 TransactionFrame::computeSorobanResourceFee(
-    uint32_t protocolVersion, SorobanResources const& txResources,
-    uint32_t txSize, uint32_t eventsSize,
+    uint32_t protocolVersion, Resource const& txResources, uint32_t eventsSize,
     SorobanNetworkConfig const& sorobanConfig, Config const& cfg)
 {
     ZoneScoped;
     releaseAssertOrThrow(
         protocolVersionStartsFrom(protocolVersion, SOROBAN_PROTOCOL_VERSION));
     CxxTransactionResources cxxResources{};
-    cxxResources.instructions = txResources.instructions;
+    cxxResources.instructions =
+        txResources.getVal(Resource::Type::INSTRUCTIONS);
 
-    // This is going to be changed in protocol 23 to only account for the
-    // actual disk reads.
-    cxxResources.disk_read_entries =
-        static_cast<uint32>(txResources.footprint.readOnly.size());
-    cxxResources.write_entries =
-        static_cast<uint32>(txResources.footprint.readWrite.size());
+    cxxResources.disk_read_entries = static_cast<uint32>(
+        txResources.getVal(Resource::Type::READ_LEDGER_ENTRIES));
+    cxxResources.write_entries = static_cast<uint32>(
+        txResources.getVal(Resource::Type::WRITE_LEDGER_ENTRIES));
 
-    cxxResources.disk_read_bytes = txResources.diskReadBytes;
-    cxxResources.write_bytes = txResources.writeBytes;
+    cxxResources.disk_read_bytes =
+        txResources.getVal(Resource::Type::DISK_READ_BYTES);
+    cxxResources.write_bytes = txResources.getVal(Resource::Type::WRITE_BYTES);
 
-    cxxResources.transaction_size_bytes = txSize;
+    cxxResources.transaction_size_bytes =
+        txResources.getVal(Resource::Type::TX_BYTE_SIZE);
     cxxResources.contract_events_size_bytes = eventsSize;
 
     // This may throw, but only in case of the Core version misconfiguration.
@@ -942,11 +942,9 @@ TransactionFrame::computePreApplySorobanResourceFee(
     // We always use the declared resource value for the resource fee
     // computation. The refunds are performed as a separate operation that
     // doesn't involve modifying any transaction fees.
-    return computeSorobanResourceFee(
-        protocolVersion, sorobanResources(),
-        static_cast<uint32>(getResources(false, protocolVersion)
-                                .getVal(Resource::Type::TX_BYTE_SIZE)),
-        0, sorobanConfig, cfg);
+    return computeSorobanResourceFee(protocolVersion,
+                                     getResources(false, protocolVersion), 0,
+                                     sorobanConfig, cfg);
 }
 
 bool

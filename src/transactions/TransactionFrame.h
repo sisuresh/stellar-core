@@ -292,10 +292,11 @@ class TransactionFrame : public TransactionFrameBase
     SorobanResources const& sorobanResources() const override;
     SorobanTransactionData::_ext_t const& getResourcesExt() const override;
 
-    static FeePair computeSorobanResourceFee(
-        uint32_t protocolVersion, SorobanResources const& txResources,
-        uint32_t txSize, uint32_t eventsSize,
-        SorobanNetworkConfig const& sorobanConfig, Config const& cfg);
+    static FeePair
+    computeSorobanResourceFee(uint32_t protocolVersion,
+                              Resource const& txResources, uint32_t eventsSize,
+                              SorobanNetworkConfig const& sorobanConfig,
+                              Config const& cfg);
     virtual int64 declaredSorobanResourceFee() const override;
     virtual bool XDRProvidesValidFee() const override;
 
