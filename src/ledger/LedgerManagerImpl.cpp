@@ -70,6 +70,7 @@
 #include "medida/timer.h"
 #include <Tracy.hpp>
 
+#include "LedgerManagerImpl.h"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -2352,13 +2353,13 @@ LedgerManagerImpl::applyTransactions(
     enableTxMeta = true;
 #endif
 
+    std::vector<ApplyStage> applyStages;
     for (auto const& phase : phases)
     {
         if (phase.isParallel())
         {
             auto const& txSetStages = phase.getParallelStages();
 
-            std::vector<ApplyStage> applyStages;
             applyStages.reserve(txSetStages.size());
 
             for (auto const& stage : txSetStages)
@@ -2405,45 +2406,7 @@ LedgerManagerImpl::applyTransactions(
             applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
                                sorobanBasePrngSeed);
 
-            for (auto const& stage : applyStages)
-            {
-                for (auto const& txBundle : stage)
-                {
-                    {
-                        // TODO:
-                        // This should technically be called
-                        // after the tx set as been applied. This works at the
-                        // moment because the Soroban phase is second.
-
-                        // This call is a noop if it were in the non-parallel
-                        // path, but we should still probably call it there as
-                        // well.
-                        LedgerTxn ltxInner(ltx);
-                        txBundle.getTx()->processPostTxSetApply(
-                            mApp.getAppConnector(), ltxInner,
-                            txBundle.getResPayload(),
-                            txBundle.getEffects()
-                                .getMeta()
-                                .getTxEventManager());
-
-                        if (ledgerCloseMeta)
-                        {
-                            ledgerCloseMeta->setPostTxApplyFeeProcessing(
-                                ltxInner.getChanges(), txBundle.getTxNum());
-                        }
-                        ltxInner.commit();
-                    }
-
-                    // setPostTxApplyFeeProcessing can update the feeCharged in
-                    // the result, so this needs to be done after
-                    processResultAndMeta(ledgerCloseMeta, txBundle.getTxNum(),
-                                         txBundle.getEffects().getMeta(),
-                                         *txBundle.getTx(),
-                                         txBundle.getResPayload(), txResultSet,
-                                         sorobanTxSucceeded, sorobanTxFailed,
-                                         txSucceeded, txFailed);
-                }
-            }
+            // meta will be processed in processPostTxSetApply
         }
         else
         {
@@ -2485,6 +2448,9 @@ LedgerManagerImpl::applyTransactions(
                 tx->processPostApply(mApp.getAppConnector(), ltx, tm,
                                      mutableTxResult);
 
+                // We process meta early here instead of in
+                // processPostTxSetApply because the non-parallel path does not
+                // used TransactionFrame::processPostTxSetApply at the moment.
                 processResultAndMeta(ledgerCloseMeta, index, tm, *tx,
                                      mutableTxResult, txResultSet,
                                      sorobanTxSucceeded, sorobanTxFailed,
@@ -2494,6 +2460,10 @@ LedgerManagerImpl::applyTransactions(
             }
         }
     }
+
+    processPostTxSetApply(phases, applyStages, ltx, ledgerCloseMeta,
+                          txResultSet, sorobanTxSucceeded, sorobanTxFailed,
+                          txSucceeded, txFailed);
 
 #ifdef BUILD_TESTS
     releaseAssert(ledgerCloseMeta);
@@ -2509,6 +2479,56 @@ LedgerManagerImpl::applyTransactions(
     return txResultSet;
 }
 
+void
+LedgerManagerImpl::processPostTxSetApply(
+    std::vector<TxSetPhaseFrame> const& phases,
+    std::vector<ApplyStage> const& applyStages, AbstractLedgerTxn& ltx,
+    std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
+    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+{
+    for (auto const& phase : phases)
+    {
+        if (phase.isParallel())
+        {
+            for (auto const& stage : applyStages)
+            {
+                for (auto const& txBundle : stage)
+                {
+                    {
+                        LedgerTxn ltxInner(ltx);
+                        txBundle.getTx()->processPostTxSetApply(
+                            mApp.getAppConnector(), ltxInner,
+                            txBundle.getResPayload(),
+                            txBundle.getEffects()
+                                .getMeta()
+                                .getTxEventManager());
+
+                        if (ledgerCloseMeta)
+                        {
+                            ledgerCloseMeta->setPostTxApplyFeeProcessing(
+                                ltxInner.getChanges(), txBundle.getTxNum());
+                        }
+                        ltxInner.commit();
+                    }
+
+                    // setPostTxApplyFeeProcessing can update the feeCharged in
+                    // the result, so this needs to be done after
+                    processResultAndMeta(ledgerCloseMeta, txBundle.getTxNum(),
+                                         txBundle.getEffects().getMeta(),
+                                         *txBundle.getTx(),
+                                         txBundle.getResPayload(), txResultSet,
+                                         sorobanTxSucceeded, sorobanTxFailed,
+                                         txSucceeded, txFailed);
+                }
+            }
+        }
+        // setPostTxApplyFeeProcessing is not used in the non-parallel
+        // path, so we don't need to call it here, but we will need to add
+        // support for it if we add any post tx set apply processing in the
+        // non-parallel phase.
+    }
+}
 void
 LedgerManagerImpl::logTxApplyMetrics(AbstractLedgerTxn& ltx, size_t numTxs,
                                      size_t numOps)

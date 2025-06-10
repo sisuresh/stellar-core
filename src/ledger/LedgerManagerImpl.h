@@ -185,6 +185,15 @@ class LedgerManagerImpl : public LedgerManager
         AbstractLedgerTxn& ltx,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
 
+    void processPostTxSetApply(
+        std::vector<stellar::TxSetPhaseFrame> const& phases,
+        std::vector<stellar::ApplyStage> const& applyStages,
+        stellar::AbstractLedgerTxn& ltx,
+        std::__1::unique_ptr<stellar::LedgerCloseMetaFrame> const&
+            ledgerCloseMeta,
+        TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+        uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed);
+
     std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
     applyThread(AppConnector& app,
                 std::unique_ptr<ThreadEntryMap> entryMapByCluster,
