@@ -2358,106 +2358,15 @@ LedgerManagerImpl::applyTransactions(
     {
         if (phase.isParallel())
         {
-            auto const& txSetStages = phase.getParallelStages();
-
-            applyStages.reserve(txSetStages.size());
-
-            for (auto const& stage : txSetStages)
-            {
-                std::vector<Cluster> applyClusters;
-                applyClusters.reserve(stage.size());
-
-                for (auto const& cluster : stage)
-                {
-                    Cluster applyCluster;
-                    applyCluster.reserve(cluster.size());
-
-                    for (auto const& tx : cluster)
-                    {
-                        auto& mutableTxResult = mutableTxResults.at(index);
-                        applyCluster.emplace_back(
-                            mApp.getAppConnector(), tx, *mutableTxResult,
-                            ltx.loadHeader().current().ledgerVersion, index,
-                            enableTxMeta);
-
-                        // Use txBundle.getTxNum() to get this transactions
-                        // index from now on
-                        ++index;
-
-                        // Emit fee event before applying the transaction. This
-                        // technically has to be emitted during
-                        // processFeesSeqNums, but since tx meta doesn't exist
-                        // at that point, we emit the event as soon as possible.
-                        applyCluster.back()
-                            .getEffects()
-                            .getMeta()
-                            .getTxEventManager()
-                            .newFeeEvent(
-                                tx->getFeeSourceID(),
-                                mutableTxResult->getFeeCharged(),
-                                TransactionEventStage::
-                                    TRANSACTION_EVENT_STAGE_BEFORE_ALL_TXS);
-                    }
-                    applyClusters.emplace_back(std::move(applyCluster));
-                }
-                applyStages.emplace_back(std::move(applyClusters));
-            }
-
-            applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
-                               sorobanBasePrngSeed);
-
-            // meta will be processed in processPostTxSetApply
+            applyParallelPhase(phase, applyStages, mutableTxResults, index, ltx,
+                               enableTxMeta, sorobanBasePrngSeed);
         }
         else
         {
-            for (auto const& tx : phase)
-            {
-                ZoneNamedN(txZone, "applyTransaction", true);
-                auto& mutableTxResult = *mutableTxResults.at(index);
-
-                auto txTime =
-                    mApplyState.mMetrics.mTransactionApply.TimeScope();
-                TransactionMetaBuilder tm(
-                    enableTxMeta, *tx, ltx.loadHeader().current().ledgerVersion,
-                    mApp.getAppConnector());
-                // Emit fee event before applying the transaction. This
-                // technically has to be emitted during processFeesSeqNums, but
-                // since tx meta doesn't exist at that point, we emit the event
-                // as soon as possible.
-                tm.getTxEventManager().newFeeEvent(
-                    tx->getFeeSourceID(), mutableTxResult.getFeeCharged(),
-                    TransactionEventStage::
-                        TRANSACTION_EVENT_STAGE_BEFORE_ALL_TXS);
-                CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
-                           hexAbbrev(tx->getContentsHash()),
-                           tx->getNumOperations(), tx->getSeqNum(),
-                           mApp.getConfig().toShortString(tx->getSourceID()));
-
-                Hash subSeed = sorobanBasePrngSeed;
-                // If tx can use the seed, we need to compute a sub-seed for it.
-                if (tx->isSoroban())
-                {
-                    SHA256 subSeedSha;
-                    subSeedSha.add(sorobanBasePrngSeed);
-                    subSeedSha.add(xdr::xdr_to_opaque(index));
-                    subSeed = subSeedSha.finish();
-                }
-
-                tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
-                          subSeed);
-                tx->processPostApply(mApp.getAppConnector(), ltx, tm,
-                                     mutableTxResult);
-
-                // We process meta early here instead of in
-                // processPostTxSetApply because the non-parallel path does not
-                // used TransactionFrame::processPostTxSetApply at the moment.
-                processResultAndMeta(ledgerCloseMeta, index, tm, *tx,
-                                     mutableTxResult, txResultSet,
-                                     sorobanTxSucceeded, sorobanTxFailed,
-                                     txSucceeded, txFailed);
-
-                ++index;
-            }
+            applySequentialPhase(
+                phase, mutableTxResults, index, ltx, enableTxMeta,
+                sorobanBasePrngSeed, ledgerCloseMeta, txResultSet,
+                sorobanTxSucceeded, sorobanTxFailed, txSucceeded, txFailed);
         }
     }
 
@@ -2477,6 +2386,118 @@ LedgerManagerImpl::applyTransactions(
     mApplyState.mMetrics.mSorobanTransactionApplyFailed.inc(sorobanTxFailed);
     logTxApplyMetrics(ltx, numTxs, numOps);
     return txResultSet;
+}
+
+void
+LedgerManagerImpl::applyParallelPhase(
+    TxSetPhaseFrame const& phase, std::vector<stellar::ApplyStage>& applyStages,
+    std::vector<stellar::MutableTxResultPtr> const& mutableTxResults,
+    int& index, stellar::AbstractLedgerTxn& ltx, bool enableTxMeta,
+    Hash const& sorobanBasePrngSeed)
+{
+
+    auto const& txSetStages = phase.getParallelStages();
+
+    applyStages.reserve(txSetStages.size());
+
+    for (auto const& stage : txSetStages)
+    {
+        std::vector<Cluster> applyClusters;
+        applyClusters.reserve(stage.size());
+
+        for (auto const& cluster : stage)
+        {
+            Cluster applyCluster;
+            applyCluster.reserve(cluster.size());
+
+            for (auto const& tx : cluster)
+            {
+                auto& mutableTxResult = mutableTxResults.at(index);
+                applyCluster.emplace_back(
+                    mApp.getAppConnector(), tx, *mutableTxResult,
+                    ltx.loadHeader().current().ledgerVersion, index,
+                    enableTxMeta);
+
+                // Use txBundle.getTxNum() to get this transactions
+                // index from now on
+                ++index;
+
+                // Emit fee event before applying the transaction. This
+                // technically has to be emitted during
+                // processFeesSeqNums, but since tx meta doesn't exist
+                // at that point, we emit the event as soon as possible.
+                applyCluster.back()
+                    .getEffects()
+                    .getMeta()
+                    .getTxEventManager()
+                    .newFeeEvent(tx->getFeeSourceID(),
+                                 mutableTxResult->getFeeCharged(),
+                                 TransactionEventStage::
+                                     TRANSACTION_EVENT_STAGE_BEFORE_ALL_TXS);
+            }
+            applyClusters.emplace_back(std::move(applyCluster));
+        }
+        applyStages.emplace_back(std::move(applyClusters));
+    }
+
+    applySorobanStages(mApp.getAppConnector(), ltx, applyStages,
+                       sorobanBasePrngSeed);
+
+    // meta will be processed in processPostTxSetApply
+}
+
+void
+LedgerManagerImpl::applySequentialPhase(
+    TxSetPhaseFrame const& phase,
+    std::vector<MutableTxResultPtr> const& mutableTxResults, int& index,
+    AbstractLedgerTxn& ltx, bool enableTxMeta, Hash const& sorobanBasePrngSeed,
+    std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
+    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+{
+    for (auto const& tx : phase)
+    {
+        ZoneNamedN(txZone, "applyTransaction", true);
+        auto& mutableTxResult = *mutableTxResults.at(index);
+
+        auto txTime = mApplyState.mMetrics.mTransactionApply.TimeScope();
+        TransactionMetaBuilder tm(enableTxMeta, *tx,
+                                  ltx.loadHeader().current().ledgerVersion,
+                                  mApp.getAppConnector());
+        // Emit fee event before applying the transaction. This
+        // technically has to be emitted during processFeesSeqNums, but
+        // since tx meta doesn't exist at that point, we emit the event
+        // as soon as possible.
+        tm.getTxEventManager().newFeeEvent(
+            tx->getFeeSourceID(), mutableTxResult.getFeeCharged(),
+            TransactionEventStage::TRANSACTION_EVENT_STAGE_BEFORE_ALL_TXS);
+        CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
+                   hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
+                   tx->getSeqNum(),
+                   mApp.getConfig().toShortString(tx->getSourceID()));
+
+        Hash subSeed = sorobanBasePrngSeed;
+        // If tx can use the seed, we need to compute a sub-seed for it.
+        if (tx->isSoroban())
+        {
+            SHA256 subSeedSha;
+            subSeedSha.add(sorobanBasePrngSeed);
+            subSeedSha.add(xdr::xdr_to_opaque(index));
+            subSeed = subSeedSha.finish();
+        }
+
+        tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult, subSeed);
+        tx->processPostApply(mApp.getAppConnector(), ltx, tm, mutableTxResult);
+
+        // We process meta early here instead of in
+        // processPostTxSetApply because the non-parallel path does not
+        // used TransactionFrame::processPostTxSetApply at the moment.
+        processResultAndMeta(ledgerCloseMeta, index, tm, *tx, mutableTxResult,
+                             txResultSet, sorobanTxSucceeded, sorobanTxFailed,
+                             txSucceeded, txFailed);
+
+        ++index;
+    }
 }
 
 void

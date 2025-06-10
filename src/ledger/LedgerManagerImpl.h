@@ -185,12 +185,26 @@ class LedgerManagerImpl : public LedgerManager
         AbstractLedgerTxn& ltx,
         std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta);
 
+    void
+    applyParallelPhase(TxSetPhaseFrame const& phase,
+                       std::vector<ApplyStage>& applyStages,
+                       std::vector<MutableTxResultPtr> const& mutableTxResults,
+                       int& index, AbstractLedgerTxn& ltx, bool enableTxMeta,
+                       Hash const& sorobanBasePrngSeed);
+
+    void applySequentialPhase(
+        TxSetPhaseFrame const& phase,
+        std::vector<MutableTxResultPtr> const& mutableTxResults, int& index,
+        AbstractLedgerTxn& ltx, bool enableTxMeta,
+        Hash const& sorobanBasePrngSeed,
+        std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
+        TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
+        uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed);
+
     void processPostTxSetApply(
-        std::vector<stellar::TxSetPhaseFrame> const& phases,
-        std::vector<stellar::ApplyStage> const& applyStages,
-        stellar::AbstractLedgerTxn& ltx,
-        std::__1::unique_ptr<stellar::LedgerCloseMetaFrame> const&
-            ledgerCloseMeta,
+        std::vector<TxSetPhaseFrame> const& phases,
+        std::vector<ApplyStage> const& applyStages, AbstractLedgerTxn& ltx,
+        std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
         TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
         uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed);
 
