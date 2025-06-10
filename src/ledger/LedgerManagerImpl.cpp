@@ -1980,12 +1980,12 @@ recordModifiedAndRestoredEntries(std::unique_ptr<ThreadEntryMap>& entryMap,
 }
 
 std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
-LedgerManagerImpl::applyThread(
-    AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMap,
-    Cluster const& cluster, Config const& config,
-    SorobanNetworkConfig const& sorobanConfig,
-    std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
-    Hash sorobanBasePrngSeed)
+LedgerManagerImpl::applyThread(AppConnector& app,
+                               std::unique_ptr<ThreadEntryMap> entryMap,
+                               Cluster const& cluster, Config const& config,
+                               SorobanNetworkConfig const& sorobanConfig,
+                               ParallelLedgerInfo ledgerInfo,
+                               Hash sorobanBasePrngSeed)
 {
     // RO TTL bumps should only be observed when the entry is modified, so
     // we accumulate the RO TTL bumps until we need to apply them.
@@ -2005,7 +2005,7 @@ LedgerManagerImpl::applyThread(
         flushRoTTLBumpsRequiredByTx(entryMap, roTTLBumps, txBundle);
 
         auto res = txBundle.getTx()->parallelApply(
-            app, *entryMap, config, sorobanConfig, *ledgerInfo,
+            app, *entryMap, config, sorobanConfig, ledgerInfo,
             txBundle.getResPayload(), getSorobanMetrics(), txSubSeed,
             txBundle.getEffects());
 
@@ -2025,12 +2025,11 @@ LedgerManagerImpl::applyThread(
     return {threadRestoredKeys, std::move(entryMap)};
 }
 
-std::shared_ptr<ParallelLedgerInfo const>
+ParallelLedgerInfo
 getParallelLedgerInfo(AppConnector& app, LedgerHeader const& lh)
 {
-    return std::make_shared<ParallelLedgerInfo>(
-        lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve, lh.scpValue.closeTime,
-        app.getNetworkID());
+    return {lh.ledgerVersion, lh.ledgerSeq, lh.baseReserve,
+            lh.scpValue.closeTime, app.getNetworkID()};
 }
 
 std::pair<std::vector<RestoredKeys>,
@@ -2039,7 +2038,7 @@ LedgerManagerImpl::applySorobanStageClustersInParallel(
     AppConnector& app, AbstractLedgerTxn& ltx, ApplyStage const& stage,
     Hash const& sorobanBasePrngSeed, Config const& config,
     SorobanNetworkConfig const& sorobanConfig,
-    std::shared_ptr<ParallelLedgerInfo const> ledgerInfo)
+    ParallelLedgerInfo const& ledgerInfo)
 {
     std::vector<RestoredKeys> threadRestoredKeys;
     std::vector<std::unique_ptr<ThreadEntryMap>> entryMapsByCluster;
@@ -2057,8 +2056,8 @@ LedgerManagerImpl::applySorobanStageClustersInParallel(
         threadFutures.emplace_back(std::async(
             std::launch::async, &LedgerManagerImpl::applyThread, this,
             std::ref(app), std::move(entryMapPtr), std::cref(cluster),
-            std::cref(config), std::cref(sorobanConfig), std::cref(ledgerInfo),
-            std::cref(sorobanBasePrngSeed)));
+            std::cref(config), std::cref(sorobanConfig), ledgerInfo,
+            sorobanBasePrngSeed));
     }
 
     for (auto& restoredKeysFutures : threadFutures)
@@ -2097,7 +2096,7 @@ LedgerManagerImpl::addAllRestoredKeysToLedgerTxn(
 void
 LedgerManagerImpl::checkAllTxBundleInvariantsAndCallProcessPostApply(
     AppConnector& app, ApplyStage const& stage, Config const& config,
-    std::shared_ptr<const ParallelLedgerInfo>& ledgerInfo, LedgerTxn& ltxInner)
+    ParallelLedgerInfo const& ledgerInfo, LedgerTxn& ltxInner)
 {
     for (auto const& txBundle : stage)
     {
@@ -2132,7 +2131,7 @@ LedgerManagerImpl::checkAllTxBundleInvariantsAndCallProcessPostApply(
         // We only increase the internal-error metric count if the
         // ledger is a newer version.
         if (txBundle.getResPayload().getResultCode() == txINTERNAL_ERROR &&
-            ledgerInfo->getLedgerVersion() >=
+            ledgerInfo.getLedgerVersion() >=
                 config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT)
         {
             auto& internalErrorCounter = app.getMetrics().NewCounter(

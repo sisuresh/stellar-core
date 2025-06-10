@@ -190,8 +190,7 @@ class LedgerManagerImpl : public LedgerManager
                 std::unique_ptr<ThreadEntryMap> entryMapByCluster,
                 Cluster const& cluster, Config const& config,
                 SorobanNetworkConfig const& sorobanConfig,
-                std::shared_ptr<ParallelLedgerInfo const> ledgerInfo,
-                Hash sorobanBasePrngSeed);
+                ParallelLedgerInfo ledgerInfo, Hash sorobanBasePrngSeed);
 
     std::pair<std::vector<RestoredKeys>,
               std::vector<std::unique_ptr<ThreadEntryMap>>>
@@ -199,15 +198,14 @@ class LedgerManagerImpl : public LedgerManager
         AppConnector& app, AbstractLedgerTxn& ltx, ApplyStage const& stage,
         Hash const& sorobanBasePrngSeed, Config const& config,
         SorobanNetworkConfig const& sorobanConfig,
-        std::shared_ptr<ParallelLedgerInfo const> ledgerInfo);
+        ParallelLedgerInfo const& ledgerInfo);
 
     void addAllRestoredKeysToLedgerTxn(
         std::vector<RestoredKeys> const& threadRestoredKeys,
         LedgerTxn& ltxInner);
     void checkAllTxBundleInvariantsAndCallProcessPostApply(
         AppConnector& app, ApplyStage const& stage, Config const& config,
-        std::shared_ptr<const ParallelLedgerInfo>& ledgerInfo,
-        LedgerTxn& ltxInner);
+        ParallelLedgerInfo const& ledgerInfo, LedgerTxn& ltxInner);
     void writeDirtyMapEntriesToLedgerTxn(
         std::vector<std::unique_ptr<ThreadEntryMap>> const& entryMapsByCluster,
         LedgerTxn& ltxInner,
