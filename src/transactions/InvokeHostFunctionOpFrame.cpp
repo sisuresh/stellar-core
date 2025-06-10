@@ -267,73 +267,9 @@ class ApplyHelper
     SearchableHotArchiveSnapshotConstPtr mHotArchive;
     DiagnosticEventManager& mDiagnosticEvents;
 
-    // Bitmap to track which entries in the read-write footprint are
-    // marked for autorestore based on readWrite footprint ordering. If
-    // true, the entry is marked for autorestore.
-    // If no entries are marked for autorestore, the vector is empty.
-    std::vector<bool> mAutorestoredEntries{};
-
-    // Helper called on all archived keys in the footprint. Returns false if
-    // the operation should fail and populates result code and diagnostic
-    // events. Returns true if no failure occurred.
-    bool
-    handleArchivedEntry(LedgerKey const& lk, LedgerEntry const& le,
-                        bool isReadOnly, uint32_t restoredLiveUntilLedger,
-                        bool isHotArchiveEntry, uint32_t index)
+    void
+    handleArchivedEntry(LedgerKey const& lk)
     {
-        // autorestore support started in p23. Entry must be in the read write
-        // footprint and must be marked as in the archivedSorobanEntries vector.
-        if (!isReadOnly &&
-            protocolVersionStartsFrom(
-                mLtx.getHeader().ledgerVersion,
-                HotArchiveBucket::
-                    FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION) &&
-            checkIfReadWriteEntryIsMarkedForAutorestore(lk, index))
-        {
-            // In the auto restore case, we need to restore the entry and meter
-            // disk reads. The host will take care of rent fees, and write fees
-            // will be metered after the host returns.
-            auto leBuf = toCxxBuf(le);
-            auto entrySize = static_cast<uint32>(leBuf.data->size());
-            auto keySize = static_cast<uint32>(xdr::xdr_size(lk));
-
-            if (!validateContractLedgerEntry(lk, entrySize, mSorobanConfig,
-                                             mAppConfig, mOpFrame.mParentTx,
-                                             mDiagnosticEvents))
-            {
-                mOpFrame.innerResult(mRes).code(
-                    INVOKE_HOST_FUNCTION_RESOURCE_LIMIT_EXCEEDED);
-                return false;
-            }
-
-            // Charge for the restoration reads. TTLEntry writes come out of
-            // refundable fee, so only meter the actual code/data entry here.
-            if (!meterDiskReadResource(lk, keySize, entrySize))
-            {
-                return false;
-            }
-
-            // Restore the entry to the live BucketList
-            LedgerTxnEntry ttlEntry;
-            if (isHotArchiveEntry)
-            {
-                ttlEntry =
-                    mLtx.restoreFromHotArchive(le, restoredLiveUntilLedger);
-            }
-            else
-            {
-                ttlEntry =
-                    mLtx.restoreFromLiveBucketList(le, restoredLiveUntilLedger);
-            }
-
-            // Finally, add the entries to the Cxx buffer as if they were live.
-            mLedgerEntryCxxBufs.emplace_back(std::move(leBuf));
-            auto ttlBuf = toCxxBuf(ttlEntry.current().data.ttl());
-            mTtlEntryCxxBufs.emplace_back(std::move(ttlBuf));
-
-            return true;
-        }
-
         // Before p23, archived entries are never valid
         if (lk.type() == CONTRACT_CODE)
         {
@@ -352,7 +288,6 @@ class ApplyHelper
         }
 
         mOpFrame.innerResult(mRes).code(INVOKE_HOST_FUNCTION_ENTRY_ARCHIVED);
-        return false;
     }
 
     // Helper to meter disk read resources and validate
@@ -381,24 +316,6 @@ class ApplyHelper
         }
 
         return true;
-    }
-
-    // Returns true if the given key is marked for
-    // autorestore, false otherwise. Assumes that lk is
-    // a read-write key.
-    bool
-    checkIfReadWriteEntryIsMarkedForAutorestore(LedgerKey const& lk,
-                                                uint32_t index)
-    {
-
-        // If the autorestore vector is empty, there
-        // are no entries to restore
-        if (mAutorestoredEntries.empty())
-        {
-            return false;
-        }
-
-        return mAutorestoredEntries.at(index);
     }
 
     // Checks and meters the given keys. Returns false
@@ -448,47 +365,14 @@ class ApplyHelper
                         if (!isTemporaryEntry(lk))
                         {
                             auto leLtxe = mLtx.loadWithoutRecord(lk);
-                            if (!handleArchivedEntry(
-                                    lk, leLtxe.current(), isReadOnly,
-                                    restoredLiveUntilLedger,
-                                    /*isHotArchiveEntry=*/false, i))
-                            {
-                                return false;
-                            }
-
-                            continue;
+                            handleArchivedEntry(lk);
+                            return false;
                         }
                     }
                     else
                     {
                         sorobanEntryLive = true;
                         ttlEntry = ttlEntryOp->data.ttl();
-                    }
-                }
-                // If ttlLtxe doesn't exist, this is a new Soroban entry
-                // Starting in protocol 23, we must check the Hot Archive for
-                // new keys. If a new key is actually archived, fail the op.
-                else if (isPersistentEntry(lk) &&
-                         protocolVersionStartsFrom(
-                             mLtx.getHeader().ledgerVersion,
-                             HotArchiveBucket::
-                                 FIRST_PROTOCOL_SUPPORTING_PERSISTENT_EVICTION))
-                {
-                    auto archiveEntry = mHotArchive->load(lk);
-                    if (archiveEntry)
-                    {
-                        releaseAssertOrThrow(
-                            archiveEntry->type() ==
-                            HotArchiveBucketEntryType::HOT_ARCHIVE_ARCHIVED);
-                        if (!handleArchivedEntry(
-                                lk, archiveEntry->archivedEntry(), isReadOnly,
-                                restoredLiveUntilLedger,
-                                /*isHotArchiveEntry=*/true, i))
-                        {
-                            return false;
-                        }
-
-                        continue;
                     }
                 }
             }
@@ -574,28 +458,6 @@ class ApplyHelper
         // Get the entries for the footprint
         mLedgerEntryCxxBufs.reserve(footprintLength);
         mTtlEntryCxxBufs.reserve(footprintLength);
-
-        // Initialize the autorestore lookup vector
-        auto const& resourceExt = mOpFrame.getResourcesExt();
-        auto const& rwFootprint = mResources.footprint.readWrite;
-
-        // No keys marked for autorestore
-        if (resourceExt.v() != 1)
-        {
-            return;
-        }
-
-        auto const& archivedEntries =
-            resourceExt.resourceExt().archivedSorobanEntries;
-        if (!archivedEntries.empty())
-        {
-            // Initialize vector with false values for all keys
-            mAutorestoredEntries.resize(rwFootprint.size(), false);
-            for (auto index : archivedEntries)
-            {
-                mAutorestoredEntries.at(index) = true;
-            }
-        }
     }
 
     bool
