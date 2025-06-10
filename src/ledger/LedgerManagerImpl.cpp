@@ -2336,12 +2336,10 @@ LedgerManagerImpl::applyTransactions(
     auto phases = txSet.getPhasesInApplyOrder();
 
     Hash sorobanBasePrngSeed = txSet.getContentsHash();
-    uint64_t txNum{0};
     uint64_t txSucceeded{0};
     uint64_t txFailed{0};
     uint64_t sorobanTxSucceeded{0};
     uint64_t sorobanTxFailed{0};
-    size_t resultIndex = 0;
 
     // There is no need to populate the transaction meta if we are not going
     // to output it. This flag will make most of the meta operations to be
@@ -2375,12 +2373,15 @@ LedgerManagerImpl::applyTransactions(
 
                     for (auto const& tx : cluster)
                     {
-                        auto num = txNum++;
-                        auto& mutableTxResult = mutableTxResults.at(num);
+                        auto& mutableTxResult = mutableTxResults.at(index);
                         applyCluster.emplace_back(
                             mApp.getAppConnector(), tx, *mutableTxResult,
-                            ltx.loadHeader().current().ledgerVersion, num,
+                            ltx.loadHeader().current().ledgerVersion, index,
                             enableTxMeta);
+
+                        // Use txBundle.getTxNum() to get this transactions
+                        // index from now on
+                        ++index;
 
                         // Emit fee event before applying the transaction. This
                         // technically has to be emitted during
@@ -2435,13 +2436,12 @@ LedgerManagerImpl::applyTransactions(
 
                     // setPostTxApplyFeeProcessing can update the feeCharged in
                     // the result, so this needs to be done after
-                    processResultAndMeta(
-                        ledgerCloseMeta, index, txBundle.getEffects().getMeta(),
-                        *txBundle.getTx(), txBundle.getResPayload(),
-                        txResultSet, sorobanTxSucceeded, sorobanTxFailed,
-                        txSucceeded, txFailed);
-
-                    ++index;
+                    processResultAndMeta(ledgerCloseMeta, txBundle.getTxNum(),
+                                         txBundle.getEffects().getMeta(),
+                                         *txBundle.getTx(),
+                                         txBundle.getResPayload(), txResultSet,
+                                         sorobanTxSucceeded, sorobanTxFailed,
+                                         txSucceeded, txFailed);
                 }
             }
         }
@@ -2450,7 +2450,7 @@ LedgerManagerImpl::applyTransactions(
             for (auto const& tx : phase)
             {
                 ZoneNamedN(txZone, "applyTransaction", true);
-                auto& mutableTxResult = *mutableTxResults.at(resultIndex++);
+                auto& mutableTxResult = *mutableTxResults.at(index);
 
                 auto txTime =
                     mApplyState.mMetrics.mTransactionApply.TimeScope();
@@ -2476,10 +2476,9 @@ LedgerManagerImpl::applyTransactions(
                 {
                     SHA256 subSeedSha;
                     subSeedSha.add(sorobanBasePrngSeed);
-                    subSeedSha.add(xdr::xdr_to_opaque(txNum));
+                    subSeedSha.add(xdr::xdr_to_opaque(index));
                     subSeed = subSeedSha.finish();
                 }
-                ++txNum;
 
                 tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult,
                           subSeed);
