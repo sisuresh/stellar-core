@@ -952,7 +952,10 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
                 // Only mark on failure because we'll also count read bytes
                 // during apply to also count anything read from the hot
                 // archive.
+                // If we fail the tx here, we will not call doParallelApply,
+                // so any metrics we need should be set here.
                 readEntryCounters.mark(sorobanMetrics);
+                sorobanMetrics.mHostFnOpFailure.Mark();
 
                 return false;
             }

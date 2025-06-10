@@ -552,12 +552,9 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
                       std::optional<uint32_t> expectedRefund = std::nullopt,
                       bool addContractKeys = true) {
         auto rootAccount = test.getRoot();
-        // NB: we're using a single root ltx that will collect all the changes
-        // in memory in order to test lower-level Soroban logic. Thus the
-        // changes will be rolled back after `invoke` has finished.
-        LedgerTxn rootLtx(test.getApp().getLedgerTxnRoot());
+
         auto getRootBalance = [&]() {
-            LedgerTxn ltx(rootLtx);
+            LedgerTxn ltx(test.getApp().getLedgerTxnRoot());
             auto entry = stellar::loadAccount(ltx, rootAccount.getPublicKey());
             return entry.current().data.account().balance;
         };
@@ -566,79 +563,26 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
         auto invocation = contract.prepareInvocation(functionName, args, spec,
                                                      addContractKeys);
         auto tx = invocation.createTx(&rootAccount);
-        auto diagnostics = DiagnosticEventManager::createDisabled();
-        auto result = tx->checkValid(test.getApp().getAppConnector(), rootLtx,
-                                     0, 0, 0, diagnostics);
-        REQUIRE(result->isSuccess());
+        auto resPair = test.invokeTxAndGetLCM(tx);
+        auto const& result = resPair.first;
+        auto const& lcm = resPair.second;
 
         REQUIRE(tx->getFullFee() ==
                 spec.getInclusionFee() + spec.getResourceFee());
         REQUIRE(tx->getInclusionFee() == spec.getInclusionFee());
 
-        // Initially we store in result the charge for resources plus
-        // minimum inclusion  fee bid (currently equivalent to the
-        // network `baseFee` of 100).
-        int64_t baseCharged = tx->declaredSorobanResourceFee() + 100;
-        // Imitate surge pricing by charging at a higher rate than
-        // base fee.
-        uint32_t const surgePricedFee = 300;
-        REQUIRE(result->getFeeCharged() == baseCharged);
-        {
-            LedgerTxn ltx(rootLtx);
-            result = tx->processFeeSeqNum(ltx, surgePricedFee);
-            ltx.commit();
-        }
-        // The resource and the base fee are charged, with additional
-        // surge pricing fee.
-        int64_t balanceAfterFeeCharged = getRootBalance();
-        REQUIRE(initBalance - balanceAfterFeeCharged ==
-                tx->declaredSorobanResourceFee() + surgePricedFee);
-
-        TransactionMetaBuilder txmBuilder(true, *tx, test.getLedgerVersion(),
-                                          test.getApp().getAppConnector());
-        auto timerBefore = hostFnExecTimer.count();
-        // TODO:This doesn't work post v22
-        bool success = tx->apply(test.getApp().getAppConnector(), rootLtx,
-                                 txmBuilder, *result);
-        REQUIRE(hostFnExecTimer.count() - timerBefore > 0);
-
-        {
-            LedgerTxn ltx(rootLtx);
-            tx->processPostApply(test.getApp().getAppConnector(), ltx,
-                                 txmBuilder, *result);
-            ltx.commit();
-        }
-
-        // This is a little weird. This test does not call into ledger manager
-        // for transaction application, so all we get in terms of meta is
-        // TransactionMeta, which is passed into TransactionFrame::apply. To
-        // make sure we can test the refund, we create a LedgerCloseMetaFrame
-        // here and force the refund to be set on it (post v23). This LCM will
-        // only contain the refund, and nothing else.
-        LedgerCloseMetaFrame lcm(test.getLedgerVersion());
-        if (protocolVersionStartsFrom(test.getLedgerVersion(),
-                                      PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION))
-        {
-            LedgerTxn ltx(rootLtx);
-            tx->processPostTxSetApply(test.getApp().getAppConnector(), ltx,
-                                      *result, txmBuilder.getTxEventManager());
-
-            lcm.pushTxProcessingEntry();
-            lcm.setPostTxApplyFeeProcessing(ltx.getChanges(), 0);
-
-            ltx.commit();
-        }
-
-        TransactionMetaFrame txm(txmBuilder.finalize(success));
+        TransactionMetaFrame txm(lcm.getTransactionMeta(0));
         auto refundChanges =
             protocolVersionIsBefore(test.getLedgerVersion(),
                                     PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION)
                 ? txm.getChangesAfter()
                 : lcm.getPostTxApplyFeeProcessing(0);
+
         // In case of failure we simply refund the whole refundable fee portion.
         if (!expectedRefund)
         {
-            REQUIRE(!success);
+            REQUIRE(result.result.code() !=
+                    txSUCCESS); // We expect a failure here.
             // Compute the exact refundable fee (so we don't need spec
             // to have the exact refundable fee set).
             auto nonRefundableFee =
@@ -653,10 +597,9 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
                     refundChanges[0].state().data.account().balance ==
                 *expectedRefund);
 
-        // Make sure account receives expected refund
-        REQUIRE(getRootBalance() - balanceAfterFeeCharged == *expectedRefund);
+        REQUIRE(initBalance - result.feeCharged == getRootBalance());
 
-        return std::make_tuple(tx, txm, std::move(result));
+        return std::make_tuple(txm, std::move(result));
     };
 
     auto failedInvoke =
@@ -665,13 +608,12 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
             bool addContractKeys = true) {
             auto successesBefore = hostFnSuccessMeter.count();
             auto failuresBefore = hostFnFailureMeter.count();
-            auto [tx, txm, result] = invoke(contract, functionName, args, spec,
-                                            std::nullopt, addContractKeys);
+            auto [mtxm, result] = invoke(contract, functionName, args, spec,
+                                         std::nullopt, addContractKeys);
             REQUIRE(hostFnSuccessMeter.count() - successesBefore == 0);
             REQUIRE(hostFnFailureMeter.count() - failuresBefore == 1);
-            REQUIRE(result->getResultCode() == txFAILED);
-            return result->getXDR()
-                .result.results()[0]
+            REQUIRE(result.result.code() == txFAILED);
+            return result.result.results()[0]
                 .tr()
                 .invokeHostFunctionResult()
                 .code();
@@ -706,14 +648,14 @@ TEST_CASE_VERSIONS("basic contract invocation", "[tx][soroban]")
         auto successesBefore = hostFnSuccessMeter.count();
         auto failuresBefore = hostFnFailureMeter.count();
 
-        auto [tx, txm, result] =
+        auto [txm, result] =
             invoke(addContract, fnName, {sc7, sc16}, spec, expectedRefund);
 
         REQUIRE(hostFnSuccessMeter.count() - successesBefore == 1);
         REQUIRE(hostFnFailureMeter.count() - failuresBefore == 0);
-        REQUIRE(result->isSuccess());
+        REQUIRE(result.result.code() == txSUCCESS);
 
-        auto const& ores = result->getXDR().result.results().at(0);
+        auto const& ores = result.result.results().at(0);
         REQUIRE(ores.tr().type() == INVOKE_HOST_FUNCTION);
         REQUIRE(ores.tr().invokeHostFunctionResult().code() ==
                 INVOKE_HOST_FUNCTION_SUCCESS);
