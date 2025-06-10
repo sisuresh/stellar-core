@@ -570,10 +570,13 @@ applySurgePricing(TxSetPhase phase, TxFrameList const& txs, Application& app
         if (enforceTxsApplyOrder)
         {
             TxStageFrameList frameList;
-            frameList = {{txs}};
+            if (!txs.empty())
+            {
+                frameList = {{txs}};
+            }
             includedTxs = frameList;
 
-            // soroban only has one fee lane lane
+            // soroban only has one fee lane
             hadTxNotFittingLane.emplace_back(false);
         }
         else
