@@ -163,66 +163,6 @@ OperationFrame::apply(AppConnector& app, SignatureChecker& signatureChecker,
 }
 
 bool
-OperationFrame::preloadEntryHelper(
-    AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-    std::function<bool(LedgerKey const&, uint32_t /*entrySize*/)>
-        readEntryCallback) const
-{
-    auto getEntries = [&](xdr::xvector<LedgerKey> const& keys) -> bool {
-        for (auto const& lk : keys)
-        {
-            uint32_t entrySize = 0u;
-
-            auto ltxe = ltx.loadWithoutRecord(lk);
-            if (ltxe)
-            {
-                entrySize =
-                    static_cast<uint32_t>(xdr::xdr_size(ltxe.current()));
-
-                entryMap.emplace(lk, ThreadEntry{ltxe.current(), false});
-
-                if (isSorobanEntry(lk))
-                {
-                    auto ttlKey = getTTLKey(lk);
-                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
-                    // TTL entry must exist
-                    releaseAssert(ttlLtxe);
-
-                    entryMap.emplace(ttlKey,
-                                     ThreadEntry{ttlLtxe.current(), false});
-                }
-            }
-            else
-            {
-                entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
-
-                if (isSorobanEntry(lk))
-                {
-                    auto ttlKey = getTTLKey(lk);
-                    auto ttlLtxe = ltx.loadWithoutRecord(ttlKey);
-                    // TTL entry must not exist
-                    releaseAssert(!ttlLtxe);
-                    entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
-                }
-            }
-
-            if (!readEntryCallback(lk, entrySize))
-            {
-                return false;
-            }
-        }
-        return true;
-    };
-
-    bool success = getEntries(mParentTx.sorobanResources().footprint.readOnly);
-    if (success)
-    {
-        success = getEntries(mParentTx.sorobanResources().footprint.readWrite);
-    }
-    return success;
-}
-
-bool
 OperationFrame::preloadEntriesForParallelApply(
     AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
     ThreadEntryMap& entryMap, OperationResult& res,

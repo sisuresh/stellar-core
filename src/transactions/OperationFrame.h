@@ -76,11 +76,6 @@ class OperationFrame
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header) const;
 
-    bool preloadEntryHelper(
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        std::function<bool(LedgerKey const&, uint32_t /*entrySize*/)>
-            readEntryCallback) const;
-
   public:
     static std::shared_ptr<OperationFrame>
     makeHelper(Operation const& op, TransactionFrame const& parentTx,

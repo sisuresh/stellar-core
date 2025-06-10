@@ -892,7 +892,6 @@ InvokeHostFunctionOpFrame::doPreloadEntriesForParallelApply(
                     if (!isLive(ttlLtxe.current(), ledgerSeq) &&
                         isTemporaryEntry(lk))
                     {
-                        meterReads = true;
                         // Temp entry is expired, so treat the TTL as if it
                         // doesn't exist
                         entryMap.emplace(ttlKey,
@@ -1631,65 +1630,63 @@ InvokeHostFunctionOpFrame::maybePopulateDiagnosticEvents(
     Config const& cfg, InvokeHostFunctionOutput const& output,
     HostFunctionMetrics const& metrics, DiagnosticEventManager& buffer) const
 {
-    if (cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
+    if (!cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS)
     {
-        for (auto const& e : output.diagnostic_events)
-        {
-            DiagnosticEvent evt;
-            xdr::xdr_from_opaque(e.data, evt);
-            buffer.pushEvent(std::move(evt));
-            CLOG_DEBUG(Tx, "Soroban diagnostic event: {}",
-                       xdr::xdr_to_string(evt));
-        }
-
-        // add additional diagnostic events for metrics
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_entry",
-                                      metrics.mReadEntryCounters.mReadEntry));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "write_entry", metrics.mWriteEntry));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "ledger_read_byte",
-                         metrics.mReadEntryCounters.mLedgerReadByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "ledger_write_byte",
-                                      metrics.mLedgerWriteByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_key_byte",
-                                      metrics.mReadEntryCounters.mReadKeyByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_key_byte",
-                                      metrics.mWriteKeyByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "read_data_byte",
-                         metrics.mReadEntryCounters.mReadDataByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_data_byte",
-                                      metrics.mWriteDataByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "read_code_byte",
-                         metrics.mReadEntryCounters.mReadCodeByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_code_byte",
-                                      metrics.mWriteCodeByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "emit_event", metrics.mEmitEvent));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "emit_event_byte",
-                                      metrics.mEmitEventByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "cpu_insn", metrics.mCpuInsn));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "mem_byte", metrics.mMemByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "invoke_time_nsecs",
-                                      metrics.mInvokeTimeNsecs));
-        // skip publishing `cpu_insn_excl_vm` and `invoke_time_nsecs_excl_vm`,
-        // we are mostly interested in those internally
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "max_rw_key_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteKeyByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "max_rw_data_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteDataByte));
-        buffer.pushEvent(
-            metricsEvent(metrics.mSuccess, "max_rw_code_byte",
-                         metrics.mReadEntryCounters.mMaxReadWriteCodeByte));
-        buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_emit_event_byte",
-                                      metrics.mMaxEmitEventByte));
+        return;
     }
+
+    for (auto const& e : output.diagnostic_events)
+    {
+        DiagnosticEvent evt;
+        xdr::xdr_from_opaque(e.data, evt);
+        buffer.pushEvent(std::move(evt));
+        CLOG_DEBUG(Tx, "Soroban diagnostic event: {}", xdr::xdr_to_string(evt));
+    }
+
+    // add additional diagnostic events for metrics
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_entry",
+                                  metrics.mReadEntryCounters.mReadEntry));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "write_entry", metrics.mWriteEntry));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "ledger_read_byte",
+                                  metrics.mReadEntryCounters.mLedgerReadByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "ledger_write_byte",
+                                  metrics.mLedgerWriteByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_key_byte",
+                                  metrics.mReadEntryCounters.mReadKeyByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_key_byte",
+                                  metrics.mWriteKeyByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_data_byte",
+                                  metrics.mReadEntryCounters.mReadDataByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_data_byte",
+                                  metrics.mWriteDataByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "read_code_byte",
+                                  metrics.mReadEntryCounters.mReadCodeByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "write_code_byte",
+                                  metrics.mWriteCodeByte));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "emit_event", metrics.mEmitEvent));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "emit_event_byte",
+                                  metrics.mEmitEventByte));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "cpu_insn", metrics.mCpuInsn));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "mem_byte", metrics.mMemByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "invoke_time_nsecs",
+                                  metrics.mInvokeTimeNsecs));
+    // skip publishing `cpu_insn_excl_vm` and `invoke_time_nsecs_excl_vm`,
+    // we are mostly interested in those internally
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "max_rw_key_byte",
+                     metrics.mReadEntryCounters.mMaxReadWriteKeyByte));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "max_rw_data_byte",
+                     metrics.mReadEntryCounters.mMaxReadWriteDataByte));
+    buffer.pushEvent(
+        metricsEvent(metrics.mSuccess, "max_rw_code_byte",
+                     metrics.mReadEntryCounters.mMaxReadWriteCodeByte));
+    buffer.pushEvent(metricsEvent(metrics.mSuccess, "max_emit_event_byte",
+                                  metrics.mMaxEmitEventByte));
 }
 
 bool
