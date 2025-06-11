@@ -2371,7 +2371,6 @@ TransactionFrame::processPostApply(AppConnector& app,
         meta.pushTxChangesAfter(ltx);
         ltx.commit();
     }
-    meta.maybeSetRefundableFeeMeta(txResult.getRefundableFeeTracker());
 }
 
 void

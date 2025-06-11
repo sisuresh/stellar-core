@@ -235,8 +235,6 @@ FeeBumpTransactionFrame::processPostApply(
         meta.pushTxChangesAfter(ltxInner);
         ltxInner.commit();
     }
-
-    meta.maybeSetRefundableFeeMeta(txResult.getRefundableFeeTracker());
 }
 
 void

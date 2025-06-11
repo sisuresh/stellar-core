@@ -2143,6 +2143,9 @@ LedgerManagerImpl::checkAllTxBundleInvariantsAndCallProcessPostApply(
         txBundle.getTx()->processPostApply(mApp.getAppConnector(), ltxInner,
                                            txBundle.getEffects().getMeta(),
                                            txBundle.getResPayload());
+
+        txBundle.getEffects().getMeta().maybeSetRefundableFeeMeta(
+            txBundle.getResPayload().getRefundableFeeTracker());
     }
 }
 void
@@ -2488,6 +2491,8 @@ LedgerManagerImpl::applySequentialPhase(
 
         tx->apply(mApp.getAppConnector(), ltx, tm, mutableTxResult, subSeed);
         tx->processPostApply(mApp.getAppConnector(), ltx, tm, mutableTxResult);
+
+        tm.maybeSetRefundableFeeMeta(mutableTxResult.getRefundableFeeTracker());
 
         // We process meta early here instead of in
         // processPostTxSetApply because the non-parallel path does not
