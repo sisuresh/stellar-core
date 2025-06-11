@@ -2260,8 +2260,7 @@ LedgerManagerImpl::processResultAndMeta(
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
     uint32_t txIndex, TransactionMetaBuilder& txMetaBuilder,
     TransactionFrameBase const& tx, MutableTransactionResultBase const& result,
-    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
-    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+    TransactionResultSet& txResultSet)
 {
     TransactionResultPair resultPair;
     resultPair.transactionHash = tx.getContentsHash();
@@ -2271,17 +2270,17 @@ LedgerManagerImpl::processResultAndMeta(
     {
         if (tx.isSoroban())
         {
-            ++sorobanTxSucceeded;
+            mApplyState.mMetrics.mSorobanTransactionApplySucceeded.inc();
         }
-        ++txSucceeded;
+        mApplyState.mMetrics.mTransactionApplySucceeded.inc();
     }
     else
     {
         if (tx.isSoroban())
         {
-            ++sorobanTxFailed;
+            mApplyState.mMetrics.mSorobanTransactionApplyFailed.inc();
         }
-        ++txFailed;
+        mApplyState.mMetrics.mTransactionApplyFailed.inc();
     }
 
     // First gather the TransactionResultPair into the TxResultSet
@@ -2340,10 +2339,6 @@ LedgerManagerImpl::applyTransactions(
     auto phases = txSet.getPhasesInApplyOrder();
 
     Hash sorobanBasePrngSeed = txSet.getContentsHash();
-    uint64_t txSucceeded{0};
-    uint64_t txFailed{0};
-    uint64_t sorobanTxSucceeded{0};
-    uint64_t sorobanTxFailed{0};
 
     // There is no need to populate the transaction meta if we are not going
     // to output it. This flag will make most of the meta operations to be
@@ -2366,27 +2361,20 @@ LedgerManagerImpl::applyTransactions(
         }
         else
         {
-            applySequentialPhase(
-                phase, mutableTxResults, index, ltx, enableTxMeta,
-                sorobanBasePrngSeed, ledgerCloseMeta, txResultSet,
-                sorobanTxSucceeded, sorobanTxFailed, txSucceeded, txFailed);
+            applySequentialPhase(phase, mutableTxResults, index, ltx,
+                                 enableTxMeta, sorobanBasePrngSeed,
+                                 ledgerCloseMeta, txResultSet);
         }
     }
 
     processPostTxSetApply(phases, applyStages, ltx, ledgerCloseMeta,
-                          txResultSet, sorobanTxSucceeded, sorobanTxFailed,
-                          txSucceeded, txFailed);
+                          txResultSet);
 
 #ifdef BUILD_TESTS
     releaseAssert(ledgerCloseMeta);
     mLastLedgerCloseMeta = *ledgerCloseMeta;
 #endif
 
-    mApplyState.mMetrics.mTransactionApplySucceeded.inc(txSucceeded);
-    mApplyState.mMetrics.mTransactionApplyFailed.inc(txFailed);
-    mApplyState.mMetrics.mSorobanTransactionApplySucceeded.inc(
-        sorobanTxSucceeded);
-    mApplyState.mMetrics.mSorobanTransactionApplyFailed.inc(sorobanTxFailed);
     logTxApplyMetrics(ltx, numTxs, numOps);
     return txResultSet;
 }
@@ -2455,8 +2443,7 @@ LedgerManagerImpl::applySequentialPhase(
     std::vector<MutableTxResultPtr> const& mutableTxResults, int& index,
     AbstractLedgerTxn& ltx, bool enableTxMeta, Hash const& sorobanBasePrngSeed,
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
-    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
-    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+    TransactionResultSet& txResultSet)
 {
     for (auto const& tx : phase)
     {
@@ -2498,8 +2485,7 @@ LedgerManagerImpl::applySequentialPhase(
         // processPostTxSetApply because the non-parallel path does not
         // used TransactionFrame::processPostTxSetApply at the moment.
         processResultAndMeta(ledgerCloseMeta, index, tm, *tx, mutableTxResult,
-                             txResultSet, sorobanTxSucceeded, sorobanTxFailed,
-                             txSucceeded, txFailed);
+                             txResultSet);
 
         ++index;
     }
@@ -2510,8 +2496,7 @@ LedgerManagerImpl::processPostTxSetApply(
     std::vector<TxSetPhaseFrame> const& phases,
     std::vector<ApplyStage> const& applyStages, AbstractLedgerTxn& ltx,
     std::unique_ptr<LedgerCloseMetaFrame> const& ledgerCloseMeta,
-    TransactionResultSet& txResultSet, uint64_t& sorobanTxSucceeded,
-    uint64_t& sorobanTxFailed, uint64_t& txSucceeded, uint64_t& txFailed)
+    TransactionResultSet& txResultSet)
 {
     for (auto const& phase : phases)
     {
@@ -2543,9 +2528,7 @@ LedgerManagerImpl::processPostTxSetApply(
                     processResultAndMeta(ledgerCloseMeta, txBundle.getTxNum(),
                                          txBundle.getEffects().getMeta(),
                                          *txBundle.getTx(),
-                                         txBundle.getResPayload(), txResultSet,
-                                         sorobanTxSucceeded, sorobanTxFailed,
-                                         txSucceeded, txFailed);
+                                         txBundle.getResPayload(), txResultSet);
                 }
             }
         }
