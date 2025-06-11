@@ -245,8 +245,8 @@ struct HostFunctionMetrics
     }
 };
 
-// Helper class for handling state in doApply
-class ApplyHelper
+// Helper class for handling state in doApply. Only used prio to protocol 23
+class PreV23ApplyHelper
 {
   private:
     AppConnector& mApp;
@@ -331,9 +331,8 @@ class ApplyHelper
             ledgerSeq +
             mSorobanConfig.stateArchivalSettings().minPersistentTTL - 1;
 
-        for (size_t i = 0; i < keys.size(); ++i)
+        for (auto const& lk : keys)
         {
-            auto const& lk = keys[i];
             uint32_t keySize = static_cast<uint32_t>(xdr::xdr_size(lk));
             uint32_t entrySize = 0u;
             std::optional<TTLEntry> ttlEntry;
@@ -430,11 +429,11 @@ class ApplyHelper
     }
 
   public:
-    ApplyHelper(AppConnector& app, AbstractLedgerTxn& ltx,
-                Hash const& sorobanBasePrngSeed, OperationResult& res,
-                std::optional<RefundableFeeTracker>& refundableFeeTracker,
-                OperationMetaBuilder& opMeta,
-                InvokeHostFunctionOpFrame const& opFrame)
+    PreV23ApplyHelper(AppConnector& app, AbstractLedgerTxn& ltx,
+                      Hash const& sorobanBasePrngSeed, OperationResult& res,
+                      std::optional<RefundableFeeTracker>& refundableFeeTracker,
+                      OperationMetaBuilder& opMeta,
+                      InvokeHostFunctionOpFrame const& opFrame)
         : mApp(app)
         , mLtx(ltx)
         , mRes(res)
@@ -657,8 +656,8 @@ class ApplyHelper
             }
         }
 
-        // Append events to the enclosing TransactionFrame, where
-        // they'll be picked up and transferred to the TxMeta.
+        // We collect the events into a preimage that will be hashed
+        // into the ledger.
         InvokeHostFunctionSuccessPreImage success{};
         success.events.reserve(out.contract_events.size());
         for (auto const& buf : out.contract_events)
@@ -1408,8 +1407,8 @@ class ParallelApplyHelper
             }
         }
 
-        // Append events to the enclosing TransactionFrame, where
-        // they'll be picked up and transferred to the TxMeta.
+        // We collect the events into a preimage that will be hashed
+        // into the ledger.
         InvokeHostFunctionSuccessPreImage success{};
         success.events.reserve(out.contract_events.size());
         for (auto const& buf : out.contract_events)
@@ -1568,8 +1567,8 @@ InvokeHostFunctionOpFrame::doApply(
                                 PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
 
     // Create ApplyHelper and delegate processing to it
-    ApplyHelper helper(app, ltx, sorobanBasePrngSeed, res, refundableFeeTracker,
-                       opMeta, *this);
+    PreV23ApplyHelper helper(app, ltx, sorobanBasePrngSeed, res,
+                             refundableFeeTracker, opMeta, *this);
     return helper.apply();
 }
 
