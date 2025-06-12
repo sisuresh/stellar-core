@@ -6498,7 +6498,7 @@ TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")
     {
         // All of these put_temporary txs will have the same fee, resulting in
         // some non-determinism when building tx set. To avoid that, use the
-        // i1Spec fee to offet the other txs inclusion fees.
+        // i1Spec fee to offset the other txs inclusion fees.
         auto i1Spec =
             client.writeKeySpec("key1", ContractDataDurability::TEMPORARY);
         auto i1 = client.getContract().prepareInvocation(
@@ -7058,7 +7058,8 @@ TEST_CASE("parallel txs hit declared readBytes", "[tx][soroban][parallelapply]")
     }
 }
 
-TEST_CASE("delete non existent entry", "[tx][soroban][parallelapply]")
+TEST_CASE("delete non existent entry with parallel apply",
+          "[tx][soroban][parallelapply]")
 {
     auto cfg = getTestConfig();
     cfg.LEDGER_PROTOCOL_VERSION =
@@ -7267,7 +7268,7 @@ TEST_CASE("parallel restore and extend op", "[tx][soroban][parallelapply]")
     checkTx(1, r, txSUCCESS);
 }
 
-TEST_CASE("restore and update", "[tx][soroban][parallelapply]")
+TEST_CASE("parallel restore and update", "[tx][soroban][parallelapply]")
 {
     auto cfg = getTestConfig();
     cfg.LEDGER_PROTOCOL_VERSION =
