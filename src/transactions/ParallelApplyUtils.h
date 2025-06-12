@@ -65,4 +65,9 @@ std::unordered_set<LedgerKey> getReadWriteKeysForStage(ApplyStage const& stage);
 std::unique_ptr<ThreadEntryMap> collectEntries(AppConnector& app,
                                                AbstractLedgerTxn& ltx,
                                                Cluster const& cluster);
+
+// sets LedgerTxnDelta within effects
+void setDelta(ThreadEntryMap const& entryMap,
+              OpModifiedEntryMap const& opModifiedEntryMap,
+              ParallelLedgerInfo const& ledgerInfo, TxEffects& effects);
 }
