@@ -40,10 +40,8 @@ LedgerEntryChanges
 processOpLedgerEntryChanges(
     Config const& cfg, OperationFrame const& op,
     LedgerEntryChanges const& initialChanges,
-    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
-        hotArchiveRestores,
-    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
-        liveRestores,
+    UnorderedMap<LedgerKey, LedgerEntry> const& hotArchiveRestores,
+    UnorderedMap<LedgerKey, LedgerEntry> const& liveRestores,
     uint32_t protocolVersion, uint32_t ledgerSeq)
 {
     auto changes = initialChanges;
@@ -276,26 +274,93 @@ processOpLedgerEntryChanges(
 } // namespace
 
 void
-OperationMetaBuilder::setLedgerChanges(
-    LedgerEntryChanges const& initialChanges,
-    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
-        hotArchiveRestores,
-    stellar::UnorderedMap<stellar::LedgerKey, stellar::LedgerEntry> const&
-        liveRestores,
-    uint32_t ledgerSeq)
+OperationMetaBuilder::setLedgerChanges(AbstractLedgerTxn& opLtx,
+                                       uint32_t ledgerSeq)
 {
     if (!mEnabled)
     {
         return;
     }
     std::visit(
-        [&initialChanges, &hotArchiveRestores, &liveRestores, ledgerSeq,
-         this](auto&& meta) {
+        [&opLtx, ledgerSeq, this](auto&& meta) {
             meta.get().changes = processOpLedgerEntryChanges(
-                mConfig, mOp, initialChanges, hotArchiveRestores, liveRestores,
-                mProtocolVersion, ledgerSeq);
+                mConfig, mOp, opLtx.getChanges(),
+                opLtx.getRestoredHotArchiveKeys(),
+                opLtx.getRestoredLiveBucketListKeys(), mProtocolVersion,
+                ledgerSeq);
         },
         mMeta);
+}
+
+void
+OperationMetaBuilder::setLedgerChangesFromEntryMaps(
+    ThreadEntryMap const& initialEntryMap,
+    OpModifiedEntryMap const& opModifiedEntryMap,
+    UnorderedMap<LedgerKey, LedgerEntry> const& hotArchiveRestores,
+    UnorderedMap<LedgerKey, LedgerEntry> const& liveRestores,
+    uint32_t ledgerSeq)
+{
+    if (!mEnabled)
+    {
+        return;
+    }
+
+    LedgerEntryChanges changes;
+    for (auto const& newUpdates : opModifiedEntryMap)
+    {
+        auto const& lk = newUpdates.first;
+        auto const& le = newUpdates.second;
+
+        // Any key the op updates should also be in initialEntryMap because the
+        // keys were taken from the footprint (the ttl keys were added
+        // as well)
+        auto prev = initialEntryMap.find(lk);
+        releaseAssertOrThrow(prev != initialEntryMap.end());
+
+        auto prevLe = prev->second.mLedgerEntry;
+
+        if (prevLe)
+        {
+            changes.emplace_back(LEDGER_ENTRY_STATE);
+            changes.back().state() = *prevLe;
+
+            if (le)
+            {
+                changes.emplace_back(LEDGER_ENTRY_UPDATED);
+                changes.back().updated() = *le;
+                // TODO: Find a better way to set lastModifiedLedgerSeq
+                // lastModifiedLedgerSeq will be set by the ltx commit
+                // later but we need to do this here so meta is
+                // generated correctly.
+                changes.back().updated().lastModifiedLedgerSeq = ledgerSeq;
+            }
+            else
+            {
+                changes.emplace_back(LEDGER_ENTRY_REMOVED);
+                changes.back().removed() = lk;
+            }
+        }
+        else
+        {
+            // op should return a LedgerEntry for this key if it doesn't
+            // exist in EntryMap because it must've been created in the
+            // op
+            releaseAssertOrThrow(le);
+
+            changes.emplace_back(LEDGER_ENTRY_CREATED);
+            changes.back().created() = *le;
+            changes.back().created().lastModifiedLedgerSeq = ledgerSeq;
+        }
+
+        std::visit(
+            [&changes, &hotArchiveRestores, &liveRestores, ledgerSeq,
+             this](auto&& meta) {
+                meta.get().changes = processOpLedgerEntryChanges(
+                    mConfig, mOp, changes, hotArchiveRestores, liveRestores,
+                    mProtocolVersion, ledgerSeq);
+            },
+            mMeta);
+    }
 }
 
 void

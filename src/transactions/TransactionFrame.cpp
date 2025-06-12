@@ -1924,8 +1924,6 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
-            // Build OperationMeta
-            LedgerEntryChanges changes;
             for (auto const& newUpdates : res.getModifiedEntryMap())
             {
                 auto const& lk = newUpdates.first;
@@ -1938,41 +1936,6 @@ TransactionFrame::parallelApply(
                 releaseAssertOrThrow(prev != entryMap.end());
 
                 auto prevLe = prev->second.mLedgerEntry;
-
-                if (prevLe)
-                {
-                    changes.emplace_back(LEDGER_ENTRY_STATE);
-                    changes.back().state() = *prevLe;
-
-                    if (le)
-                    {
-                        changes.emplace_back(LEDGER_ENTRY_UPDATED);
-                        changes.back().updated() = *le;
-                        // TODO: Find a better way to set lastModifiedLedgerSeq
-                        // lastModifiedLedgerSeq will be set by the ltx commit
-                        // later but we need to do this here so meta is
-                        // generated correctly.
-                        changes.back().updated().lastModifiedLedgerSeq =
-                            ledgerInfo.getLedgerSeq();
-                    }
-                    else
-                    {
-                        changes.emplace_back(LEDGER_ENTRY_REMOVED);
-                        changes.back().removed() = lk;
-                    }
-                }
-                else
-                {
-                    // op should return a LedgerEntry for this key if it doesn't
-                    // exist in EntryMap because it must've been created in the
-                    // op
-                    releaseAssertOrThrow(le);
-
-                    changes.emplace_back(LEDGER_ENTRY_CREATED);
-                    changes.back().created() = *le;
-                    changes.back().created().lastModifiedLedgerSeq =
-                        ledgerInfo.getLedgerSeq();
-                }
 
                 LedgerTxnDelta::EntryDelta entryDelta;
                 if (prevLe)
@@ -1996,9 +1959,11 @@ TransactionFrame::parallelApply(
                 // right before we call into the invariants.
             }
 
-            opMeta.setLedgerChanges(changes, res.getRestoredKeys().hotArchive,
-                                    res.getRestoredKeys().liveBucketList,
-                                    ledgerInfo.getLedgerSeq());
+            opMeta.setLedgerChangesFromEntryMaps(
+                entryMap, res.getModifiedEntryMap(),
+                res.getRestoredKeys().hotArchive,
+                res.getRestoredKeys().liveBucketList,
+                ledgerInfo.getLedgerSeq());
         }
         else
         {
@@ -2129,9 +2094,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
 
                 app.checkOnOperationApply(op->getOperation(), opResult, delta,
                                           opEventManager.getEvents());
-                opMeta.setLedgerChanges(
-                    ltxOp.getChanges(), ltxOp.getRestoredHotArchiveKeys(),
-                    ltxOp.getRestoredLiveBucketListKeys(), ledgerSeq);
+                opMeta.setLedgerChanges(ltxOp, ledgerSeq);
             }
 
             if (txRes ||
