@@ -100,7 +100,6 @@ class TxBundle
 };
 
 typedef std::vector<TxBundle> Cluster;
-typedef UnorderedMap<LedgerKey, TTLEntry> TTLs;
 
 class ApplyStage
 {

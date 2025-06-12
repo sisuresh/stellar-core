@@ -1887,6 +1887,12 @@ TransactionFrame::parallelApply(
     Hash const& txPrngSeed, TxEffects& effects) const
 {
     ZoneScoped;
+    // This tx failed validation earlier, do not apply it
+    if (!txResult.isSuccess())
+    {
+        return {false, {}};
+    }
+
     // TODO: Add txResult.adoptFailedReplayResult() block
     bool reportInternalErrOnException = true;
     try
@@ -1901,12 +1907,6 @@ TransactionFrame::parallelApply(
         // Is this safe/will the values make sense?
         auto& opTimer =
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
-
-        // This tx failed validation earlier, do not apply it
-        if (!txResult.isSuccess())
-        {
-            return {false, {}};
-        }
 
         releaseAssertOrThrow(mOperations.size() == 1);
 
