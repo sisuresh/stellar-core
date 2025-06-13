@@ -125,12 +125,6 @@ class TransactionTestFrame : public TransactionFrameBase
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
                               LedgerKeyMeter* lkMeter) const override;
 
-    void preloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        MutableTransactionResultBase& txResult,
-        DiagnosticEventManager& diagnosticEvents) const override;
-
     void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                           TransactionMetaBuilder& meta,
                           MutableTransactionResultBase& resPayload,

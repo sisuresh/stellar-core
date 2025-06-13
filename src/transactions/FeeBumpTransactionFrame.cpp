@@ -81,29 +81,6 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 #endif
 
 void
-FeeBumpTransactionFrame::preloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, MutableTransactionResultBase& txResult,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    try
-    {
-        mInnerTx->preloadEntriesForParallelApply(
-            app, sorobanMetrics, ltx, entryMap, txResult, diagnosticEvents);
-    }
-    catch (std::exception& e)
-    {
-        printErrorAndAbort("Exception in preloadEntriesForParallelApply ",
-                           e.what());
-    }
-    catch (...)
-    {
-        printErrorAndAbort(
-            "Unknown exception in preloadEntriesForParallelApply");
-    }
-}
-
-void
 FeeBumpTransactionFrame::preParallelApply(
     AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
     MutableTransactionResultBase& txResult) const

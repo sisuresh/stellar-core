@@ -66,6 +66,8 @@ class AppConnector
     SearchableHotArchiveSnapshotConstPtr
     copySearchableHotArchiveBucketListSnapshot();
 
+    SearchableSnapshotConstPtr copySearchableLiveBucketListSnapshot();
+
     // Refreshes `snapshot` if a newer snapshot is available. No-op otherwise.
     void
     maybeCopySearchableBucketListSnapshot(SearchableSnapshotConstPtr& snapshot);

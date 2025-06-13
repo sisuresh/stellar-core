@@ -1762,28 +1762,6 @@ maybeTriggerTestInternalError(TransactionEnvelope const& env)
 #endif
 
 void
-TransactionFrame::preloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, MutableTransactionResultBase& txResult,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    releaseAssert(threadIsMain() ||
-                  app.threadIsType(Application::ThreadType::APPLY));
-    releaseAssert(isSoroban());
-    releaseAssert(mOperations.size() == 1);
-
-    auto op = mOperations.front();
-    auto& opResult = txResult.getOpResultAt(0);
-
-    bool res = mOperations.at(0)->preloadEntriesForParallelApply(
-        app, sorobanMetrics, ltx, entryMap, opResult, diagnosticEvents);
-    if (!res)
-    {
-        txResult.setInnermostError(txFAILED);
-    }
-}
-
-void
 TransactionFrame::preParallelApply(
     AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
     MutableTransactionResultBase& resPayload) const
@@ -1897,6 +1875,7 @@ TransactionFrame::parallelApply(
     bool reportInternalErrOnException = true;
     try
     {
+        auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
         // We do not want to increase the internal-error metric count for
         // older ledger versions. The minimum ledger version for which we
         // start internal-error counting is defined in the app config.
@@ -1924,10 +1903,11 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
-            setDelta(entryMap, res.getModifiedEntryMap(), ledgerInfo, effects);
+            setDelta(liveSnapshot, entryMap, res.getModifiedEntryMap(),
+                     ledgerInfo, effects);
 
             opMeta.setLedgerChangesFromEntryMaps(
-                entryMap, res.getModifiedEntryMap(),
+                liveSnapshot, entryMap, res.getModifiedEntryMap(),
                 res.getRestoredKeys().hotArchive,
                 res.getRestoredKeys().liveBucketList,
                 ledgerInfo.getLedgerSeq());

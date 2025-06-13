@@ -11,6 +11,7 @@
 #include "ledger/LedgerTypeUtils.h"
 #include "transactions/MutableTransactionResult.h"
 #include "transactions/OperationFrame.h"
+#include "transactions/ParallelApplyUtils.h"
 #include "transactions/TransactionFrameBase.h"
 #include "transactions/TransactionMeta.h"
 #include "util/GlobalChecks.h"
@@ -294,6 +295,7 @@ OperationMetaBuilder::setLedgerChanges(AbstractLedgerTxn& opLtx,
 
 void
 OperationMetaBuilder::setLedgerChangesFromEntryMaps(
+    SearchableSnapshotConstPtr liveSnapshot,
     ThreadEntryMap const& initialEntryMap,
     OpModifiedEntryMap const& opModifiedEntryMap,
     UnorderedMap<LedgerKey, LedgerEntry> const& hotArchiveRestores,
@@ -311,13 +313,7 @@ OperationMetaBuilder::setLedgerChangesFromEntryMaps(
         auto const& lk = newUpdates.first;
         auto const& le = newUpdates.second;
 
-        // Any key the op updates should also be in initialEntryMap because the
-        // keys were taken from the footprint (the ttl keys were added
-        // as well)
-        auto prev = initialEntryMap.find(lk);
-        releaseAssertOrThrow(prev != initialEntryMap.end());
-
-        auto prevLe = prev->second.mLedgerEntry;
+        auto prevLe = getLiveEntry(lk, liveSnapshot, initialEntryMap);
 
         if (prevLe)
         {

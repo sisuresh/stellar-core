@@ -245,12 +245,6 @@ class TransactionFrame : public TransactionFrameBase
     processFeeSeqNum(AbstractLedgerTxn& ltx,
                      std::optional<int64_t> baseFee) const override;
 
-    void preloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        MutableTransactionResultBase& txResult,
-        DiagnosticEventManager& diagnosticEvents) const override;
-
     void preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                           TransactionMetaBuilder& meta,
                           MutableTransactionResultBase& resPayload,

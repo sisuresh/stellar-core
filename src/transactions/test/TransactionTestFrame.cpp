@@ -306,16 +306,6 @@ TransactionTestFrame::insertKeysForTxApply(UnorderedSet<LedgerKey>& keys,
 }
 
 void
-TransactionTestFrame::preloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, MutableTransactionResultBase& txResult,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    mTransactionFrame->preloadEntriesForParallelApply(
-        app, sorobanMetrics, ltx, entryMap, txResult, diagnosticEvents);
-}
-
-void
 TransactionTestFrame::preParallelApply(
     AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
     MutableTransactionResultBase& resPayload) const

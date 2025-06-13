@@ -52,12 +52,6 @@ class OperationFrame
             std::optional<RefundableFeeTracker>& refundableFeeTracker,
             OperationMetaBuilder& opMeta) const = 0;
 
-    // returns false if preloading failed.
-    virtual bool doPreloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-        DiagnosticEventManager& diagnosticEvents) const;
-
     virtual ParallelTxReturnVal doParallelApply(
         AppConnector& app, ThreadEntryMap const& entryMap, Config const& config,
         SorobanNetworkConfig const& sorobanConfig, Hash const& txPrngSeed,
@@ -103,11 +97,6 @@ class OperationFrame
                OperationResult& res,
                std::optional<RefundableFeeTracker>& refundableFeeTracker,
                OperationMetaBuilder& opMeta) const;
-
-    bool preloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-        DiagnosticEventManager& diagnosticEvents) const;
 
     ParallelTxReturnVal applyParallel(
         AppConnector& app,

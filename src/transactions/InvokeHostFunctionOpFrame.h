@@ -54,11 +54,6 @@ class InvokeHostFunctionOpFrame : public OperationFrame
     bool doCheckValid(uint32_t ledgerVersion,
                       OperationResult& res) const override;
 
-    bool doPreloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap, OperationResult& res,
-        DiagnosticEventManager& diagnosticEvents) const override;
-
     ParallelTxReturnVal doParallelApply(
         AppConnector& app,
         ThreadEntryMap const& entryMap, // Must not be shared between threads!
