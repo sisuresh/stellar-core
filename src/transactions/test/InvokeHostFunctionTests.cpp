@@ -1646,6 +1646,8 @@ TEST_CASE_VERSIONS("refund account merged", "[tx][soroban][merge]")
         classicMergeTx->addSignature(a1.getSecretKey());
         std::vector<TransactionFrameBasePtr> txs = {classicMergeTx, tx};
         auto r = closeLedger(test.getApp(), txs);
+        REQUIRE(r.results.size() == 2);
+
         checkTx(0, r, txSUCCESS);
 
         // The source account of the soroban tx was merged during the classic
@@ -6412,6 +6414,46 @@ readParallelMeta(std::string const& metaPath)
     }
 
     return res;
+}
+
+TEST_CASE_VERSIONS("non-fee source account is recipient of payment in both "
+                   "classic and soroban",
+                   "[tx][soroban][parallelapply]")
+{
+    Config cfg = getTestConfig();
+    cfg.EMIT_CLASSIC_EVENTS = true;
+    cfg.BACKFILL_STELLAR_ASSET_EVENTS = true;
+
+    VirtualClock clock;
+    auto app = createTestApplication(clock, cfg);
+
+    for_versions_from(23, *app, [&] {
+        SorobanTest test(app);
+        AssetContractTestClient assetClient(test, txtest::makeNativeAsset());
+
+        auto ledgerVersion = getLclProtocolVersion(test.getApp());
+
+        const int64_t startingBalance =
+            test.getApp().getLedgerManager().getLastMinBalance(50);
+
+        auto a1 = test.getRoot().create("A", startingBalance);
+        auto b1 = test.getRoot().create("B", startingBalance);
+        auto c1 = test.getRoot().create("C", startingBalance);
+
+        auto b1Addr = makeAccountAddress(b1.getPublicKey());
+        auto sacTx = assetClient.getTransferTx(c1, b1Addr, 50);
+
+        auto classicTx = a1.tx({payment(b1, 10)});
+
+        std::vector<TransactionFrameBasePtr> txs = {classicTx, sacTx};
+        auto r = closeLedger(test.getApp(), txs);
+        REQUIRE(r.results.size() == 2);
+        checkTx(0, r, txSUCCESS);
+        checkTx(1, r, txSUCCESS);
+
+        // Make sure both payments are reflected in the balance
+        REQUIRE(b1.getBalance() == startingBalance + 10 + 50);
+    });
 }
 
 TEST_CASE("parallel txs", "[tx][soroban][parallelapply]")

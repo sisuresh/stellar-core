@@ -2349,11 +2349,15 @@ LedgerManagerImpl::applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,
     ThreadEntryMap globalEntryMap;
     // From now on, we will be using globalEntryMap, liveSnapshots, and the
     // hotArchive to collect all entries. Before we continue though, we need to
-    // load the fee source accounts because they have already been updated with
-    // charged fees, and preParallelApply will update sequence numbers which
-    // won't be reflected in the live snapshot.
-    preParallelApplyAndCollectFeeSourceAccounts(app, ltx, stages,
-                                                globalEntryMap);
+    // load into the globalEntryMap any classic entries that have been modified
+    // in this ledger because those changes won't be reflected in the
+    // globalEntryMap. The entries that could've changed are accounts and
+    // trustlines from the classic phase, as well as fee source accounts that
+    // had their sequence numbers bumped and fees charged. preParallelApply will
+    // update sequence numbers so it needs to be called before we check
+    // LedgerTxn.
+    preParallelApplyAndCollectModifiedClassicEntries(app, ltx, stages,
+                                                     globalEntryMap);
 
     for (auto const& stage : stages)
     {

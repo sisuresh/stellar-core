@@ -478,6 +478,16 @@ class AbstractLedgerTxnParent
     virtual std::shared_ptr<InternalLedgerEntry const>
     getNewestVersion(InternalLedgerKey const& key) const = 0;
 
+    // getNewestVersionBelowRoot finds the newest version of the
+    // InternalLedgerEntry associated with the InternalLedgerKey key by
+    // checking if there is a version stored in this AbstractLedgerTxnParent.
+    // The difference with getNewestVersion is that this function does not do
+    // any lookups in the root, and instead returns nullptr. This is used to
+    // determine which entries need to be loaded from LedgerTxn instead of
+    // the liveSnapshot during ledger apply.
+    virtual std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+    getNewestVersionBelowRoot(InternalLedgerKey const& key) const = 0;
+
     // Return the count of the number of offer objects within
     // range of ledgers `ledgers`. Will throw when called on anything other than
     // a (real or stub) root LedgerTxn.
@@ -797,6 +807,9 @@ class LedgerTxn : public AbstractLedgerTxn
     std::shared_ptr<InternalLedgerEntry const>
     getNewestVersion(InternalLedgerKey const& key) const override;
 
+    std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+    getNewestVersionBelowRoot(InternalLedgerKey const& key) const override;
+
     LedgerTxnEntry load(InternalLedgerKey const& key) override;
 
     void createWithoutLoading(InternalLedgerEntry const& entry) override;
@@ -916,6 +929,9 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     std::shared_ptr<InternalLedgerEntry const>
     getNewestVersion(InternalLedgerKey const& key) const override;
+
+    std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+    getNewestVersionBelowRoot(InternalLedgerKey const& key) const override;
 
     void rollbackChild() noexcept override;
 

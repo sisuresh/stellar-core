@@ -1691,6 +1691,23 @@ LedgerTxn::Impl::getNewestVersionEntryMap(InternalLedgerKey const& key)
     return std::make_pair(mParent.getNewestVersion(key), iter);
 }
 
+std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+LedgerTxn::getNewestVersionBelowRoot(InternalLedgerKey const& key) const
+{
+    return getImpl()->getNewestVersionBelowRoot(key);
+}
+
+std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+LedgerTxn::Impl::getNewestVersionBelowRoot(InternalLedgerKey const& key) const
+{
+    auto iter = mEntry.find(key);
+    if (iter != mEntry.end())
+    {
+        return std::make_pair(true, iter->second.get());
+    }
+    return mParent.getNewestVersionBelowRoot(key);
+}
+
 UnorderedMap<LedgerKey, LedgerEntry>
 LedgerTxn::getOffersByAccountAndAsset(AccountID const& account,
                                       Asset const& asset)
@@ -3574,6 +3591,12 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
             return nullptr;
         }
     }
+}
+
+std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+LedgerTxnRoot::getNewestVersionBelowRoot(InternalLedgerKey const& key) const
+{
+    return {false, nullptr};
 }
 
 void

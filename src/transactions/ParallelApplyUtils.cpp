@@ -60,12 +60,36 @@ collectEntries(ThreadEntryMap const& globalEntryMap, Cluster const& cluster)
 }
 
 void
-preParallelApplyAndCollectFeeSourceAccounts(
+preParallelApplyAndCollectModifiedClassicEntries(
     AppConnector& app, AbstractLedgerTxn& ltx,
     std::vector<ApplyStage> const& stages, ThreadEntryMap& globalEntryMap)
 {
     releaseAssert(threadIsMain() ||
                   app.threadIsType(Application::ThreadType::APPLY));
+
+    auto fetchInMemoryClassicEntries =
+        [&](xdr::xvector<LedgerKey> const& keys) {
+            for (auto const& lk : keys)
+            {
+                if (isSorobanEntry(lk))
+                {
+                    continue;
+                }
+
+                auto entryPair = ltx.getNewestVersionBelowRoot(lk);
+                if (!entryPair.first)
+                {
+                    continue;
+                }
+
+                std::optional<LedgerEntry> entry =
+                    entryPair.second ? std::make_optional<LedgerEntry>(
+                                           entryPair.second->ledgerEntry())
+                                     : std::nullopt;
+
+                globalEntryMap.emplace(lk, ThreadEntry{entry, false});
+            }
+        };
 
     for (auto const& stage : stages)
     {
@@ -77,19 +101,11 @@ preParallelApplyAndCollectFeeSourceAccounts(
                                                txBundle.getEffects().getMeta(),
                                                txBundle.getResPayload());
 
-            auto cltxe = stellar::loadAccountWithoutRecord(
-                ltx, txBundle.getTx()->getFeeSourceID());
+            auto const& footprint =
+                txBundle.getTx()->sorobanResources().footprint;
 
-            auto lk = accountKey(txBundle.getTx()->getFeeSourceID());
-            // fee source was merged in a previous phase
-            if (!cltxe)
-            {
-                globalEntryMap.emplace(lk, ThreadEntry{std::nullopt, false});
-            }
-            else
-            {
-                globalEntryMap.emplace(lk, ThreadEntry{cltxe.current(), false});
-            }
+            fetchInMemoryClassicEntries(footprint.readWrite);
+            fetchInMemoryClassicEntries(footprint.readOnly);
         }
     }
 }

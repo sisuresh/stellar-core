@@ -71,7 +71,7 @@ void setDelta(SearchableSnapshotConstPtr liveSnapshot,
               OpModifiedEntryMap const& opModifiedEntryMap,
               ParallelLedgerInfo const& ledgerInfo, TxEffects& effects);
 
-void preParallelApplyAndCollectFeeSourceAccounts(
+void preParallelApplyAndCollectModifiedClassicEntries(
     AppConnector& app, AbstractLedgerTxn& ltx,
     std::vector<ApplyStage> const& stages, ThreadEntryMap& globalEntryMap);
 

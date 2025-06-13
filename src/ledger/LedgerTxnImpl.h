@@ -474,6 +474,14 @@ class LedgerTxn::Impl
     std::shared_ptr<InternalLedgerEntry const>
     getNewestVersion(InternalLedgerKey const& key) const;
 
+    // getNewestVersionBelowRoot has the basic exception safety guarantee. If it
+    // throws an exception, then
+    // - the prepared statement cache may be, but is not guaranteed to be,
+    //   modified
+    // - the entry cache may be, but is not guaranteed to be, cleared.
+    std::pair<bool, std::shared_ptr<InternalLedgerEntry const> const>
+    getNewestVersionBelowRoot(InternalLedgerKey const& key) const;
+
     // load has the basic exception safety guarantee. If it throws an exception,
     // then
     // - the prepared statement cache may be, but is not guaranteed to be,
