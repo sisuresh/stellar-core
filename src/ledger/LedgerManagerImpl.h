@@ -206,8 +206,7 @@ class LedgerManagerImpl : public LedgerManager
         TransactionResultSet& txResultSet);
 
     std::pair<RestoredKeys, std::unique_ptr<ThreadEntryMap>>
-    applyThread(AppConnector& app,
-                std::unique_ptr<ThreadEntryMap> entryMapByCluster,
+    applyThread(AppConnector& app, std::unique_ptr<ThreadEntryMap> entryMap,
                 Cluster const& cluster, Config const& config,
                 SorobanNetworkConfig const& sorobanConfig,
                 ParallelLedgerInfo ledgerInfo, Hash sorobanBasePrngSeed);
@@ -216,22 +215,27 @@ class LedgerManagerImpl : public LedgerManager
               std::vector<std::unique_ptr<ThreadEntryMap>>>
     applySorobanStageClustersInParallel(
         AppConnector& app, AbstractLedgerTxn& ltx, ApplyStage const& stage,
-        Hash const& sorobanBasePrngSeed, Config const& config,
-        SorobanNetworkConfig const& sorobanConfig,
+        ThreadEntryMap const& entryMap, Hash const& sorobanBasePrngSeed,
+        Config const& config, SorobanNetworkConfig const& sorobanConfig,
         ParallelLedgerInfo const& ledgerInfo);
 
     void addAllRestoredKeysToLedgerTxn(
         std::vector<RestoredKeys> const& threadRestoredKeys,
-        LedgerTxn& ltxInner);
+        AbstractLedgerTxn& ltx);
     void checkAllTxBundleInvariantsAndCallProcessPostApply(
         AppConnector& app, ApplyStage const& stage, Config const& config,
-        ParallelLedgerInfo const& ledgerInfo, LedgerTxn& ltxInner);
-    void writeDirtyMapEntriesToLedgerTxn(
+        ParallelLedgerInfo const& ledgerInfo, AbstractLedgerTxn& ltx);
+
+    void writeDirtyMapEntriesToGlobalEntryMap(
         std::vector<std::unique_ptr<ThreadEntryMap>> const& entryMapsByCluster,
-        LedgerTxn& ltxInner,
+        ThreadEntryMap& globalEntryMap,
         std::unordered_set<LedgerKey> const& isInReadWriteSet);
+
+    void writeGlobalEntryMapToLedgerTxn(AbstractLedgerTxn& ltx,
+                                        ThreadEntryMap const& globalEntryMap);
+
     void applySorobanStage(AppConnector& app, AbstractLedgerTxn& ltx,
-                           ApplyStage const& stage,
+                           ThreadEntryMap& entryMap, ApplyStage const& stage,
                            Hash const& sorobanBasePrngSeed);
 
     void applySorobanStages(AppConnector& app, AbstractLedgerTxn& ltx,

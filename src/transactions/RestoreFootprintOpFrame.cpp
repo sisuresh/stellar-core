@@ -53,73 +53,6 @@ RestoreFootprintOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
-bool
-RestoreFootprintOpFrame::doPreloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, OperationResult& res,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    releaseAssert(threadIsMain() ||
-                  app.threadIsType(Application::ThreadType::APPLY));
-
-    uint32_t ledgerReadByte = 0;
-
-    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-
-    for (auto const& lk : mParentTx.sorobanResources().footprint.readWrite)
-    {
-        auto ttlKey = getTTLKey(lk);
-        auto constTTLLtxe = ltx.loadWithoutRecord(ttlKey);
-        if (constTTLLtxe)
-        {
-            entryMap.emplace(ttlKey,
-                             ThreadEntry{constTTLLtxe.current(), false});
-
-            if (!isLive(constTTLLtxe.current(), ledgerSeq))
-            {
-                auto constEntryLtxe = ltx.loadWithoutRecord(lk);
-
-                entryMap.emplace(lk,
-                                 ThreadEntry{constEntryLtxe.current(), false});
-
-                // We checked for TTLEntry existence above
-                releaseAssertOrThrow(constEntryLtxe);
-
-                ledgerReadByte += static_cast<uint32>(
-                    xdr::xdr_size(constEntryLtxe.current()));
-            }
-            // We aren't adding the entry key if it's live. This means we will
-            // not try to access the entry after this point for this
-            // transaction.
-        }
-        else
-        {
-            entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
-            entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
-        }
-        // If the entry exists in the hot archive, we'll load those during
-        // parallel apply and also validate the read bytes limit then
-
-        auto const& resources = mParentTx.sorobanResources();
-        if (resources.diskReadBytes < ledgerReadByte)
-        {
-            innerResult(res).code(RESTORE_FOOTPRINT_RESOURCE_LIMIT_EXCEEDED);
-
-            diagnosticEvents.pushError(
-                SCE_BUDGET, SCEC_EXCEEDED_LIMIT,
-                "operation byte-read mresources exceeds amount specified",
-                {makeU64SCVal(ledgerReadByte),
-                 makeU64SCVal(resources.diskReadBytes)});
-
-            // Only mark on failure because we'll also count read bytes during
-            // apply to also count anything read from the hot archive.
-            sorobanMetrics.mRestoreFpOpReadLedgerByte.Mark(ledgerReadByte);
-            return false;
-        }
-    }
-    return true;
-}
-
 ParallelTxReturnVal
 RestoreFootprintOpFrame::doParallelApply(
     AppConnector& app,
@@ -138,6 +71,8 @@ RestoreFootprintOpFrame::doParallelApply(
 
     RestoreFootprintMetrics metrics(sorobanMetrics);
     auto timeScope = metrics.getExecTimer();
+
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     auto const& resources = mParentTx.sorobanResources();
     auto const& footprint = resources.footprint;
@@ -163,8 +98,8 @@ RestoreFootprintOpFrame::doParallelApply(
         auto ttlKey = getTTLKey(lk);
         {
             // First check the live BucketList
-            auto ttlLtxe = entryMap.find(ttlKey);
-            if (ttlLtxe == entryMap.end() || !ttlLtxe->second.mLedgerEntry)
+            auto ttlLeOpt = getLiveEntry(ttlKey, liveSnapshot, entryMap);
+            if (!ttlLeOpt)
             {
                 hotArchiveEntry = hotArchive->load(lk);
                 if (!hotArchiveEntry)
@@ -174,7 +109,7 @@ RestoreFootprintOpFrame::doParallelApply(
                 }
             }
             // Skip entry if it's already live.
-            else if (isLive(*ttlLtxe->second.mLedgerEntry, ledgerSeq))
+            else if (isLive(*ttlLeOpt, ledgerSeq))
             {
                 continue;
             }
@@ -191,13 +126,12 @@ RestoreFootprintOpFrame::doParallelApply(
         }
         else
         {
-            auto entryLtxe = entryMap.find(lk);
+            auto entryLeOpt = getLiveEntry(lk, liveSnapshot, entryMap);
 
             // We checked for TTLEntry existence above
-            releaseAssertOrThrow(entryLtxe != entryMap.end() &&
-                                 entryLtxe->second.mLedgerEntry);
+            releaseAssertOrThrow(entryLeOpt);
 
-            entry = *entryLtxe->second.mLedgerEntry;
+            entry = *entryLeOpt;
             entrySize = static_cast<uint32>(xdr::xdr_size(entry));
         }
 
@@ -275,14 +209,10 @@ RestoreFootprintOpFrame::doParallelApply(
         }
         else
         {
-            // Entry exists in the live BucketList if we get to this point due
-            // to the constTTLLtxe loadWithoutRecord logic above.
+            auto ttlLeOpt = getLiveEntry(ttlKey, liveSnapshot, entryMap);
+            releaseAssertOrThrow(ttlLeOpt);
 
-            auto ttlLtxe = entryMap.find(ttlKey);
-            releaseAssertOrThrow(ttlLtxe != entryMap.end() &&
-                                 ttlLtxe->second.mLedgerEntry);
-
-            LedgerEntry ttlEntry = *ttlLtxe->second.mLedgerEntry;
+            LedgerEntry ttlEntry = *ttlLeOpt;
             ttlEntry.data.ttl().liveUntilLedgerSeq = restoredLiveUntilLedger;
             opEntryMap.emplace(ttlKey, ttlEntry);
 

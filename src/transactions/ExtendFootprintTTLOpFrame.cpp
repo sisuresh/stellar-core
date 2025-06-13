@@ -51,60 +51,6 @@ ExtendFootprintTTLOpFrame::isOpSupported(LedgerHeader const& header) const
     return header.ledgerVersion >= 20;
 }
 
-bool
-ExtendFootprintTTLOpFrame::doPreloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, OperationResult& res,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    releaseAssert(threadIsMain() ||
-                  app.threadIsType(Application::ThreadType::APPLY));
-
-    uint32_t ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-    uint32_t newLiveUntilLedgerSeq = ledgerSeq + mExtendFootprintTTLOp.extendTo;
-
-    for (auto const& lk : mParentTx.sorobanResources().footprint.readOnly)
-    {
-        auto ttlKey = getTTLKey(lk);
-        {
-            auto ttlConstLtxe = ltx.loadWithoutRecord(ttlKey);
-            if (!ttlConstLtxe)
-            {
-                entryMap.emplace(lk, ThreadEntry{std::nullopt, false});
-                entryMap.emplace(ttlKey, ThreadEntry{std::nullopt, false});
-                // Skip archived and missing entries
-                continue;
-            }
-
-            entryMap.emplace(ttlKey,
-                             ThreadEntry{ttlConstLtxe.current(), false});
-
-            if (!isLive(ttlConstLtxe.current(), ledgerSeq))
-            {
-                // We aren't adding the entry key if it isn't live. This means
-                // we will not try to access the entry after this point for this
-                // transaction.
-                continue;
-            }
-
-            // Skip entries that don't need to be extended
-            auto currLiveUntilLedgerSeq =
-                ttlConstLtxe.current().data.ttl().liveUntilLedgerSeq;
-            if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
-            {
-                continue;
-            }
-        }
-
-        auto entryLtxe = ltx.loadWithoutRecord(lk);
-        // We checked for TTLEntry existence above
-        releaseAssertOrThrow(entryLtxe);
-
-        entryMap.emplace(lk, ThreadEntry{entryLtxe.current(), false});
-    }
-    return true;
-}
-
 ParallelTxReturnVal
 ExtendFootprintTTLOpFrame::doParallelApply(
     AppConnector& app,
@@ -121,9 +67,10 @@ ExtendFootprintTTLOpFrame::doParallelApply(
                                   PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
     releaseAssertOrThrow(refundableFeeTracker);
 
-    // We don't use ExtendFootprintTTLMetrics here because it only tracks
-    // ledgerReadBytes, which is handled in doPreloadEntriesForParallelApply
-    auto timescope = sorobanMetrics.mExtFpTtlOpExec.TimeScope();
+    ExtendFootprintTTLMetrics metrics(sorobanMetrics);
+    auto timeScope = metrics.getExecTimer();
+
+    auto liveSnapshot = app.copySearchableLiveBucketListSnapshot();
 
     auto const& resources = mParentTx.sorobanResources();
     auto const& footprint = resources.footprint;
@@ -142,10 +89,10 @@ ExtendFootprintTTLOpFrame::doParallelApply(
     for (auto const& lk : footprint.readOnly)
     {
         auto ttlKey = getTTLKey(lk);
-        auto ttlIter = entryMap.find(ttlKey);
 
-        if (ttlIter == entryMap.end() || !ttlIter->second.mLedgerEntry ||
-            !isLive(*ttlIter->second.mLedgerEntry, ledgerInfo.getLedgerSeq()))
+        auto ttlLeOpt = getLiveEntry(ttlKey, liveSnapshot, entryMap);
+
+        if (!ttlLeOpt || !isLive(*ttlLeOpt, ledgerInfo.getLedgerSeq()))
         {
             // Skip archived entries, as those must be restored.
             //
@@ -155,21 +102,19 @@ ExtendFootprintTTLOpFrame::doParallelApply(
             continue;
         }
 
-        auto currLiveUntilLedgerSeq =
-            ttlIter->second.mLedgerEntry->data.ttl().liveUntilLedgerSeq;
+        auto currLiveUntilLedgerSeq = ttlLeOpt->data.ttl().liveUntilLedgerSeq;
         if (currLiveUntilLedgerSeq >= newLiveUntilLedgerSeq)
         {
             continue;
         }
 
-        auto entryIter = entryMap.find(lk);
+        auto entryOpt = getLiveEntry(lk, liveSnapshot, entryMap);
+        // We checked for TTLEntry existence above
+        releaseAssertOrThrow(entryOpt);
 
         // Load the ContractCode/ContractData entry for fee calculation.
 
-        // We checked for TTLEntry existence above
-        releaseAssertOrThrow(entryIter != entryMap.end() &&
-                             entryIter->second.mLedgerEntry);
-        auto const& entryLe = *entryIter->second.mLedgerEntry;
+        auto const& entryLe = *entryOpt;
 
         uint32_t entrySize = static_cast<uint32_t>(xdr::xdr_size(entryLe));
 
@@ -181,7 +126,7 @@ ExtendFootprintTTLOpFrame::doParallelApply(
             return {false, {}};
         }
 
-        auto ttlLe = *ttlIter->second.mLedgerEntry;
+        auto ttlLe = *ttlLeOpt;
 
         rustEntryRentChanges.emplace_back();
         auto& rustChange = rustEntryRentChanges.back();

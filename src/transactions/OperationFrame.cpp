@@ -162,26 +162,6 @@ OperationFrame::apply(AppConnector& app, SignatureChecker& signatureChecker,
     return applyRes;
 }
 
-bool
-OperationFrame::preloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, OperationResult& res,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    return doPreloadEntriesForParallelApply(app, sorobanMetrics, ltx, entryMap,
-                                            res, diagnosticEvents);
-}
-
-bool
-OperationFrame::doPreloadEntriesForParallelApply(
-    AppConnector& app, SorobanMetrics& sorobanMetrics, AbstractLedgerTxn& ltx,
-    ThreadEntryMap& entryMap, OperationResult& res,
-    DiagnosticEventManager& diagnosticEvents) const
-{
-    throw std::runtime_error("Cannot call preloadEntriesForParallelApply on a "
-                             "non Soroban operation");
-}
-
 ParallelTxReturnVal
 OperationFrame::applyParallel(
     AppConnector& app, ThreadEntryMap const& entryMap, Config const& config,

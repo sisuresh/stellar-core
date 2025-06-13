@@ -71,12 +71,6 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
 
     virtual ~FeeBumpTransactionFrame(){};
 
-    void preloadEntriesForParallelApply(
-        AppConnector& app, SorobanMetrics& sorobanMetrics,
-        AbstractLedgerTxn& ltx, ThreadEntryMap& entryMap,
-        MutableTransactionResultBase& txResult,
-        DiagnosticEventManager& diagnosticEvents) const override;
-
     void
     preParallelApply(AppConnector& app, AbstractLedgerTxn& ltx,
                      TransactionMetaBuilder& meta,

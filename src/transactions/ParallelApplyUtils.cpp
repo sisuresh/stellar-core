@@ -29,18 +29,30 @@ getReadWriteKeysForStage(ApplyStage const& stage)
 }
 
 std::unique_ptr<ThreadEntryMap>
-collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
-               Cluster const& cluster)
+collectEntries(ThreadEntryMap const& globalEntryMap, Cluster const& cluster)
 {
     auto entryMap = std::make_unique<ThreadEntryMap>();
     for (auto const& txBundle : cluster)
     {
-        if (txBundle.getResPayload().isSuccess())
+        auto const& footprint = txBundle.getTx()->sorobanResources().footprint;
+        for (auto const& lk : footprint.readWrite)
         {
-            txBundle.getTx()->preloadEntriesForParallelApply(
-                app, app.getSorobanMetrics(), ltx, *entryMap,
-                txBundle.getResPayload(),
-                txBundle.getEffects().getMeta().getDiagnosticEventManager());
+            auto it = globalEntryMap.find(lk);
+            if (it != globalEntryMap.end())
+            {
+                // If the entry exists, we take it
+                entryMap->emplace(lk, it->second);
+            }
+        }
+
+        for (auto const& lk : footprint.readOnly)
+        {
+            auto it = globalEntryMap.find(lk);
+            if (it != globalEntryMap.end())
+            {
+                // If the entry exists, we take it
+                entryMap->emplace(lk, it->second);
+            }
         }
     }
 
@@ -48,7 +60,43 @@ collectEntries(AppConnector& app, AbstractLedgerTxn& ltx,
 }
 
 void
-setDelta(ThreadEntryMap const& entryMap,
+preParallelApplyAndCollectFeeSourceAccounts(
+    AppConnector& app, AbstractLedgerTxn& ltx,
+    std::vector<ApplyStage> const& stages, ThreadEntryMap& globalEntryMap)
+{
+    releaseAssert(threadIsMain() ||
+                  app.threadIsType(Application::ThreadType::APPLY));
+
+    for (auto const& stage : stages)
+    {
+        for (auto const& txBundle : stage)
+        {
+            // Make sure to call preParallelApply on all txs because this will
+            // modify the fee source accounts sequence numbers.
+            txBundle.getTx()->preParallelApply(app, ltx,
+                                               txBundle.getEffects().getMeta(),
+                                               txBundle.getResPayload());
+
+            auto cltxe = stellar::loadAccountWithoutRecord(
+                ltx, txBundle.getTx()->getFeeSourceID());
+
+            auto lk = accountKey(txBundle.getTx()->getFeeSourceID());
+            // fee source was merged in a previous phase
+            if (!cltxe)
+            {
+                globalEntryMap.emplace(lk, ThreadEntry{std::nullopt, false});
+            }
+            else
+            {
+                globalEntryMap.emplace(lk, ThreadEntry{cltxe.current(), false});
+            }
+        }
+    }
+}
+
+void
+setDelta(SearchableSnapshotConstPtr liveSnapshot,
+         ThreadEntryMap const& entryMap,
          OpModifiedEntryMap const& opModifiedEntryMap,
          ParallelLedgerInfo const& ledgerInfo, TxEffects& effects)
 {
@@ -60,10 +108,8 @@ setDelta(ThreadEntryMap const& entryMap,
         // Any key the op updates should also be in entryMap because the
         // keys were taken from the footprint (the ttl keys were added
         // as well)
-        auto prev = entryMap.find(lk);
-        releaseAssertOrThrow(prev != entryMap.end());
 
-        auto prevLe = prev->second.mLedgerEntry;
+        auto prevLe = getLiveEntry(lk, liveSnapshot, entryMap);
 
         LedgerTxnDelta::EntryDelta entryDelta;
         if (prevLe)
@@ -81,6 +127,23 @@ setDelta(ThreadEntryMap const& entryMap,
         }
 
         effects.setDeltaEntry(lk, entryDelta);
+    }
+}
+
+std::optional<LedgerEntry>
+getLiveEntry(LedgerKey const& lk, SearchableSnapshotConstPtr liveSnapshot,
+             ThreadEntryMap const& entryMap)
+{
+    // TODO: These copies aren't ideal.
+    auto entryIter = entryMap.find(lk);
+    if (entryIter != entryMap.end())
+    {
+        return entryIter->second.mLedgerEntry;
+    }
+    else
+    {
+        auto res = liveSnapshot->load(lk);
+        return res ? std::make_optional(*res) : std::nullopt;
     }
 }
 }
