@@ -354,7 +354,7 @@ recordModifiedAndRestoredEntries(SearchableSnapshotConstPtr liveSnapshot,
         if (isRoTTLKey(rmap, lk) && entryOpt && updatedLe)
         {
             // Accumulate RO bumps instead of writing them to the entryMap.
-            releaseAssert(ttl(updatedLe) > ttl(entryOpt));
+            releaseAssert(ttl(updatedLe) >= ttl(entryOpt));
             updateMaxOfRoTTLBump(roTTLBumps, lk, updatedLe);
         }
         else

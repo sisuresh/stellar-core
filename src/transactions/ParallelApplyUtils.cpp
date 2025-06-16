@@ -91,6 +91,11 @@ preParallelApplyAndCollectModifiedClassicEntries(
             }
         };
 
+    // First call preParallelApply on all transactions,
+    // and then load from footprints. This order is important
+    // because preParallelApply modifies the fee source accounts
+    // and those accounts could show up in the footprint
+    // of a different transaction.
     for (auto const& stage : stages)
     {
         for (auto const& txBundle : stage)
@@ -100,7 +105,13 @@ preParallelApplyAndCollectModifiedClassicEntries(
             txBundle.getTx()->preParallelApply(app, ltx,
                                                txBundle.getEffects().getMeta(),
                                                txBundle.getResPayload());
+        }
+    }
 
+    for (auto const& stage : stages)
+    {
+        for (auto const& txBundle : stage)
+        {
             auto const& footprint =
                 txBundle.getTx()->sorobanResources().footprint;
 
