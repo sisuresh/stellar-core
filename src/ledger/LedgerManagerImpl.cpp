@@ -112,7 +112,7 @@ const int64_t LedgerManager::GENESIS_LEDGER_TOTAL_COINS = 1000000000000000000;
 namespace
 {
 
-static std::vector<uint32_t>
+std::vector<uint32_t>
 getModuleCacheProtocols()
 {
     std::vector<uint32_t> ledgerVersions;
@@ -133,7 +133,7 @@ getModuleCacheProtocols()
     return ledgerVersions;
 }
 
-static void
+void
 setLedgerTxnHeader(LedgerHeader const& lh, Application& app)
 {
     LedgerTxn ltx(app.getLedgerTxnRoot());
@@ -141,7 +141,7 @@ setLedgerTxnHeader(LedgerHeader const& lh, Application& app)
     ltx.commit();
 }
 
-static bool
+bool
 mergeOpInTx(std::vector<Operation> const& ops)
 {
     for (auto const& op : ops)
@@ -154,25 +154,25 @@ mergeOpInTx(std::vector<Operation> const& ops)
     return false;
 }
 
-static inline uint32_t&
+inline uint32_t&
 ttl(LedgerEntry& le)
 {
     return le.data.ttl().liveUntilLedgerSeq;
 }
 
-static inline uint32_t const&
+inline uint32_t const&
 ttl(LedgerEntry const& le)
 {
     return le.data.ttl().liveUntilLedgerSeq;
 }
 
-static inline uint32_t&
+inline uint32_t&
 ttl(std::optional<LedgerEntry>& le)
 {
     return ttl(le.value());
 }
 
-static inline uint32_t const&
+inline uint32_t const&
 ttl(std::optional<LedgerEntry> const& le)
 {
     return ttl(le.value());
@@ -193,7 +193,7 @@ ttl(std::optional<LedgerEntry> const& le)
 //
 // So: for correct accounting of the write happening in this tx, we have to
 // flush any pending RO TTL bumps that interfere with its RW footprint.
-static void
+void
 flushRoTTLBumpsRequiredByTx(SearchableSnapshotConstPtr liveSnapshot,
                             ThreadEntryMap& entryMap,
                             UnorderedMap<LedgerKey, uint32_t>& roTTLBumps,
@@ -250,7 +250,7 @@ flushRoTTLBumpsRequiredByTx(SearchableSnapshotConstPtr liveSnapshot,
 
 // Ensure that for each remaining RO TTL bump in `roTTLBumps`, the
 // TTL entry is present in the `entryMap` and is >= the bump TTL.
-static void
+void
 flushResidualRoTTLBumps(SearchableSnapshotConstPtr liveSnapshot,
                         ThreadEntryMap& entryMap,
                         UnorderedMap<LedgerKey, uint32_t> const& roTTLBumps)
@@ -282,7 +282,7 @@ flushResidualRoTTLBumps(SearchableSnapshotConstPtr liveSnapshot,
 // Construct a map of all the TTL keys associated with all soroban
 // (code-or-data) keys named in the footprint of the `txBundle`, along with a
 // boolean indicating whether they're RO TTL keys. When false, they're RW.
-static UnorderedMap<LedgerKey, bool>
+UnorderedMap<LedgerKey, bool>
 buildRoTTLMap(TxBundle const& txBundle)
 {
     UnorderedMap<LedgerKey, bool> isReadOnlyTTLMap;
@@ -310,7 +310,7 @@ buildRoTTLMap(TxBundle const& txBundle)
 
 // Look up a key in the RO TTL map built above. If the key is either not a TTL,
 // or not RO, return false.
-static bool
+bool
 isRoTTLKey(UnorderedMap<LedgerKey, bool> const& rmap, LedgerKey const& lk)
 {
     auto it = rmap.find(lk);
@@ -320,7 +320,7 @@ isRoTTLKey(UnorderedMap<LedgerKey, bool> const& rmap, LedgerKey const& lk)
 
 // Accumulate into the buffer of `roTTLBumps` the max of any existing entry and
 // the provided `updatedLE`, which must be a non-nullopt TTL LE.
-static void
+void
 updateMaxOfRoTTLBump(UnorderedMap<LedgerKey, uint32_t>& roTTLBumps,
                      LedgerKey const& lk,
                      std::optional<LedgerEntry> const& updatedLe)
@@ -335,7 +335,7 @@ updateMaxOfRoTTLBump(UnorderedMap<LedgerKey, uint32_t>& roTTLBumps,
 // Writes the entries in `res` back to the `entryMap`, `roTTLBumps` and
 // `threadRestoredKeys` variables that are accumulating the state of
 // the transaction cluster.
-static void
+void
 recordModifiedAndRestoredEntries(SearchableSnapshotConstPtr liveSnapshot,
                                  ThreadEntryMap& entryMap,
                                  UnorderedMap<LedgerKey, uint32_t>& roTTLBumps,
