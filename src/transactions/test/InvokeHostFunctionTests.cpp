@@ -6416,6 +6416,55 @@ readParallelMeta(std::string const& metaPath)
     return res;
 }
 
+TEST_CASE_VERSIONS(
+    "source account account of first tx is in second txs footprint",
+    "[tx][soroban][parallelapply]")
+{
+    Config cfg = getTestConfig();
+    cfg.EMIT_CLASSIC_EVENTS = true;
+    cfg.BACKFILL_STELLAR_ASSET_EVENTS = true;
+
+    VirtualClock clock;
+    auto app = createTestApplication(clock, cfg);
+
+    for_versions_from(20, *app, [&] {
+        SorobanTest test(app);
+        AssetContractTestClient assetClient(test, txtest::makeNativeAsset());
+
+        auto ledgerVersion = getLclProtocolVersion(test.getApp());
+
+        const int64_t startingBalance =
+            test.getApp().getLedgerManager().getLastMinBalance(50);
+
+        auto a1 = test.getRoot().create("A", startingBalance);
+        auto b1 = test.getRoot().create("B", startingBalance);
+        auto c1 = test.getRoot().create("C", startingBalance);
+
+        auto b1StartingSeq = b1.loadSequenceNumber();
+
+        auto classicTx = c1.tx({payment(b1, 10)});
+
+        auto b1Addr = makeAccountAddress(b1.getPublicKey());
+        auto sorobanTx1 = assetClient.getTransferTx(a1, b1Addr, 50);
+
+        auto wasm = rust_bridge::get_test_wasm_add_i32();
+        auto resources =
+            defaultUploadWasmResourcesWithoutFootprint(wasm, ledgerVersion);
+        auto sorobanTx2 =
+            makeSorobanWasmUploadTx(test.getApp(), b1, wasm, resources, 1000);
+
+        std::vector<TransactionFrameBasePtr> txs = {classicTx, sorobanTx1,
+                                                    sorobanTx2};
+        auto r = closeLedger(test.getApp(), txs, true);
+        REQUIRE(r.results.size() == 3);
+        checkTx(0, r, txSUCCESS);
+        checkTx(1, r, txSUCCESS);
+        checkTx(2, r, txSUCCESS);
+
+        REQUIRE(b1.loadSequenceNumber() == b1StartingSeq + 1);
+    });
+}
+
 TEST_CASE_VERSIONS("non-fee source account is recipient of payment in both "
                    "classic and soroban",
                    "[tx][soroban][parallelapply]")
@@ -6427,7 +6476,7 @@ TEST_CASE_VERSIONS("non-fee source account is recipient of payment in both "
     VirtualClock clock;
     auto app = createTestApplication(clock, cfg);
 
-    for_versions_from(23, *app, [&] {
+    for_versions_from(20, *app, [&] {
         SorobanTest test(app);
         AssetContractTestClient assetClient(test, txtest::makeNativeAsset());
 
