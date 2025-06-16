@@ -2104,7 +2104,7 @@
 		"+cR3oq2qY0I="
 	],
 	"contract storage|protocol version 23|footprint|unused readWrite key" : [ "IQlK4uxx/sc=" ],
-	"delete non existent entry" : [ "+cR3oq2qY0I=", "evcPGZBGw78=" ],
+	"delete non existent entry with parallel apply" : [ "+cR3oq2qY0I=", "evcPGZBGw78=" ],
 	"failure diagnostics" : [ "+cR3oq2qY0I=" ],
 	"fee bump refund account merged|protocol version 20" : 
 	[
@@ -2140,6 +2140,7 @@
 	],
 	"ledger entry size limit enforced" : [ "+cR3oq2qY0I=", "+cR3oq2qY0I=" ],
 	"loadgen Wasm executes properly" : [ "+cR3oq2qY0I=" ],
+	"non-fee source account is recipient of payment in both classic and soroban|protocol version 23" : [ "NTGGdj1offM=", "1zYBhd4gn9o=", "bhQTXuBYbDU=", "39fbDE+DTSM=" ],
 	"overly large soroban values are handled gracefully" : 
 	[
 		"+cR3oq2qY0I=",
@@ -2153,6 +2154,7 @@
 		"+cR3oq2qY0I="
 	],
 	"parallel restore and extend op" : [ "+cR3oq2qY0I=", "NoMqEJ/vmYg=", "iFlQVInOBwo=" ],
+	"parallel restore and update" : [ "+cR3oq2qY0I=", "P8ehwdplnew=", "rlrYvQwPRJc=" ],
 	"parallel txs" : 
 	[
 		"+cR3oq2qY0I=",
@@ -2694,7 +2696,6 @@
 	"refund test with closeLedger|protocol version 21" : [ "NTGGdj1offM=", "4gCiTRsvvQQ=" ],
 	"refund test with closeLedger|protocol version 22" : [ "NTGGdj1offM=", "g3gHe/+0R0s=" ],
 	"refund test with closeLedger|protocol version 23" : [ "NTGGdj1offM=", "h532lvO9l1c=" ],
-	"restore and update" : [ "+cR3oq2qY0I=", "P8ehwdplnew=", "rlrYvQwPRJc=" ],
 	"settings upgrade" : [ "+cR3oq2qY0I=", "+cR3oq2qY0I=" ],
 	"settings upgrade command line utils" : 
 	[
