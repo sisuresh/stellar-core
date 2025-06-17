@@ -1907,7 +1907,11 @@ TransactionFrame::parallelApply(
         return {false, {}};
     }
 
-    // TODO: Add txResult.adoptFailedReplayResult() block
+    if (!maybeAdoptFailedReplayResult(txResult))
+    {
+        return {false, {}};
+    }
+
     bool reportInternalErrOnException = true;
     try
     {
@@ -1919,7 +1923,6 @@ TransactionFrame::parallelApply(
             ledgerInfo.getLedgerVersion() >=
             config.LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT;
 
-        // Is this safe/will the values make sense?
         auto& opTimer =
             app.getMetrics().NewTimer({"ledger", "operation", "apply"});
 
@@ -1997,16 +2000,7 @@ TransactionFrame::applyOperations(SignatureChecker& signatureChecker,
                                   Hash const& sorobanBasePrngSeed) const
 {
     ZoneScoped;
-#ifdef BUILD_TESTS
-    if (txResult.adoptFailedReplayResult())
-    {
-        // Sub-zone for skips
-        ZoneScopedN("skipped failed");
-        CLOG_DEBUG(Tx, "Skipping replay of failed transaction: tx {}",
-                   binToHex(getContentsHash()));
-        return false;
-    }
-#endif
+    maybeAdoptFailedReplayResult(txResult);
 
     auto& internalErrorCounter = app.getMetrics().NewCounter(
         {"ledger", "transaction", "internal-error"});
@@ -2316,6 +2310,23 @@ TransactionFrame::getSize() const
 {
     ZoneScoped;
     return static_cast<uint32_t>(xdr::xdr_size(mEnvelope));
+}
+
+bool
+TransactionFrame::maybeAdoptFailedReplayResult(
+    MutableTransactionResultBase& txResult) const
+{
+#ifdef BUILD_TESTS
+    if (txResult.adoptFailedReplayResult())
+    {
+        // Sub-zone for skips
+        ZoneScopedN("skipped failed");
+        CLOG_DEBUG(Tx, "Skipping replay of failed transaction: tx {}",
+                   binToHex(getContentsHash()));
+        return false;
+    }
+#endif
+    return true;
 }
 
 } // namespace stellar
