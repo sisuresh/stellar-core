@@ -1942,12 +1942,12 @@ TransactionFrame::parallelApply(
 
         if (res.getSuccess())
         {
+            auto hotArchive = res.getRestoredKeys().hotArchive;
             setDelta(liveSnapshot, entryMap, res.getModifiedEntryMap(),
-                     ledgerInfo, effects);
+                     hotArchive, ledgerInfo, effects);
 
             opMeta.setLedgerChangesFromEntryMaps(
-                liveSnapshot, entryMap, res.getModifiedEntryMap(),
-                res.getRestoredKeys().hotArchive,
+                liveSnapshot, entryMap, res.getModifiedEntryMap(), hotArchive,
                 res.getRestoredKeys().liveBucketList,
                 ledgerInfo.getLedgerSeq());
         }

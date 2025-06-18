@@ -4026,6 +4026,16 @@ TEST_CASE("persistent entry archival", "[tx][soroban][archival]")
                 test.createExtendOpTx(restoreResources, bumpLedgers, 1'000,
                                       resourceFee, &extendSrcAccount);
 
+            // A delete that autorestores
+            auto delSrcAccount = test.getRoot().create("del", 500000000);
+            auto delSpec =
+                client.writeKeySpec("key", ContractDataDurability::PERSISTENT)
+                    .setArchivedIndexes({0});
+            auto inv = client.getContract().prepareInvocation(
+                "del_persistent", {makeSymbolSCVal("key")}, delSpec);
+            auto delTx = inv.withExactNonRefundableResourceFee().createTx(
+                &delSrcAccount);
+
             SECTION("manual restore")
             {
                 SorobanResources restoreResources;
@@ -4066,6 +4076,41 @@ TEST_CASE("persistent entry archival", "[tx][soroban][archival]")
                 // bumped in the subsequent TX
                 REQUIRE(test.getTTL(lk) == bumpLedgers + test.getLCLSeq());
             }
+            SECTION("autorestore then delete")
+            {
+                auto r = closeLedger(test.getApp(), {delTx});
+                REQUIRE(r.results.size() == 1);
+
+                checkTx(0, r, txSUCCESS);
+
+                REQUIRE(client.has("key", ContractDataDurability::PERSISTENT,
+                                   false) == INVOKE_HOST_FUNCTION_SUCCESS);
+            }
+
+            // TODO: This exposes a bug we need to fix.
+            /* SECTION("autorestore, delete, then create")
+            {
+                auto writeInvocation = client.getContract().prepareInvocation(
+                    "put_persistent",
+                    {makeSymbolSCVal("key"), makeU64SCVal(200)},
+                    client
+                        .writeKeySpec("key",
+            ContractDataDurability::PERSISTENT));
+
+                auto writeTx =
+                    writeInvocation.withExactNonRefundableResourceFee()
+                        .createTx();
+
+                auto r = closeLedger(test.getApp(), {delTx, writeTx});
+                REQUIRE(r.results.size() == 2);
+
+                std::cout << xdrToCerealString(r, "r") << std::endl;
+                checkTx(0, r, txSUCCESS);
+                checkTx(1, r, txSUCCESS);
+
+                REQUIRE(client.has("key", ContractDataDurability::PERSISTENT,
+                                true) == INVOKE_HOST_FUNCTION_SUCCESS);
+            }  */
         }
     };
 
