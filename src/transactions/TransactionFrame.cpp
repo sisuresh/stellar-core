@@ -1906,6 +1906,8 @@ TransactionFrame::parallelApply(
         return {false, {}};
     }
 
+    std::cout << "parallelApply: " << std::endl<< std::endl;
+
     auto& internalErrorCounter = app.getMetrics().NewCounter(
         {"ledger", "transaction", "internal-error"});
     bool reportInternalErrOnException = true;

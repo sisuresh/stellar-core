@@ -4496,6 +4496,63 @@ TEST_CASE("persistent entry archival", "[tx][soroban][archival]")
                 REQUIRE(test.getTTL(lk) == bumpLedgers + test.getLCLSeq());
             }
 
+            SECTION("manual restore then update")
+            {
+                auto restoreSrcAccount =
+                    test.getRoot().create("restore", 500000000);
+
+                SorobanResources restoreResources;
+                restoreResources.footprint.readWrite = {lk};
+                restoreResources.instructions = 0;
+                restoreResources.diskReadBytes = 10'000;
+                restoreResources.writeBytes = 10'000;
+
+                auto resourceFee = 300'000 + 40'000;
+                auto restoreTx = test.createRestoreTx(
+                    restoreResources, 1'000, resourceFee, &restoreSrcAccount);
+
+                auto updateInvocation = client.getContract().prepareInvocation(
+                    "put_persistent",
+                    {makeSymbolSCVal("key"), makeU64SCVal(111)},
+                    client.writeKeySpec("key",
+                                        ContractDataDurability::PERSISTENT));
+
+                auto updateSrcAccount =
+                    test.getRoot().create("update", 500000000);
+                auto updateTx =
+                    updateInvocation.withExactNonRefundableResourceFee()
+                        .createTx(&updateSrcAccount);
+
+                SECTION("same stage")
+                {
+                    auto r = closeLedger(test.getApp(), {restoreTx, updateTx},
+                                         /*strictOrder=*/true);
+                    REQUIRE(r.results.size() == 2);
+                    checkTx(0, r, txSUCCESS);
+                    checkTx(1, r, txSUCCESS);
+
+                    REQUIRE(test.getTTL(lk) == test.getNetworkCfg()
+                                                       .stateArchivalSettings()
+                                                       .minPersistentTTL +
+                                                   test.getLCLSeq() - 1);
+                    client.get("key", ContractDataDurability::PERSISTENT, 111);
+                }
+                SECTION("across stages")
+                {
+                    auto r = closeLedger(test.getApp(), {restoreTx, updateTx},
+                                         {{{0}}, {{1}}});
+                    REQUIRE(r.results.size() == 2);
+                    checkTx(0, r, txSUCCESS);
+                    checkTx(1, r, txSUCCESS);
+
+                    REQUIRE(test.getTTL(lk) == test.getNetworkCfg()
+                                                       .stateArchivalSettings()
+                                                       .minPersistentTTL +
+                                                   test.getLCLSeq() - 1);
+                    client.get("key", ContractDataDurability::PERSISTENT, 111);
+                }
+            }
+
             SECTION("autorestore")
             {
                 auto writeInvocation = client.getContract().prepareInvocation(
@@ -7029,7 +7086,7 @@ readParallelMeta(std::string const& metaPath)
 }
 
 TEST_CASE_VERSIONS(
-    "source account account of first tx is in second txs footprint",
+    "source account of first tx is in second txs footprint",
     "[tx][soroban][parallelapply]")
 {
     Config cfg = getTestConfig();

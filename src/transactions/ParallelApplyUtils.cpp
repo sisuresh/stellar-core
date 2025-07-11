@@ -472,34 +472,10 @@ GlobalParallelApplyLedgerState::getSnapshotLedgerSeq() const
     return mLiveSnapshot->getLedgerSeq();
 }
 
-std::optional<LedgerEntry>
-GlobalParallelApplyLedgerState::getLiveEntryOpt(LedgerKey const& key) const
+ParallelApplyEntryMap const&
+GlobalParallelApplyLedgerState::getGlobalEntryMap() const
 {
-    auto it0 = mGlobalEntryMap.find(key);
-    if (it0 != mGlobalEntryMap.end())
-    {
-        return it0->second.mLedgerEntry;
-    }
-    // Invariant check: If an entry was restored from the live state, then it's
-    // possible that the global entry map does not have that key (because live
-    // restores only update the ttl), but if the entry was restored from the hot
-    // archive, both the ttl entry and the entry itself are updated. So if the
-    // key is missing from the global entry map, it could not have been
-    // previously restored from the hot archive.
-    releaseAssertOrThrow(!mGlobalRestoredEntries.entryWasRestoredFromMap(
-        key, mGlobalRestoredEntries.hotArchive));
-
-    // Check InMemorySorobanState cache for soroban types
-    std::shared_ptr<LedgerEntry const> res;
-    if (InMemorySorobanState::isInMemoryType(key))
-    {
-        res = mInMemorySorobanState.get(key);
-    }
-    else
-    {
-        res = mLiveSnapshot->load(key);
-    }
-    return res ? std::make_optional(*res) : std::nullopt;
+    return mGlobalEntryMap;
 }
 
 RestoredEntries const&
@@ -566,15 +542,8 @@ ThreadParallelApplyLedgerState::collectClusterFootprintEntriesFromGlobal(
     //
     //  - it skips copying duplicates if 2 txs touch the same key; just an
     //    optimization.
-    //
-    //  - it uses parent.getLiveEntryOpt which will:
-    //
-    //    - check a few more invariants than the old getLiveEntry.
-    //
-    //    - also copy footprint entries from the live snapshot -- not just
-    //      propagated/dirty stuff from the parent entry map, so it's a bit
-    //      of a pre-load (though not a pre-hot-restore)
 
+    auto const& globalEntryMap = global.getGlobalEntryMap();
     for (auto const& txBundle : cluster)
     {
         auto const& footprint = txBundle.getTx()->sorobanResources().footprint;
@@ -584,33 +553,55 @@ ThreadParallelApplyLedgerState::collectClusterFootprintEntriesFromGlobal(
             {
                 if (mThreadEntryMap.find(key) != mThreadEntryMap.end())
                 {
+                    std::cout << xdrToCerealString(key, "exists?")
+                                  << std::endl;
                     continue;
                 }
-                auto opt = global.getLiveEntryOpt(key);
-                if (opt)
+
+                // TODO: Need to load ttl key separately...
+                // Check why this didn't trigger a test
+                auto entryIt = globalEntryMap.find(key);
+                if (entryIt != globalEntryMap.end())
                 {
-                    mThreadEntryMap.emplace(
-                        key, ParallelApplyEntry::cleanPopulated(opt.value()));
-                    if (isSorobanEntry(key))
+                    if(entryIt->second.mLedgerEntry)
                     {
-                        auto ttlKey = getTTLKey(key);
-                        auto ttlOpt = global.getLiveEntryOpt(ttlKey);
-                        releaseAssertOrThrow(ttlOpt);
+                        std::cout << xdrToCerealString(
+                            entryIt->second.mLedgerEntry.value(), "preloaddded entry")
+                                  << std::endl;
                         mThreadEntryMap.emplace(
-                            ttlKey,
-                            ParallelApplyEntry::cleanPopulated(ttlOpt.value()));
+                        key, ParallelApplyEntry::cleanPopulated(entryIt->second.mLedgerEntry.value()));
+                        if (isSorobanEntry(key))
+                        {
+                            auto ttlKey = getTTLKey(key);
+                            auto ttlIt = globalEntryMap.find(ttlKey);
+                            releaseAssertOrThrow(ttlIt != globalEntryMap.end());
+
+                            std::cout << xdrToCerealString(
+                            ttlIt->second.mLedgerEntry.value(), "preloaddded ttl")
+                                  << std::endl;
+                            mThreadEntryMap.emplace(
+                                ttlKey,
+                                ParallelApplyEntry::cleanPopulated(ttlIt->second.mLedgerEntry.value()));
+                        }
+                    }
+                    else
+                    {
+
+                        std::cout << xdrToCerealString(key, "preloaddded MISSING")
+                                  << std::endl;
+                        mThreadEntryMap.emplace(key,
+                                            ParallelApplyEntry::cleanEmpty());
+                        if (isSorobanEntry(key))
+                        {
+                            auto ttlKey = getTTLKey(key);
+                            mThreadEntryMap.emplace(
+                                ttlKey, ParallelApplyEntry::cleanEmpty());
+                        }
                     }
                 }
-                else
-                {
-                    mThreadEntryMap.emplace(key,
-                                            ParallelApplyEntry::cleanEmpty());
-                    if (isSorobanEntry(key))
-                    {
-                        auto ttlKey = getTTLKey(key);
-                        mThreadEntryMap.emplace(
-                            ttlKey, ParallelApplyEntry::cleanEmpty());
-                    }
+                else{
+                    std::cout << xdrToCerealString(key, "misssing from global")
+                                  << std::endl;
                 }
             }
         }
@@ -702,20 +693,30 @@ ThreadParallelApplyLedgerState::getLiveEntryOpt(LedgerKey const& key) const
     {
         return it0->second.mLedgerEntry;
     }
+
+    // TODO: update comment with a modified version of this one.
+    // Invariant check: If an entry was restored from the live state, then it's
+    // possible that the global entry map does not have that key (because live
+    // restores only update the ttl), but if the entry was restored from the hot
+    // archive, both the ttl entry and the entry itself are updated. So if the
+    // key is missing from the global entry map, it could not have been
+    // previously restored from the hot archive.
+
     // Invariant check: if an entry is not in mThreadEntryMap it should also not
     // be in the restored map, unless it's a TTL entry, in which case only a
     // weaker invariant holds: it can't be in the _hot_ restored map. It's
     // possible for a TTL entry to be just in the live restored map if its
     // associated entry was live-restored.
-    if (key.type() == TTL)
-    {
-        releaseAssertOrThrow(!mThreadRestoredEntries.entryWasRestoredFromMap(
-            key, mThreadRestoredEntries.hotArchive));
-    }
-    else
-    {
-        releaseAssertOrThrow(!mThreadRestoredEntries.entryWasRestored(key));
-    }
+
+    releaseAssertOrThrow(!mThreadRestoredEntries.entryWasRestoredFromMap(
+        key, mThreadRestoredEntries.hotArchive));
+
+
+    // mThreadEntryMap was preloaded with entries from the global map in 
+    // collectClusterFootprintEntriesFromGlobal (even if it's marked for deletion),
+    // so if the keys does not exist in mThreadEntryMap, it can't exist in the global
+    // entry map either. We still need to check the in memory soroban state or
+    // the live snapshot.
 
     // Check InMemorySorobanState cache for soroban types
     std::shared_ptr<LedgerEntry const> res;
