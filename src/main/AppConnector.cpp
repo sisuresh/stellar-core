@@ -191,6 +191,12 @@ AppConnector::getProtocol23CorruptionDataVerifier()
     return mApp.getProtocol23CorruptionDataVerifier();
 }
 
+std::unique_ptr<p23_hot_archive_bug::Protocol23CorruptionEventReconciler>&
+AppConnector::getProtocol23CorruptionEventReconciler()
+{
+    return mApp.getProtocol23CorruptionEventReconciler();
+}
+
 #ifdef BUILD_TESTS
 bool
 AppConnector::getRunInOverlayOnlyMode() const

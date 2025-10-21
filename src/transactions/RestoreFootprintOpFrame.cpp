@@ -162,6 +162,36 @@ class RestoreFootprintApplyHelper : virtual public LedgerAccessHelper
                             lk, entry, ledgerSeq, getLedgerVersion());
                 }
 
+                if (mApp.getProtocol23CorruptionEventReconciler())
+                {
+                    auto eventInfo =
+                        mApp.getProtocol23CorruptionEventReconciler()
+                            ->getSACReconciliationEvent(lk, entry, ledgerSeq,
+                                                        getLedgerVersion());
+                    if (eventInfo)
+                    {
+                        if (eventInfo->amount > 0)
+                        {
+                            mOpMeta.getEventManager().newMintEvent(
+                                eventInfo->asset, eventInfo->mintOrBurnAddress,
+                                eventInfo->amount, false);
+                        }
+                        else
+                        {
+                            mOpMeta.getEventManager().newBurnEvent(
+                                eventInfo->asset, eventInfo->mintOrBurnAddress,
+                                -eventInfo->amount);
+                        }
+
+                        CLOG_WARNING(
+                            Ledger,
+                            "restore op reconciliation event, event = {}",
+                            xdrToCerealString(
+                                mOpMeta.getEventManager().getEvents().back(),
+                                "restoreop"));
+                    }
+                }
+
                 // Update last modified ledger seq to the current ledger seq
                 // since we're rewriting this entry. ltx will update this for
                 // us, but we need to process the meta before ltx has a chance

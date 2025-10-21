@@ -264,6 +264,10 @@ class InvokeHostFunctionApplyHelper : virtual LedgerAccessHelper
     SearchableHotArchiveSnapshotConstPtr mHotArchive;
     DiagnosticEventManager& mDiagnosticEvents;
 
+    std::vector<p23_hot_archive_bug::Protocol23CorruptionEventReconciler::
+                    SACReconciliationInfo>
+        mProtocol23SACReconciliationEvents;
+
     InvokeHostFunctionApplyHelper(
         AppConnector& app, Hash const& sorobanBasePrngSeed,
         OperationResult& res,
@@ -743,7 +747,39 @@ class InvokeHostFunctionApplyHelper : virtual LedgerAccessHelper
         mOpFrame.innerResult(mRes).code(INVOKE_HOST_FUNCTION_SUCCESS);
         mOpFrame.innerResult(mRes).success() = xdrSha256(success);
 
-        mOpMeta.getEventManager().setEvents(std::move(success.events));
+        if (!mProtocol23SACReconciliationEvents.empty())
+        {
+            xdr::xvector<ContractEvent> events;
+            events.reserve(success.events.size() +
+                           mProtocol23SACReconciliationEvents.size());
+            for (auto const& rEvent : mProtocol23SACReconciliationEvents)
+            {
+                if (rEvent.amount > 0)
+                {
+                    events.emplace_back(mOpMeta.getEventManager().makeMintEvent(
+                        rEvent.asset, rEvent.mintOrBurnAddress, rEvent.amount,
+                        false));
+                }
+                else
+                {
+                    events.emplace_back(mOpMeta.getEventManager().makeBurnEvent(
+                        rEvent.asset, rEvent.mintOrBurnAddress,
+                        -rEvent.amount));
+                }
+                CLOG_WARNING(Ledger,
+                             "autorestore reconciliation event, Entry = {}",
+                             xdrToCerealString(events.back(), "autorestore"));
+            }
+
+            std::move(success.events.begin(), success.events.end(),
+                      std::back_inserter(events));
+            mOpMeta.getEventManager().setEvents(std::move(events));
+        }
+        else
+        {
+            mOpMeta.getEventManager().setEvents(std::move(success.events));
+        }
+
         mOpMeta.setSorobanReturnValue(success.returnValue);
         mMetrics.mSuccess = true;
     }
@@ -1013,6 +1049,19 @@ class InvokeHostFunctionParallelApplyHelper
                     ->verifyRestorationOfCorruptedEntry(
                         lk, le, mLedgerInfo.getLedgerSeq(),
                         mLedgerInfo.getLedgerVersion());
+            }
+
+            if (isHotArchiveEntry &&
+                mApp.getProtocol23CorruptionEventReconciler())
+            {
+                auto ev = mApp.getProtocol23CorruptionEventReconciler()
+                              ->getSACReconciliationEvent(
+                                  lk, le, mLedgerInfo.getLedgerSeq(),
+                                  mLedgerInfo.getLedgerVersion());
+                if (ev)
+                {
+                    mProtocol23SACReconciliationEvents.emplace_back(*ev);
+                }
             }
 
             return true;

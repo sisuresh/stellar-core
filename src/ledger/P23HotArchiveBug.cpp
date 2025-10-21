@@ -490,5 +490,184 @@ Protocol23CorruptionDataVerifier::verifyEntryFixesOnP24Upgrade(
     }
 }
 
+Protocol23CorruptionEventReconciler::Protocol23CorruptionEventReconciler(
+    Hash const& networkID)
+{
+    for (size_t i = 0; i < P23_CORRUPTED_AFFECTED_ASSETS_COUNT; ++i)
+    {
+        Asset asset;
+        fromOpaqueBase64(asset, P23_CORRUPTED_AFFECTED_ASSETS[i]);
+
+        SCAddress address;
+        address.type(SC_ADDRESS_TYPE_CONTRACT);
+        address.contractId() = getAssetContractID(networkID, asset);
+
+        auto [_i, inserted] = mSACAssetMap.emplace(address, asset);
+        releaseAssert(inserted);
+    }
+
+    for (size_t i = 0; i < P23_CORRUPTED_HOT_ARCHIVE_ENTRIES_COUNT; ++i)
+    {
+        LedgerEntry corruptedEntry =
+            decodeLedgerEntry(P23_CORRUPTED_HOT_ARCHIVE_ENTRIES[i]);
+
+        LedgerEntry correctEntry =
+            decodeLedgerEntry(P23_CORRUPTED_HOT_ARCHIVE_ENTRY_CORRECT_STATE[i]);
+
+        mKeyToEntries.emplace(LedgerEntryKey(corruptedEntry),
+                              std::make_pair(correctEntry, corruptedEntry));
+    }
+
+    // Verify that the keys in corruptedMap and correctMap match
+}
+
+std::optional<std::pair<uint64_t /*lo balance*/, SCAddress /*owner*/>>
+getAmountLo(LedgerEntry const& le)
+{
+    if (le.data.type() != CONTRACT_DATA)
+    {
+        return std::nullopt;
+    }
+    auto const& cd = le.data.contractData();
+
+    if (cd.durability != ContractDataDurability::PERSISTENT ||
+        cd.key.type() != SCV_VEC || !cd.key.vec() || cd.key.vec()->size() != 2)
+    {
+        return std::nullopt;
+    }
+
+    SCVal balanceSymbol(SCV_SYMBOL);
+    balanceSymbol.sym() = "Balance";
+
+    // The balanceSymbol should be the first entry in the SCVec
+    if (!(cd.key.vec()->at(0) == balanceSymbol))
+    {
+        return std::nullopt;
+    }
+
+    auto const& balanceOwner = cd.key.vec()->at(1);
+    if (balanceOwner.type() != SCV_ADDRESS)
+    {
+        return std::nullopt;
+    }
+
+    if (cd.val.type() != SCV_MAP || !cd.val.map() || cd.val.map()->size() != 3)
+    {
+        return std::nullopt;
+    }
+
+    SCVal amountSymbol(SCV_SYMBOL);
+    amountSymbol.sym() = "amount";
+
+    auto const& amountEntry = cd.val.map()->at(0);
+    if (!(amountEntry.key == amountSymbol) ||
+        amountEntry.val.type() != SCV_I128)
+    {
+        return std::nullopt;
+    }
+
+    // This looks like an SAC balance entry.
+    auto lo = amountEntry.val.i128().lo;
+    auto hi = amountEntry.val.i128().hi;
+    // Make the assumption that amount fit in int64_t for now. We'll find out if
+    // this is false during validation. Remember that this will only run for p23
+    // after we're on p24.
+    releaseAssert(hi == 0);
+
+    // We checked earlier that the key is a vector of size 2.
+    return std::make_pair(lo, balanceOwner.address());
+}
+
+std::optional<Protocol23CorruptionEventReconciler::SACReconciliationInfo>
+Protocol23CorruptionEventReconciler::getSACReconciliationEvent(
+    LedgerKey const& restoredKey, LedgerEntry const& restoredEntry,
+    uint32_t ledgerSeq, uint32_t protocolVersion)
+{
+    if (!protocolVersionEquals(protocolVersion, ProtocolVersion::V_23))
+    {
+        // std::cout << "Not p23\n" << std::endl;
+        return std::nullopt;
+    }
+
+    auto entryIter = mKeyToEntries.find(restoredKey);
+    if (entryIter == mKeyToEntries.end())
+    {
+        return std::nullopt;
+    }
+
+    auto restoreLo = getAmountLo(restoredEntry);
+    if (!restoreLo)
+    {
+        return std::nullopt;
+    }
+
+    auto const& [correctEntry, corruptedEntry] = entryIter->second;
+    releaseAssert(restoredEntry == corruptedEntry);
+
+    auto correctLo = getAmountLo(correctEntry);
+    if (!correctLo)
+    {
+        CLOG_WARNING(Ledger,
+                     "Event Reconciliation - Skipping SAC reconciliation event "
+                     "for restored entry as "
+                     "the structure of the correct entry does not match what's "
+                     "expected for an SAC entry. Entry = {}",
+                     xdr::xdr_to_string(restoredEntry));
+        return std::nullopt;
+    }
+
+    auto const& contractId = restoredEntry.data.contractData().contract;
+    auto it = mSACAssetMap.find(contractId);
+    if (it == mSACAssetMap.end())
+    {
+        CLOG_WARNING(
+            Ledger,
+            "Event Reconciliation - Skipping SAC reconciliation event for "
+            "restored entry as its "
+            "contract ID is not in the affected assets map. RestoredEntry = "
+            "{}, CorrectEntry = {}",
+            xdr::xdr_to_string(restoredEntry),
+            xdr::xdr_to_string(correctEntry));
+
+        //  Make sure the only diff is lastModifiedLedgerSeq
+        auto restoredEntryCopy = restoredEntry;
+        restoredEntryCopy.lastModifiedLedgerSeq =
+            correctEntry.lastModifiedLedgerSeq;
+        releaseAssert(restoredEntryCopy == correctEntry);
+        return std::nullopt;
+    }
+
+    // The balance addresses must match.
+    releaseAssert(correctLo->second == restoreLo->second);
+
+    if (correctLo->first == restoreLo->first)
+    {
+        // No change in amount, no reconciliation event.
+        return std::nullopt;
+    }
+
+    if (correctLo->first > std::numeric_limits<std::int64_t>::max() ||
+        restoreLo->first > std::numeric_limits<std::int64_t>::max())
+    {
+        CLOG_WARNING(
+            Ledger,
+            "Event Reconciliation - Skipping SAC reconciliation event for "
+            "restored entry as "
+            "the amount does not fit in int64_t. restored = {}, correct = {}. ",
+            xdr::xdr_to_string(restoredEntry),
+            xdr::xdr_to_string(correctEntry));
+        return std::nullopt;
+    }
+
+    auto diff = static_cast<int64_t>(restoreLo->first) -
+                static_cast<int64_t>(correctLo->first);
+
+    Protocol23CorruptionEventReconciler::SACReconciliationInfo info;
+    info.asset = it->second;
+    info.mintOrBurnAddress = correctLo->second;
+    info.amount = diff;
+    return info;
+}
+
 } // namespace p23_hot_archive_bug
 } // namespace stellar
