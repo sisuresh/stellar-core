@@ -79,7 +79,7 @@ AppConnector::checkOnOperationApply(Operation const& operation,
                                     std::vector<ContractEvent> const& events)
 {
     mApp.getInvariantManager().checkOnOperationApply(operation, opres, ltxDelta,
-                                                     events);
+                                                     events, *this);
 }
 
 Hash const&

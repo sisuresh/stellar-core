@@ -569,7 +569,7 @@ getAmountLo(LedgerEntry const& le)
     // This looks like an SAC balance entry.
     auto lo = amountEntry.val.i128().lo;
     auto hi = amountEntry.val.i128().hi;
-    // Make the assumption that amount fit in int64_t for now. We'll find out if
+    // Make the assumption that amount fits in int64_t for now. We'll find out if
     // this is false during validation. Remember that this will only run for p23
     // after we're on p24.
     releaseAssert(hi == 0);
@@ -579,13 +579,12 @@ getAmountLo(LedgerEntry const& le)
 }
 
 std::optional<Protocol23CorruptionEventReconciler::SACReconciliationInfo>
-Protocol23CorruptionEventReconciler::getSACReconciliationEvent(
+Protocol23CorruptionEventReconciler::getSACReconciliationEventAndTrackDiff(
     LedgerKey const& restoredKey, LedgerEntry const& restoredEntry,
     uint32_t ledgerSeq, uint32_t protocolVersion)
 {
     if (!protocolVersionEquals(protocolVersion, ProtocolVersion::V_23))
     {
-        // std::cout << "Not p23\n" << std::endl;
         return std::nullopt;
     }
 
@@ -646,6 +645,7 @@ Protocol23CorruptionEventReconciler::getSACReconciliationEvent(
         return std::nullopt;
     }
 
+    // None of the balances are expected to exceed int64_t range.
     if (correctLo->first > std::numeric_limits<std::int64_t>::max() ||
         restoreLo->first > std::numeric_limits<std::int64_t>::max())
     {
@@ -656,7 +656,7 @@ Protocol23CorruptionEventReconciler::getSACReconciliationEvent(
             "the amount does not fit in int64_t. restored = {}, correct = {}. ",
             xdr::xdr_to_string(restoredEntry),
             xdr::xdr_to_string(correctEntry));
-        return std::nullopt;
+        releaseAssert(false);
     }
 
     auto diff = static_cast<int64_t>(restoreLo->first) -
@@ -666,7 +666,36 @@ Protocol23CorruptionEventReconciler::getSACReconciliationEvent(
     info.asset = it->second;
     info.mintOrBurnAddress = correctLo->second;
     info.amount = diff;
+
+    mReconciliationAmounts[correctLo->second][it->second].emplace_back(diff);
+
     return info;
+}
+
+bool
+Protocol23CorruptionEventReconciler::hasReconciliationAmount(
+    Asset const& asset, SCAddress const& address, CxxI128 const& amount) const
+{
+    auto addrIt = mReconciliationAmounts.find(address);
+    if (addrIt == mReconciliationAmounts.end())
+    {
+        return false;
+    }
+
+    auto assetIt = addrIt->second.find(asset);
+    if (assetIt == addrIt->second.end())
+    {
+        return false;
+    }
+
+    for (auto const& a : assetIt->second)
+    {
+        if (rust_bridge::i128_i64_eq(amount, a))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace p23_hot_archive_bug

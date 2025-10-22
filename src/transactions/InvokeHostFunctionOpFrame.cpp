@@ -1055,7 +1055,7 @@ class InvokeHostFunctionParallelApplyHelper
                 mApp.getProtocol23CorruptionEventReconciler())
             {
                 auto ev = mApp.getProtocol23CorruptionEventReconciler()
-                              ->getSACReconciliationEvent(
+                              ->getSACReconciliationEventAndTrackDiff(
                                   lk, le, mLedgerInfo.getLedgerSeq(),
                                   mLedgerInfo.getLedgerVersion());
                 if (ev)

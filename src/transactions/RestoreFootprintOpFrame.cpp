@@ -166,8 +166,8 @@ class RestoreFootprintApplyHelper : virtual public LedgerAccessHelper
                 {
                     auto eventInfo =
                         mApp.getProtocol23CorruptionEventReconciler()
-                            ->getSACReconciliationEvent(lk, entry, ledgerSeq,
-                                                        getLedgerVersion());
+                            ->getSACReconciliationEventAndTrackDiff(
+                                lk, entry, ledgerSeq, getLedgerVersion());
                     if (eventInfo)
                     {
                         if (eventInfo->amount > 0)
