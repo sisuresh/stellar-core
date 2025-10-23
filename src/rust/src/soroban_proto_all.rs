@@ -31,7 +31,10 @@ use crate::RustBuf;
 
 // We also alias the latest soroban as soroban_curr to help reduce churn in code
 // that's just "always supposed to use the latest".
+#[cfg(not(feature = "next"))]
 pub(crate) use p24 as soroban_curr;
+#[cfg(feature = "next")]
+pub(crate) use p25 as soroban_curr;
 
 // We also pin some protocol _agnostic_ definitions that are technically
 // implemented by a specific version of soroban, but which is protocol-stable
