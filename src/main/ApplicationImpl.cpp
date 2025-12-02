@@ -33,6 +33,7 @@
 #include "invariant/InvariantManager.h"
 #include "invariant/LedgerEntryIsValid.h"
 #include "invariant/LiabilitiesMatchOffers.h"
+#include "invariant/NativeAssetSupply.h"
 #include "invariant/SponsorshipCountIsValid.h"
 #include "ledger/LedgerHeaderUtils.h"
 #include "ledger/LedgerManager.h"
@@ -324,6 +325,7 @@ ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
     ConstantProductInvariant::registerInvariant(*this);
     EventsAreConsistentWithEntryDiffs::registerInvariant(*this);
     ArchivedStateConsistency::registerInvariant(*this);
+    NativeAssetSupply::registerInvariant(*this);
 
     enableInvariantsFromConfig();
 
