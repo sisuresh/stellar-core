@@ -241,10 +241,17 @@ canHoldNative(LedgerEntryType type)
 static Loop
 scanLiveBucket(LiveBucketSnapshot const& bucket,
                std::unordered_set<LedgerKey>& seenKeys, Asset const& asset,
-               AssetContractInfo const& assetContractInfo, int64_t& sumBalance)
+               AssetContractInfo const& assetContractInfo, int64_t& sumBalance,
+               std::function<bool()> const& isStopping)
 {
     for (LiveBucketInputIterator iter(bucket.getRawBucket()); iter; ++iter)
     {
+        // Allow early termination if application is stopping
+        if (isStopping())
+        {
+            return Loop::COMPLETE;
+        }
+
         auto const& be = *iter;
         if (be.type() == LIVEENTRY || be.type() == INITENTRY)
         {
@@ -272,11 +279,18 @@ scanHotArchiveBucket(HotArchiveBucketSnapshot const& bucket,
                      std::unordered_set<LedgerKey>& seenKeys,
                      Asset const& asset,
                      AssetContractInfo const& assetContractInfo,
-                     int64_t& sumBalance)
+                     int64_t& sumBalance,
+                     std::function<bool()> const& isStopping)
 {
     for (HotArchiveBucketInputIterator iter(bucket.getRawBucket()); iter;
          ++iter)
     {
+        // Allow early termination if application is stopping
+        if (isStopping())
+        {
+            return Loop::COMPLETE;
+        }
+
         auto const& be = *iter;
         if (be.type() == HOT_ARCHIVE_ARCHIVED)
         {
@@ -300,12 +314,12 @@ scanHotArchiveBucket(HotArchiveBucketSnapshot const& bucket,
 std::string
 ConservationOfLumens::checkSnapshot(
     CompleteConstLedgerStatePtr ledgerState,
-    InMemorySorobanState const& inMemorySnapshot)
+    InMemorySorobanState const& inMemorySnapshot,
+    std::function<bool()> isStopping)
 {
-    CLOG_ERROR(Tx, "Running ConservationOfLumens invariant snapshot check");
     LogSlowExecution logSlow("ConservationOfLumens::checkSnapshot",
                              LogSlowExecution::Mode::AUTOMATIC_RAII, "took",
-                             std::chrono::seconds(30));
+                             std::chrono::seconds(300));
 
     auto liveSnapshot = ledgerState->getBucketSnapshot();
     auto hotArchiveSnapshot = ledgerState->getHotArchiveSnapshot();
@@ -329,21 +343,35 @@ ConservationOfLumens::checkSnapshot(
     {
         std::unordered_set<LedgerKey> seenKeys;
         liveSnapshot->loopAllBuckets([&seenKeys, &nativeAsset, &sumBalance,
+                                      &isStopping,
                                       this](LiveBucketSnapshot const& bucket) {
             return scanLiveBucket(bucket, seenKeys, nativeAsset,
-                                  mLumenContractInfo, sumBalance);
+                                  mLumenContractInfo, sumBalance, isStopping);
         });
+    }
+
+    // Check if we should stop before scanning hot archive
+    if (isStopping())
+    {
+        return std::string{};
     }
 
     // Scan the Hot Archive for native balances using loopAllBuckets
     {
         std::unordered_set<LedgerKey> seenKeys;
         hotArchiveSnapshot->loopAllBuckets(
-            [&seenKeys, &nativeAsset, &sumBalance,
+            [&seenKeys, &nativeAsset, &sumBalance, &isStopping,
              this](HotArchiveBucketSnapshot const& bucket) {
                 return scanHotArchiveBucket(bucket, seenKeys, nativeAsset,
-                                            mLumenContractInfo, sumBalance);
+                                            mLumenContractInfo, sumBalance,
+                                            isStopping);
             });
+    }
+
+    // We stopped early, so it's likely we didn't finish scanning everything
+    if (isStopping())
+    {
+        return std::string{};
     }
 
     // Compare the calculated total with totalCoins from the ledger header
@@ -356,7 +384,6 @@ ConservationOfLumens::checkSnapshot(
                        "{}, Difference: {}"),
             sumBalance, header.totalCoins, header.totalCoins - sumBalance);
     }
-    CLOG_ERROR(Tx, "!!!Finished ConservationOfLumens invariant snapshot check");
     return std::string{};
 }
 }

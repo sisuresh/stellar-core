@@ -336,6 +336,6 @@ TEST_CASE("Snapshot invariant validates total lumens",
             app.getLedgerManager().getInMemorySorobanStateForTesting();
 
         REQUIRE_NOTHROW(app.getInvariantManager().runStateSnapshotInvariant(
-            ledgerState, inMemoryState));
+            ledgerState, inMemoryState, []() { return false; }));
     }
 }
