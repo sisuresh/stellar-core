@@ -759,7 +759,8 @@ applyPriceErrorThresholds(Price price, int64_t wheatReceive, int64_t sheepSend,
             // happen that the sender sells no sheep and we throw in this case.
             if (sheepSend == 0)
             {
-                throw std::runtime_error("invalid amount of sheep sent");
+                CLOG_ERROR("{}", "invalid amount of sheep sent");
+                // throw std::runtime_error("invalid amount of sheep sent");
             }
             break;
         default:
@@ -1147,6 +1148,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     maxWheatSend = std::min({offer.amount, maxWheatSend});
     int64_t maxSheepReceive =
         canBuyAtMost(header, accountB, sheep, sheepLineAccountB);
+    releaseAssertOrThrow(maxSheepReceive > 0);
     auto exchangeResult =
         exchangeV10(offer.price, maxWheatSend, maxWheatReceived, maxSheepSend,
                     maxSheepReceive, round);
