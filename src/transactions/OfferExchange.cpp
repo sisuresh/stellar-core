@@ -759,7 +759,7 @@ applyPriceErrorThresholds(Price price, int64_t wheatReceive, int64_t sheepSend,
             // happen that the sender sells no sheep and we throw in this case.
             if (sheepSend == 0)
             {
-                CLOG_ERROR("{}", "invalid amount of sheep sent");
+                CLOG_ERROR(Tx, "{}", "invalid amount of sheep sent");
                 // throw std::runtime_error("invalid amount of sheep sent");
             }
             break;
