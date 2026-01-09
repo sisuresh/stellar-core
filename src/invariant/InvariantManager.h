@@ -80,6 +80,11 @@ class InvariantManager
 
     virtual bool shouldRunInvariantSnapshot() const = 0;
 
+    // Called on main thread before posting snapshot invariant to background.
+    // Sets mStateSnapshotInvariantRunning = true and
+    // mShouldRunStateSnapshotInvariant = false to prevent duplicate tasks.
+    virtual void markSnapshotInvariantRunning() = 0;
+
 #ifdef BUILD_TESTS
     virtual void snapshotForFuzzer() = 0;
     virtual void resetForFuzzer() = 0;

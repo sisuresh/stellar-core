@@ -79,6 +79,7 @@ class InvariantManagerImpl : public InvariantManager
     virtual void start(LedgerManager const& ledgerManager) override;
 
     bool shouldRunInvariantSnapshot() const override;
+    void markSnapshotInvariantRunning() override;
 
     void runStateSnapshotInvariant(
         SearchableSnapshotConstPtr liveSnapshot,

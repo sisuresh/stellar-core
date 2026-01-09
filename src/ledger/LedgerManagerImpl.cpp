@@ -776,6 +776,11 @@ LedgerManagerImpl::maybeRunSnapshotInvariantFromLedgerState(
     releaseAssertOrThrow(liveSnapshotCopy->getLedgerSeq() == ledgerSeq);
     releaseAssertOrThrow(hotArchiveSnapshotCopy->getLedgerSeq() == ledgerSeq);
 
+    // Mark the invariant as running on the main thread before posting to
+    // background. This prevents duplicate tasks from being queued if multiple
+    // ledgers close before the background task starts.
+    mApp.getInvariantManager().markSnapshotInvariantRunning();
+
     // Note: No race condition acquiring app by reference, as all worker
     // threads are joined before application destruction.
     auto cb = [liveSnapshot = liveSnapshotCopy,
