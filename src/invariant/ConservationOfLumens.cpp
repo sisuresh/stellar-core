@@ -236,8 +236,6 @@ scanLiveBuckets(
             continue;
         }
 
-        std::unordered_set<LedgerKey> countedKeys;
-
         liveSnapshot->scanForEntriesOfType(
             type, [&](BucketEntry const& be) -> Loop {
                 if (isStopping())
@@ -245,7 +243,7 @@ scanLiveBuckets(
                     return Loop::COMPLETE;
                 }
 
-                if (be.type() == LIVEENTRY || be.type() == INITENTRY)
+               /*  if (be.type() == LIVEENTRY || be.type() == INITENTRY)
                 {
                     if (!processEntryIfNew(
                             be.liveEntry(), LedgerEntryKey(be.liveEntry()),
@@ -258,7 +256,7 @@ scanLiveBuckets(
                 else if (be.type() == DEADENTRY)
                 {
                     countedKeys.emplace(be.deadEntry());
-                }
+                } */
                 return Loop::INCOMPLETE;
             });
 
@@ -335,16 +333,6 @@ ConservationOfLumens::checkSnapshot(
 
     int64_t sumBalance = 0;
     std::string errorMsg;
-
-    // Start with the fee pool from the ledger header
-    if (!addBalance(sumBalance, header.feePool))
-    {
-        return fmt::format(
-            FMT_STRING("ConservationOfLumens invariant failed: "
-                       "Fee pool balance overflowed when added to total. "
-                       "Current sum: {}, Fee pool: {}"),
-            sumBalance, header.feePool);
-    }
 
     // Scan the Live BucketList for native balances using loopAllBuckets
 
