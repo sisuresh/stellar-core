@@ -631,7 +631,7 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, TimePoint closeTime,
         auto const& closeMeta = lm.getLastClosedLedgerCloseMeta();
         if (closeMeta.has_value())
         {
-            gAccumulatedLcm.emplace_back(closeMeta->getXDR());
+            appendToAccumulatedLcm(closeMeta->getXDR());
         }
     }
     return lm.mLatestTxResultSet;
@@ -664,7 +664,7 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, time_t closeTime,
         auto const& closeMeta = lm.getLastClosedLedgerCloseMeta();
         if (closeMeta.has_value())
         {
-            gAccumulatedLcm.emplace_back(closeMeta->getXDR());
+            appendToAccumulatedLcm(closeMeta->getXDR());
         }
     }
 
