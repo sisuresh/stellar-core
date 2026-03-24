@@ -216,6 +216,7 @@ Command options can only by placed after command.
       exercise scenarios downstream meta consumers (e.g. Horizon, RPC)
       would find interesting, such as different operation types, failed
       transactions, config upgrades, and Soroban state changes.
+  * The network passphrase is set to `(V) (;,,;) (V)` for all captured meta.
   * For [further info](https://github.com/philsquared/Catch/blob/master/docs/command-line.md)
     on possible options for test.
   * For example this will run just the tests tagged with `[tx]` using protocol
