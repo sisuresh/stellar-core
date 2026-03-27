@@ -6001,13 +6001,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
             auto ledgerUpgrade = LedgerUpgrade{LEDGER_UPGRADE_CONFIG};
             ledgerUpgrade.newConfig() = upgradeSetKey;
 
-            auto const& lcl = lm.getLastClosedLedgerHeader();
-            auto txSet = TxSetXDRFrame::makeEmpty(lcl);
-            auto lastCloseTime = lcl.header.scpValue.closeTime;
-
-            app->getHerder().externalizeValue(
-                txSet, lcl.header.ledgerSeq + 1, lastCloseTime,
-                {LedgerTestUtils::toUpgradeType(ledgerUpgrade)});
+            executeUpgrade(*app, ledgerUpgrade);
 
             checkSettings(updatedEntries);
         }
@@ -6044,13 +6038,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto ledgerUpgrade = LedgerUpgrade{LEDGER_UPGRADE_CONFIG};
         ledgerUpgrade.newConfig() = upgradeSetKey2;
 
-        auto const& lcl = lm.getLastClosedLedgerHeader();
-        auto txSet = TxSetXDRFrame::makeEmpty(lcl);
-        auto lastCloseTime = lcl.header.scpValue.closeTime;
-
-        app->getHerder().externalizeValue(
-            txSet, lcl.header.ledgerSeq + 1, lastCloseTime,
-            {LedgerTestUtils::toUpgradeType(ledgerUpgrade)});
+        executeUpgrade(*app, ledgerUpgrade);
 
         checkSettings(initialEntries);
     }
@@ -6077,12 +6065,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto ledgerUpgrade = LedgerUpgrade{LEDGER_UPGRADE_CONFIG};
         ledgerUpgrade.newConfig() = upgradeSetKey;
 
-        auto txSet = TxSetXDRFrame::makeEmpty(lcl);
-        auto lastCloseTime = lcl.header.scpValue.closeTime;
-
-        app->getHerder().externalizeValue(
-            txSet, lcl.header.ledgerSeq + 1, lastCloseTime,
-            {LedgerTestUtils::toUpgradeType(ledgerUpgrade)});
+        executeUpgrade(*app, ledgerUpgrade);
 
         // No upgrade due to expired entry
         checkSettings(initialEntries);
@@ -6100,12 +6083,7 @@ TEST_CASE("settings upgrade command line utils", "[tx][soroban][upgrades]")
         auto ledgerUpgrade = LedgerUpgrade{LEDGER_UPGRADE_CONFIG};
         ledgerUpgrade.newConfig() = upgradeSetKey;
 
-        auto txSet = TxSetXDRFrame::makeEmpty(lcl);
-        auto lastCloseTime = lcl.header.scpValue.closeTime;
-
-        app->getHerder().externalizeValue(
-            txSet, lcl.header.ledgerSeq + 1, lastCloseTime,
-            {LedgerTestUtils::toUpgradeType(ledgerUpgrade)});
+        executeUpgrade(*app, ledgerUpgrade);
 
         // No upgrade due to tampered entry
         checkSettings(initialEntries);
