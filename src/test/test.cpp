@@ -142,14 +142,53 @@ buildLcmOutputPath(Catch::TestCaseInfo const& tc,
     return "test-lcm/" + fileStem + "/" + name + ".xdr";
 }
 
+static uint32_t
+lcmLedgerSeq(LedgerCloseMeta const& lcm)
+{
+    switch (lcm.v())
+    {
+    case 0:
+        return lcm.v0().ledgerHeader.header.ledgerSeq;
+    case 1:
+        return lcm.v1().ledgerHeader.header.ledgerSeq;
+    case 2:
+        return lcm.v2().ledgerHeader.header.ledgerSeq;
+    default:
+        releaseAssert(false);
+    }
+}
+
+static void
+checkLcmSequenceContiguity(std::vector<LedgerCloseMeta> const& metas,
+                           size_t startIndex, std::string const& path)
+{
+    if (startIndex + 1 >= metas.size())
+    {
+        // Zero or one entry — nothing to check for contiguity.
+        return;
+    }
+    for (size_t i = startIndex + 1; i < metas.size(); ++i)
+    {
+        auto prevSeq = lcmLedgerSeq(metas[i - 1]);
+        auto curSeq = lcmLedgerSeq(metas[i]);
+        REQUIRE(curSeq == prevSeq + 1);
+    }
+}
+
 static void
 writeLcmToFile(std::string const& path, size_t startIndex)
 {
     auto const& allMetas = txtest::getAccumulatedLcm();
     if (startIndex >= allMetas.size())
     {
+        LOG_WARNING(DEFAULT_LOG,
+                    "LCM auto-capture: no LedgerCloseMeta entries for '{}'. "
+                    "This test may use tx->apply() instead of closeLedger().",
+                    path);
         return;
     }
+
+    checkLcmSequenceContiguity(allMetas, startIndex, path);
 
     // Ensure parent directory exists
     auto lastSlash = path.find_last_of('/');
