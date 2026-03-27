@@ -66,6 +66,20 @@ appendToAccumulatedLcm(LedgerCloseMeta const& lcm)
     gAccumulatedLcm.emplace_back(lcm);
 }
 
+void
+captureLastClosedLedgerLcm(Application& app)
+{
+    if (isLcmCaptureEnabled())
+    {
+        auto const& closeMeta =
+            app.getLedgerManager().getLastClosedLedgerCloseMeta();
+        if (closeMeta.has_value())
+        {
+            appendToAccumulatedLcm(closeMeta->getXDR());
+        }
+    }
+}
+
 ExpectedOpResult::ExpectedOpResult(OperationResultCode code)
 {
     mOperationResult.code(code);
@@ -626,14 +640,7 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, TimePoint closeTime,
     }
     releaseAssert(app.getLedgerManager().getLastClosedLedgerNum() == ledgerSeq);
     auto& lm = static_cast<LedgerManagerImpl&>(app.getLedgerManager());
-    if (isLcmCaptureEnabled())
-    {
-        auto const& closeMeta = lm.getLastClosedLedgerCloseMeta();
-        if (closeMeta.has_value())
-        {
-            appendToAccumulatedLcm(closeMeta->getXDR());
-        }
-    }
+    captureLastClosedLedgerLcm(app);
     return lm.mLatestTxResultSet;
 }
 
@@ -659,14 +666,7 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, time_t closeTime,
 
     REQUIRE(app.getLedgerManager().getLastClosedLedgerNum() == ledgerSeq);
 
-    if (isLcmCaptureEnabled())
-    {
-        auto const& closeMeta = lm.getLastClosedLedgerCloseMeta();
-        if (closeMeta.has_value())
-        {
-            appendToAccumulatedLcm(closeMeta->getXDR());
-        }
-    }
+    captureLastClosedLedgerLcm(app);
 
     return z1;
 }
@@ -1981,6 +1981,9 @@ executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades,
     auto lastCloseTime = lcl.header.scpValue.closeTime;
     app.getHerder().externalizeValue(txSet, lcl.header.ledgerSeq + 1,
                                      lastCloseTime, upgrades);
+
+    captureLastClosedLedgerLcm(app);
+
     if (upgradesIgnored)
     {
         auto const& newHeader = lm.getLastClosedLedgerHeader().header;

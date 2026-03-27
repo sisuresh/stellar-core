@@ -387,6 +387,7 @@ TestAccount getGenesisAccount(Application& app, uint32_t accountIndex);
 std::vector<LedgerCloseMeta> const& getAccumulatedLcm();
 void clearAccumulatedLcm();
 void appendToAccumulatedLcm(LedgerCloseMeta const& lcm);
+void captureLastClosedLedgerLcm(Application& app);
 
 } // end txtest namespace
 }
