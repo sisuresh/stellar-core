@@ -206,7 +206,7 @@ Command options can only by placed after command.
       automatically at leaf-section boundaries (or test-case boundaries for
       tests without sections) to `test-lcm/<TestFileBaseName>/`. Each file
       is named after the test case and section path
-      (e.g. `test_name__section__subsection.xdr`) and contains
+      (e.g. `test_name-section-subsection.xdr`) and contains
       stream-framed `LedgerCloseMeta` entries that can be decoded with
       `stellar-xdr decode --type LedgerCloseMeta --input stream-framed`.
       Meta is normalized (sorted) before writing so that output is

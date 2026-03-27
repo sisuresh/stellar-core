@@ -135,7 +135,7 @@ buildLcmOutputPath(Catch::TestCaseInfo const& tc,
     // section with the same name as the test case.
     for (size_t i = 1; i < sectionStack.size(); ++i)
     {
-        name += "__";
+        name += "-";
         name += sanitizeForFilename(sectionStack[i].info.name);
     }
 
