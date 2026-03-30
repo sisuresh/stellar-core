@@ -216,9 +216,7 @@ writeLcmToFile(std::string const& path, size_t startIndex)
     size_t count = 0;
     for (size_t i = startIndex; i < allMetas.size(); ++i)
     {
-        auto normalized = allMetas[i];
-        normalizeMeta(normalized);
-        out.writeOne(normalized);
+        out.writeOne(allMetas[i]);
         ++count;
     }
 

@@ -69,7 +69,11 @@ appendToAccumulatedLcm(LedgerCloseMeta const& lcm)
 void
 captureLastClosedLedgerLcm(Application& app)
 {
-    if (isLcmCaptureEnabled())
+    // TODO: In-memory mode uses applyCheck which closes an empty ledger
+    // then applies the tx directly, so txs never appear in LCM. Fix this
+    // by restructuring applyCheck to use closeLedger(app, {tx}) when
+    // capturing LCM.
+    if (isLcmCaptureEnabled() && !app.getConfig().MODE_USES_IN_MEMORY_LEDGER)
     {
         auto const& closeMeta =
             app.getLedgerManager().getLastClosedLedgerCloseMeta();
