@@ -954,7 +954,7 @@ TEST_CASE_VERSIONS("merge event reconciler", "[tx][merge]")
     auto txfee = app->getLedgerManager().getLastTxFee();
 
     int64_t const minBalance =
-        app->getLedgerManager().getLastMinBalance(0) + txfee * 2;
+        app->getLedgerManager().getLastMinBalance(0) + txfee * 10;
 
     auto a1 = root->create("A", minBalance);
     auto b1 = root->create("B", minBalance);
