@@ -18,9 +18,9 @@ use std::{fmt::Display, io::Cursor, panic, rc::Rc, time::Instant};
 //
 //    crate::soroban_proto_all::p21::soroban_proto_any
 //    crate::soroban_proto_all::p22::soroban_proto_any
-//    crate::soroban_proto_all::p23::soroban_proto_any ...
+//    crate::soroban_proto_all::p25::soroban_proto_any ...
 //
-// Each such location is embedded inside a parent module -- p21, p22, p23, etc.
+// Each such location is embedded inside a parent module -- p21, p22, p25, etc.
 // -- which is an adaptor for a specific version of soroban: it provides a
 // specific soroban version binding for `soroban_env_host` which we import here
 // from the adaptor: we refer to `super::soroban_env_host`, rather than
@@ -45,8 +45,6 @@ pub(crate) use super::soroban_env_host::{
     budget::{AsBudget, Budget},
     e2e_invoke::{extract_rent_changes, LedgerEntryChange},
     fees::{
-        compute_rent_fee as host_compute_rent_fee,
-        compute_transaction_resource_fee as host_compute_transaction_resource_fee,
         FeeConfiguration, LedgerEntryRentChange, RentFeeConfiguration, TransactionResources,
     },
     xdr::{
@@ -455,10 +453,11 @@ fn invoke_host_function_or_maybe_panic(
         Ok(res) => match res.encoded_invoke_result {
             Ok(result_value) => {
                 let rent_changes = extract_rent_changes(&res.ledger_changes);
-                let rent_fee = host_compute_rent_fee(
+                let rent_fee = super::host_compute_rent_fee_wrapper(
                     &rent_changes,
                     &rent_fee_configuration.into(),
                     ledger_seq_num,
+                    protocol_version,
                 );
                 let modified_ledger_entries = extract_ledger_effects(res.ledger_changes)?;
                 return Ok(InvokeHostFunctionOutput {
@@ -567,9 +566,13 @@ pub(crate) fn rustbuf_containing_diagnostic_event_to_string(buf: &RustBuf) -> St
 pub(crate) fn compute_transaction_resource_fee(
     tx_resources: CxxTransactionResources,
     fee_config: CxxFeeConfiguration,
+    protocol_version: u32,
 ) -> FeePair {
-    let (non_refundable_fee, refundable_fee) =
-        host_compute_transaction_resource_fee(&tx_resources.into(), &fee_config.into());
+    let (non_refundable_fee, refundable_fee) = super::host_compute_transaction_resource_fee_wrapper(
+        &tx_resources.into(),
+        &fee_config.into(),
+        protocol_version,
+    );
     FeePair {
         non_refundable_fee,
         refundable_fee,
@@ -580,12 +583,14 @@ pub(crate) fn compute_rent_fee(
     changed_entries: &Vec<CxxLedgerEntryRentChange>,
     fee_config: CxxRentFeeConfiguration,
     current_ledger_seq: u32,
+    protocol_version: u32,
 ) -> i64 {
     let changed_entries: Vec<_> = changed_entries.iter().map(|e| e.into()).collect();
-    host_compute_rent_fee(
+    super::host_compute_rent_fee_wrapper(
         &changed_entries,
         &((&fee_config).into()),
         current_ledger_seq,
+        protocol_version,
     )
 }
 

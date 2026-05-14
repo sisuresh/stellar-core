@@ -43,13 +43,13 @@ pub(crate) use p27 as soroban_curr;
 // only compatible with with, say, a rust Dyn interface like Box<dyn Error>).
 pub(crate) mod protocol_agnostic {
     pub(crate) fn make_error(msg: &'static str) -> Box<dyn std::error::Error> {
-        super::p24::soroban_proto_any::CoreHostError::General(msg.into()).into()
+        super::p25::soroban_proto_any::CoreHostError::General(msg.into()).into()
     }
 
     // The i128 functions are protocol-agnostic because they're too simple to
     // ever plausibly change. If they ever _do_ change we can switch this (and
     // the callers) to pass a protocol number but it seems unlikely.
-    pub(crate) use super::p24::soroban_env_host::xdr::int128_helpers;
+    pub(crate) use super::p25::soroban_env_host::xdr::int128_helpers;
 }
 
 #[cfg(feature = "next")]
@@ -68,8 +68,9 @@ pub(crate) mod p27 {
         budget::Budget,
         e2e_invoke::{self, InvokeHostFunctionResult},
         fees::{
-            compute_rent_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, RentWriteFeeConfiguration, TransactionResources,
+            compute_rent_fee, compute_rent_write_fee_per_1kb, compute_transaction_resource_fee,
+            FeeConfiguration, LedgerEntryRentChange, RentFeeConfiguration,
+            RentWriteFeeConfiguration, TransactionResources,
         },
         vm::wasm_module_memory_cost,
         xdr::{ContractCodeEntry, DiagnosticEvent},
@@ -157,6 +158,25 @@ pub(crate) mod p27 {
         compute_rent_write_fee_per_1kb(bucket_list_size, &fee_config.into())
     }
 
+    // The p27 host doesn't take protocol_version on its fee functions; it's
+    // a single-protocol host so we just discard the argument here.
+    pub(crate) fn host_compute_transaction_resource_fee_wrapper(
+        tx_resources: &TransactionResources,
+        fee_config: &FeeConfiguration,
+        _protocol_version: u32,
+    ) -> (i64, i64) {
+        compute_transaction_resource_fee(tx_resources, fee_config)
+    }
+
+    pub(crate) fn host_compute_rent_fee_wrapper(
+        changed_entries: &[LedgerEntryRentChange],
+        fee_config: &RentFeeConfiguration,
+        current_ledger_seq: u32,
+        _protocol_version: u32,
+    ) -> i64 {
+        compute_rent_fee(changed_entries, fee_config, current_ledger_seq)
+    }
+
     pub(crate) fn convert_transaction_resources(
         value: &CxxTransactionResources,
     ) -> TransactionResources {
@@ -236,8 +256,9 @@ pub(crate) mod p26 {
         budget::Budget,
         e2e_invoke::{self, InvokeHostFunctionResult},
         fees::{
-            compute_rent_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, RentWriteFeeConfiguration, TransactionResources,
+            compute_rent_fee, compute_rent_write_fee_per_1kb, compute_transaction_resource_fee,
+            FeeConfiguration, LedgerEntryRentChange, RentFeeConfiguration,
+            RentWriteFeeConfiguration, TransactionResources,
         },
         vm::wasm_module_memory_cost,
         xdr::{ContractCodeEntry, DiagnosticEvent},
@@ -329,6 +350,25 @@ pub(crate) mod p26 {
         compute_rent_write_fee_per_1kb(bucket_list_size, &fee_config.into())
     }
 
+    // The p26 host doesn't take protocol_version on its fee functions; it's
+    // a single-protocol host so we just discard the argument here.
+    pub(crate) fn host_compute_transaction_resource_fee_wrapper(
+        tx_resources: &TransactionResources,
+        fee_config: &FeeConfiguration,
+        _protocol_version: u32,
+    ) -> (i64, i64) {
+        compute_transaction_resource_fee(tx_resources, fee_config)
+    }
+
+    pub(crate) fn host_compute_rent_fee_wrapper(
+        changed_entries: &[LedgerEntryRentChange],
+        fee_config: &RentFeeConfiguration,
+        current_ledger_seq: u32,
+        _protocol_version: u32,
+    ) -> i64 {
+        compute_rent_fee(changed_entries, fee_config, current_ledger_seq)
+    }
+
     pub(crate) fn convert_transaction_resources(
         value: &CxxTransactionResources,
     ) -> TransactionResources {
@@ -408,8 +448,10 @@ pub(crate) mod p25 {
         budget::Budget,
         e2e_invoke::{self, InvokeHostFunctionResult},
         fees::{
-            compute_rent_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, RentWriteFeeConfiguration, TransactionResources,
+            compute_rent_fee_with_protocol, compute_rent_write_fee_per_1kb,
+            compute_transaction_resource_fee_with_protocol, FeeConfiguration,
+            LedgerEntryRentChange, RentFeeConfiguration, RentWriteFeeConfiguration,
+            TransactionResources,
         },
         vm::wasm_module_memory_cost,
         xdr::{ContractCodeEntry, DiagnosticEvent},
@@ -502,177 +544,29 @@ pub(crate) mod p25 {
         compute_rent_write_fee_per_1kb(bucket_list_size, &fee_config.into())
     }
 
-    pub(crate) fn convert_transaction_resources(
-        value: &CxxTransactionResources,
-    ) -> TransactionResources {
-        TransactionResources {
-            instructions: value.instructions,
-            disk_read_entries: value.disk_read_entries,
-            write_entries: value.write_entries,
-            disk_read_bytes: value.disk_read_bytes,
-            write_bytes: value.write_bytes,
-            contract_events_size_bytes: value.contract_events_size_bytes,
-            transaction_size_bytes: value.transaction_size_bytes,
-        }
+    // The p25 host now serves protocols 20..=25, so its fee functions take
+    // an explicit `protocol_version` that gates the pre-CAP-66 fee formula
+    // and the p25-only code-entry rent discount.
+    pub(crate) fn host_compute_transaction_resource_fee_wrapper(
+        tx_resources: &TransactionResources,
+        fee_config: &FeeConfiguration,
+        protocol_version: u32,
+    ) -> (i64, i64) {
+        compute_transaction_resource_fee_with_protocol(tx_resources, fee_config, protocol_version)
     }
 
-    impl From<CxxRentWriteFeeConfiguration> for RentWriteFeeConfiguration {
-        fn from(value: CxxRentWriteFeeConfiguration) -> Self {
-            Self {
-                state_target_size_bytes: value.state_target_size_bytes,
-                rent_fee_1kb_state_size_low: value.rent_fee_1kb_state_size_low,
-                rent_fee_1kb_state_size_high: value.rent_fee_1kb_state_size_high,
-                state_size_rent_fee_growth_factor: value.state_size_rent_fee_growth_factor,
-            }
-        }
-    }
-
-    pub(crate) fn convert_rent_fee_configuration(
-        value: &CxxRentFeeConfiguration,
-    ) -> RentFeeConfiguration {
-        RentFeeConfiguration {
-            fee_per_rent_1kb: value.fee_per_rent_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_write_entry: value.fee_per_write_entry,
-            persistent_rent_rate_denominator: value.persistent_rent_rate_denominator,
-            temporary_rent_rate_denominator: value.temporary_rent_rate_denominator,
-        }
-    }
-
-    pub(crate) fn convert_fee_configuration(value: CxxFeeConfiguration) -> FeeConfiguration {
-        FeeConfiguration {
-            fee_per_instruction_increment: value.fee_per_instruction_increment,
-            fee_per_disk_read_entry: value.fee_per_disk_read_entry,
-            fee_per_write_entry: value.fee_per_write_entry,
-            fee_per_disk_read_1kb: value.fee_per_disk_read_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_historical_1kb: value.fee_per_historical_1kb,
-            fee_per_contract_event_1kb: value.fee_per_contract_event_1kb,
-            fee_per_transaction_size_1kb: value.fee_per_transaction_size_1kb,
-        }
-    }
-
-    pub(crate) fn convert_ledger_entry_rent_change(
-        value: &CxxLedgerEntryRentChange,
-    ) -> LedgerEntryRentChange {
-        LedgerEntryRentChange {
-            is_persistent: value.is_persistent,
-            is_code_entry: value.is_code_entry,
-            old_size_bytes: value.old_size_bytes,
-            new_size_bytes: value.new_size_bytes,
-            old_live_until_ledger: value.old_live_until_ledger,
-            new_live_until_ledger: value.new_live_until_ledger,
-        }
-    }
-}
-
-#[path = "."]
-pub(crate) mod p24 {
-    pub(crate) extern crate soroban_env_host_p24;
-    use crate::{
-        bridge::rust_bridge::CxxLedgerEntryRentChange,
-        rust_bridge::{
-            CxxFeeConfiguration, CxxRentFeeConfiguration, CxxRentWriteFeeConfiguration,
-            CxxTransactionResources,
-        },
-        SorobanModuleCache,
-    };
-    use soroban_env_host::{
-        budget::Budget,
-        e2e_invoke::{self, InvokeHostFunctionResult},
-        fees::{
-            compute_rent_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, RentWriteFeeConfiguration, TransactionResources,
-        },
-        vm::wasm_module_memory_cost,
-        xdr::{ContractCodeEntry, DiagnosticEvent},
-        HostError, LedgerInfo, TraceHook,
-    };
-    pub(crate) use soroban_env_host_p24 as soroban_env_host;
-
-    pub(crate) mod soroban_proto_any;
-
-    // We do some more local re-exports here of things used in soroban_proto_any.rs that
-    // don't exist in older hosts (eg. the p21 & 22 hosts, where we define stubs for
-    // these imports).
-    pub(crate) use soroban_env_host::{CompilationContext, ErrorHandler, ModuleCache};
-
-    // An adapter for some API breakage between p21 and p22.
-    pub(crate) const fn get_version_pre_release(v: &soroban_env_host::Version) -> u32 {
-        v.interface.pre_release
-    }
-
-    pub(crate) const fn get_version_protocol(v: &soroban_env_host::Version) -> u32 {
-        v.interface.protocol
-    }
-
-    pub fn invoke_host_function_with_trace_hook_and_module_cache<
-        T: AsRef<[u8]>,
-        I: ExactSizeIterator<Item = T>,
-    >(
-        budget: &Budget,
-        enable_diagnostics: bool,
-        encoded_host_fn: T,
-        encoded_resources: T,
-        restored_rw_entry_indices: &[u32],
-        encoded_source_account: T,
-        encoded_auth_entries: I,
-        ledger_info: LedgerInfo,
-        encoded_ledger_entries: I,
-        encoded_ttl_entries: I,
-        base_prng_seed: T,
-        diagnostic_events: &mut Vec<DiagnosticEvent>,
-        trace_hook: Option<TraceHook>,
-        module_cache: &SorobanModuleCache,
-    ) -> Result<InvokeHostFunctionResult, HostError> {
-        e2e_invoke::invoke_host_function(
-            budget,
-            enable_diagnostics,
-            encoded_host_fn,
-            encoded_resources,
-            restored_rw_entry_indices,
-            encoded_source_account,
-            encoded_auth_entries,
-            ledger_info,
-            encoded_ledger_entries,
-            encoded_ttl_entries,
-            base_prng_seed,
-            diagnostic_events,
-            trace_hook,
-            Some(module_cache.p24_cache.module_cache.clone()),
-        )
-    }
-
-    pub(crate) fn get_xdr_features() -> Vec<String> {
-        vec![]
-    }
-
-    pub(crate) fn get_xdr_base_git_rev() -> String {
-        use soroban_env_host::VERSION;
-        match VERSION.xdr.xdr {
-            "curr" => VERSION.xdr.xdr_curr.to_string(),
-            _ => VERSION.xdr.xdr_next.to_string(),
-        }
-    }
-    pub(crate) fn get_xdr_pkg_ver() -> String {
-        soroban_env_host::VERSION.xdr.pkg.to_string()
-    }
-    pub(crate) fn get_xdr_git_rev() -> String {
-        soroban_env_host::VERSION.xdr.rev.to_string()
-    }
-
-    pub(crate) fn wasm_module_memory_cost_wrapper(
-        budget: &Budget,
-        contract_code_entry: &ContractCodeEntry,
-    ) -> Result<u64, HostError> {
-        wasm_module_memory_cost(budget, contract_code_entry)
-    }
-
-    pub(crate) fn compute_rent_write_fee_per_1kb_wrapper(
-        bucket_list_size: i64,
-        fee_config: CxxRentWriteFeeConfiguration,
+    pub(crate) fn host_compute_rent_fee_wrapper(
+        changed_entries: &[LedgerEntryRentChange],
+        fee_config: &RentFeeConfiguration,
+        current_ledger_seq: u32,
+        protocol_version: u32,
     ) -> i64 {
-        compute_rent_write_fee_per_1kb(bucket_list_size, &fee_config.into())
+        compute_rent_fee_with_protocol(
+            changed_entries,
+            fee_config,
+            current_ledger_seq,
+            protocol_version,
+        )
     }
 
     pub(crate) fn convert_transaction_resources(
@@ -731,594 +625,6 @@ pub(crate) mod p24 {
         LedgerEntryRentChange {
             is_persistent: value.is_persistent,
             is_code_entry: value.is_code_entry,
-            old_size_bytes: value.old_size_bytes,
-            new_size_bytes: value.new_size_bytes,
-            old_live_until_ledger: value.old_live_until_ledger,
-            new_live_until_ledger: value.new_live_until_ledger,
-        }
-    }
-}
-
-#[path = "."]
-pub(crate) mod p23 {
-    pub(crate) extern crate soroban_env_host_p23;
-    use crate::{
-        bridge::rust_bridge::CxxLedgerEntryRentChange,
-        rust_bridge::{
-            CxxFeeConfiguration, CxxRentFeeConfiguration, CxxRentWriteFeeConfiguration,
-            CxxTransactionResources,
-        },
-        SorobanModuleCache,
-    };
-    use soroban_env_host::{
-        budget::Budget,
-        e2e_invoke::{self, InvokeHostFunctionResult},
-        fees::{
-            compute_rent_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, RentWriteFeeConfiguration, TransactionResources,
-        },
-        vm::wasm_module_memory_cost,
-        xdr::{ContractCodeEntry, DiagnosticEvent},
-        HostError, LedgerInfo, TraceHook,
-    };
-    pub(crate) use soroban_env_host_p23 as soroban_env_host;
-
-    pub(crate) mod soroban_proto_any;
-
-    // We do some more local re-exports here of things used in soroban_proto_any.rs that
-    // don't exist in older hosts (eg. the p21 & 22 hosts, where we define stubs for
-    // these imports).
-    pub(crate) use soroban_env_host::{CompilationContext, ErrorHandler, ModuleCache};
-
-    // An adapter for some API breakage between p21 and p22.
-    pub(crate) const fn get_version_pre_release(v: &soroban_env_host::Version) -> u32 {
-        v.interface.pre_release
-    }
-
-    pub(crate) const fn get_version_protocol(v: &soroban_env_host::Version) -> u32 {
-        v.interface.protocol
-    }
-
-    pub fn invoke_host_function_with_trace_hook_and_module_cache<
-        T: AsRef<[u8]>,
-        I: ExactSizeIterator<Item = T>,
-    >(
-        budget: &Budget,
-        enable_diagnostics: bool,
-        encoded_host_fn: T,
-        encoded_resources: T,
-        restored_rw_entry_indices: &[u32],
-        encoded_source_account: T,
-        encoded_auth_entries: I,
-        ledger_info: LedgerInfo,
-        encoded_ledger_entries: I,
-        encoded_ttl_entries: I,
-        base_prng_seed: T,
-        diagnostic_events: &mut Vec<DiagnosticEvent>,
-        trace_hook: Option<TraceHook>,
-        module_cache: &SorobanModuleCache,
-    ) -> Result<InvokeHostFunctionResult, HostError> {
-        e2e_invoke::invoke_host_function(
-            budget,
-            enable_diagnostics,
-            encoded_host_fn,
-            encoded_resources,
-            restored_rw_entry_indices,
-            encoded_source_account,
-            encoded_auth_entries,
-            ledger_info,
-            encoded_ledger_entries,
-            encoded_ttl_entries,
-            base_prng_seed,
-            diagnostic_events,
-            trace_hook,
-            Some(module_cache.p23_cache.module_cache.clone()),
-        )
-    }
-
-    pub(crate) fn get_xdr_features() -> Vec<String> {
-        vec![]
-    }
-
-    pub(crate) fn get_xdr_base_git_rev() -> String {
-        use soroban_env_host::VERSION;
-        match VERSION.xdr.xdr {
-            "curr" => VERSION.xdr.xdr_curr.to_string(),
-            _ => VERSION.xdr.xdr_next.to_string(),
-        }
-    }
-    pub(crate) fn get_xdr_pkg_ver() -> String {
-        soroban_env_host::VERSION.xdr.pkg.to_string()
-    }
-    pub(crate) fn get_xdr_git_rev() -> String {
-        soroban_env_host::VERSION.xdr.rev.to_string()
-    }
-
-    pub(crate) fn wasm_module_memory_cost_wrapper(
-        budget: &Budget,
-        contract_code_entry: &ContractCodeEntry,
-    ) -> Result<u64, HostError> {
-        wasm_module_memory_cost(budget, contract_code_entry)
-    }
-
-    pub(crate) fn compute_rent_write_fee_per_1kb_wrapper(
-        bucket_list_size: i64,
-        fee_config: CxxRentWriteFeeConfiguration,
-    ) -> i64 {
-        compute_rent_write_fee_per_1kb(bucket_list_size, &fee_config.into())
-    }
-
-    pub(crate) fn convert_transaction_resources(
-        value: &CxxTransactionResources,
-    ) -> TransactionResources {
-        TransactionResources {
-            instructions: value.instructions,
-            disk_read_entries: value.disk_read_entries,
-            write_entries: value.write_entries,
-            disk_read_bytes: value.disk_read_bytes,
-            write_bytes: value.write_bytes,
-            contract_events_size_bytes: value.contract_events_size_bytes,
-            transaction_size_bytes: value.transaction_size_bytes,
-        }
-    }
-
-    impl From<CxxRentWriteFeeConfiguration> for RentWriteFeeConfiguration {
-        fn from(value: CxxRentWriteFeeConfiguration) -> Self {
-            Self {
-                state_target_size_bytes: value.state_target_size_bytes,
-                rent_fee_1kb_state_size_low: value.rent_fee_1kb_state_size_low,
-                rent_fee_1kb_state_size_high: value.rent_fee_1kb_state_size_high,
-                state_size_rent_fee_growth_factor: value.state_size_rent_fee_growth_factor,
-            }
-        }
-    }
-
-    pub(crate) fn convert_rent_fee_configuration(
-        value: &CxxRentFeeConfiguration,
-    ) -> RentFeeConfiguration {
-        RentFeeConfiguration {
-            fee_per_rent_1kb: value.fee_per_rent_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_write_entry: value.fee_per_write_entry,
-            persistent_rent_rate_denominator: value.persistent_rent_rate_denominator,
-            temporary_rent_rate_denominator: value.temporary_rent_rate_denominator,
-        }
-    }
-
-    pub(crate) fn convert_fee_configuration(value: CxxFeeConfiguration) -> FeeConfiguration {
-        FeeConfiguration {
-            fee_per_instruction_increment: value.fee_per_instruction_increment,
-            fee_per_disk_read_entry: value.fee_per_disk_read_entry,
-            fee_per_write_entry: value.fee_per_write_entry,
-            fee_per_disk_read_1kb: value.fee_per_disk_read_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_historical_1kb: value.fee_per_historical_1kb,
-            fee_per_contract_event_1kb: value.fee_per_contract_event_1kb,
-            fee_per_transaction_size_1kb: value.fee_per_transaction_size_1kb,
-        }
-    }
-
-    pub(crate) fn convert_ledger_entry_rent_change(
-        value: &CxxLedgerEntryRentChange,
-    ) -> LedgerEntryRentChange {
-        LedgerEntryRentChange {
-            is_persistent: value.is_persistent,
-            is_code_entry: value.is_code_entry,
-            old_size_bytes: value.old_size_bytes,
-            new_size_bytes: value.new_size_bytes,
-            old_live_until_ledger: value.old_live_until_ledger,
-            new_live_until_ledger: value.new_live_until_ledger,
-        }
-    }
-}
-
-#[path = "."]
-pub(crate) mod p22 {
-    pub(crate) extern crate soroban_env_host_p22;
-    pub(crate) use soroban_env_host_p22 as soroban_env_host;
-
-    pub(crate) fn get_xdr_base_git_rev() -> String {
-        use soroban_env_host::VERSION;
-        match VERSION.xdr.xdr {
-            "curr" => VERSION.xdr.xdr_curr.to_string(),
-            _ => VERSION.xdr.xdr_next.to_string(),
-        }
-    }
-    pub(crate) fn get_xdr_pkg_ver() -> String {
-        soroban_env_host::VERSION.xdr.pkg.to_string()
-    }
-    pub(crate) fn get_xdr_git_rev() -> String {
-        soroban_env_host::VERSION.xdr.rev.to_string()
-    }
-    pub(crate) fn get_xdr_features() -> Vec<String> {
-        vec![]
-    }
-
-    pub(crate) mod soroban_proto_any;
-    use crate::{
-        bridge::rust_bridge::CxxLedgerEntryRentChange,
-        rust_bridge::{
-            CxxFeeConfiguration, CxxRentFeeConfiguration, CxxRentWriteFeeConfiguration,
-            CxxTransactionResources,
-        },
-        SorobanModuleCache,
-    };
-    use soroban_env_host::{
-        budget::{AsBudget, Budget},
-        e2e_invoke::{self, InvokeHostFunctionResult},
-        fees::{
-            compute_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, TransactionResources, WriteFeeConfiguration,
-        },
-        xdr::{ContractCodeEntry, DiagnosticEvent, Hash},
-        Error, HostError, LedgerInfo, TraceHook, Val,
-    };
-
-    // Some stub definitions to handle API additions for the
-    // reusable module cache.
-
-    #[allow(dead_code)]
-    const INTERNAL_ERROR: Error = Error::from_type_and_code(
-        soroban_env_host::xdr::ScErrorType::Context,
-        soroban_env_host::xdr::ScErrorCode::InternalError,
-    );
-
-    #[allow(dead_code)]
-    #[derive(Clone)]
-    pub(crate) struct ModuleCache;
-    #[allow(dead_code)]
-    pub(crate) trait ErrorHandler {
-        fn map_err<T, E>(&self, res: Result<T, E>) -> Result<T, HostError>
-        where
-            Error: From<E>,
-            E: core::fmt::Debug;
-        fn error(&self, error: Error, msg: &str, args: &[Val]) -> HostError;
-    }
-    #[allow(dead_code)]
-    impl ModuleCache {
-        pub(crate) fn new<T>(_handler: T) -> Result<Self, HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn parse_and_cache_module_simple<T>(
-            &self,
-            _handler: &T,
-            _protocol: u32,
-            _wasm: &[u8],
-        ) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn remove_module(&self, _key: &Hash) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn clear(&self) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn contains_module(&self, _key: &Hash) -> Result<bool, HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-    }
-    #[allow(dead_code)]
-    pub(crate) trait CompilationContext: ErrorHandler + AsBudget {}
-
-    // An adapter for some API breakage between p21 and p22.
-    pub(crate) const fn get_version_pre_release(v: &soroban_env_host::Version) -> u32 {
-        v.interface.pre_release
-    }
-
-    pub(crate) const fn get_version_protocol(v: &soroban_env_host::Version) -> u32 {
-        v.interface.protocol
-    }
-
-    pub fn invoke_host_function_with_trace_hook_and_module_cache<
-        T: AsRef<[u8]>,
-        I: ExactSizeIterator<Item = T>,
-    >(
-        budget: &Budget,
-        enable_diagnostics: bool,
-        encoded_host_fn: T,
-        encoded_resources: T,
-        _restored_rw_entry_indices: &[u32], // Ignored before p23
-        encoded_source_account: T,
-        encoded_auth_entries: I,
-        ledger_info: LedgerInfo,
-        encoded_ledger_entries: I,
-        encoded_ttl_entries: I,
-        base_prng_seed: T,
-        diagnostic_events: &mut Vec<DiagnosticEvent>,
-        trace_hook: Option<TraceHook>,
-        _module_cache: &SorobanModuleCache,
-    ) -> Result<InvokeHostFunctionResult, HostError> {
-        e2e_invoke::invoke_host_function_with_trace_hook(
-            &budget,
-            enable_diagnostics,
-            encoded_host_fn,
-            encoded_resources,
-            encoded_source_account,
-            encoded_auth_entries,
-            ledger_info,
-            encoded_ledger_entries,
-            encoded_ttl_entries,
-            base_prng_seed,
-            diagnostic_events,
-            trace_hook,
-        )
-    }
-
-    pub(crate) fn wasm_module_memory_cost_wrapper(
-        _budget: &Budget,
-        _contract_code_entry: &ContractCodeEntry,
-    ) -> Result<u64, HostError> {
-        Err(INTERNAL_ERROR.into())
-    }
-
-    pub(crate) fn compute_rent_write_fee_per_1kb_wrapper(
-        bucket_list_size: i64,
-        fee_config: CxxRentWriteFeeConfiguration,
-    ) -> i64 {
-        compute_write_fee_per_1kb(bucket_list_size, &fee_config.into())
-    }
-
-    pub(crate) fn convert_transaction_resources(
-        value: &CxxTransactionResources,
-    ) -> TransactionResources {
-        TransactionResources {
-            instructions: value.instructions,
-            read_entries: value.disk_read_entries,
-            write_entries: value.write_entries,
-            read_bytes: value.disk_read_bytes,
-            write_bytes: value.write_bytes,
-            contract_events_size_bytes: value.contract_events_size_bytes,
-            transaction_size_bytes: value.transaction_size_bytes,
-        }
-    }
-
-    impl From<CxxRentWriteFeeConfiguration> for WriteFeeConfiguration {
-        fn from(value: CxxRentWriteFeeConfiguration) -> Self {
-            Self {
-                bucket_list_target_size_bytes: value.state_target_size_bytes,
-                write_fee_1kb_bucket_list_low: value.rent_fee_1kb_state_size_low,
-                write_fee_1kb_bucket_list_high: value.rent_fee_1kb_state_size_high,
-                bucket_list_write_fee_growth_factor: value.state_size_rent_fee_growth_factor,
-            }
-        }
-    }
-    pub(crate) fn convert_rent_fee_configuration(
-        value: &CxxRentFeeConfiguration,
-    ) -> RentFeeConfiguration {
-        RentFeeConfiguration {
-            fee_per_write_1kb: value.fee_per_rent_1kb,
-            fee_per_write_entry: value.fee_per_write_entry,
-            persistent_rent_rate_denominator: value.persistent_rent_rate_denominator,
-            temporary_rent_rate_denominator: value.temporary_rent_rate_denominator,
-        }
-    }
-
-    pub(crate) fn convert_fee_configuration(value: CxxFeeConfiguration) -> FeeConfiguration {
-        FeeConfiguration {
-            fee_per_instruction_increment: value.fee_per_instruction_increment,
-            fee_per_read_entry: value.fee_per_disk_read_entry,
-            fee_per_write_entry: value.fee_per_write_entry,
-            fee_per_read_1kb: value.fee_per_disk_read_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_historical_1kb: value.fee_per_historical_1kb,
-            fee_per_contract_event_1kb: value.fee_per_contract_event_1kb,
-            fee_per_transaction_size_1kb: value.fee_per_transaction_size_1kb,
-        }
-    }
-
-    pub(crate) fn convert_ledger_entry_rent_change(
-        value: &CxxLedgerEntryRentChange,
-    ) -> LedgerEntryRentChange {
-        LedgerEntryRentChange {
-            is_persistent: value.is_persistent,
-            old_size_bytes: value.old_size_bytes,
-            new_size_bytes: value.new_size_bytes,
-            old_live_until_ledger: value.old_live_until_ledger,
-            new_live_until_ledger: value.new_live_until_ledger,
-        }
-    }
-}
-
-#[path = "."]
-pub(crate) mod p21 {
-    pub(crate) extern crate soroban_env_host_p21;
-    pub(crate) use soroban_env_host_p21 as soroban_env_host;
-
-    pub(crate) fn get_xdr_base_git_rev() -> String {
-        use soroban_env_host::VERSION;
-        match VERSION.xdr.xdr {
-            "curr" => VERSION.xdr.xdr_curr.to_string(),
-            _ => VERSION.xdr.xdr_next.to_string(),
-        }
-    }
-    pub(crate) fn get_xdr_pkg_ver() -> String {
-        soroban_env_host::VERSION.xdr.pkg.to_string()
-    }
-    pub(crate) fn get_xdr_git_rev() -> String {
-        soroban_env_host::VERSION.xdr.rev.to_string()
-    }
-    pub(crate) fn get_xdr_features() -> Vec<String> {
-        vec![]
-    }
-
-    pub(crate) mod soroban_proto_any;
-    use crate::{
-        bridge::rust_bridge::CxxLedgerEntryRentChange,
-        rust_bridge::{
-            CxxFeeConfiguration, CxxRentFeeConfiguration, CxxRentWriteFeeConfiguration,
-            CxxTransactionResources,
-        },
-        SorobanModuleCache,
-    };
-    use soroban_env_host::{
-        budget::{AsBudget, Budget},
-        e2e_invoke::{self, InvokeHostFunctionResult},
-        fees::{
-            compute_write_fee_per_1kb, FeeConfiguration, LedgerEntryRentChange,
-            RentFeeConfiguration, TransactionResources, WriteFeeConfiguration,
-        },
-        xdr::{ContractCodeEntry, DiagnosticEvent, Hash},
-        Error, HostError, LedgerInfo, TraceHook, Val,
-    };
-
-    // Some stub definitions to handle API additions for the
-    // reusable module cache.
-
-    #[allow(dead_code)]
-    const INTERNAL_ERROR: Error = Error::from_type_and_code(
-        soroban_env_host::xdr::ScErrorType::Context,
-        soroban_env_host::xdr::ScErrorCode::InternalError,
-    );
-
-    #[allow(dead_code)]
-    #[derive(Clone)]
-    pub(crate) struct ModuleCache;
-    #[allow(dead_code)]
-    pub(crate) trait ErrorHandler {
-        fn map_err<T, E>(&self, res: Result<T, E>) -> Result<T, HostError>
-        where
-            Error: From<E>,
-            E: core::fmt::Debug;
-        fn error(&self, error: Error, msg: &str, args: &[Val]) -> HostError;
-    }
-    #[allow(dead_code)]
-    impl ModuleCache {
-        pub(crate) fn new<T>(_handler: T) -> Result<Self, HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn parse_and_cache_module_simple<T>(
-            &self,
-            _handler: &T,
-            _protocol: u32,
-            _wasm: &[u8],
-        ) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn remove_module(&self, _key: &Hash) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn clear(&self) -> Result<(), HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-        pub(crate) fn contains_module(&self, _key: &Hash) -> Result<bool, HostError> {
-            Err(INTERNAL_ERROR.into())
-        }
-    }
-    #[allow(dead_code)]
-    pub(crate) trait CompilationContext: ErrorHandler + AsBudget {}
-
-    // An adapter for some API breakage between p21 and p22.
-    pub(crate) const fn get_version_pre_release(v: &soroban_env_host::Version) -> u32 {
-        soroban_env_host::meta::get_pre_release_version(v.interface)
-    }
-
-    pub(crate) const fn get_version_protocol(v: &soroban_env_host::Version) -> u32 {
-        soroban_env_host::meta::get_ledger_protocol_version(v.interface)
-    }
-
-    pub fn invoke_host_function_with_trace_hook_and_module_cache<
-        T: AsRef<[u8]>,
-        I: ExactSizeIterator<Item = T>,
-    >(
-        budget: &Budget,
-        enable_diagnostics: bool,
-        encoded_host_fn: T,
-        encoded_resources: T,
-        _restored_rw_entry_indices: &[u32], // Ignored before p23
-        encoded_source_account: T,
-        encoded_auth_entries: I,
-        ledger_info: LedgerInfo,
-        encoded_ledger_entries: I,
-        encoded_ttl_entries: I,
-        base_prng_seed: T,
-        diagnostic_events: &mut Vec<DiagnosticEvent>,
-        trace_hook: Option<TraceHook>,
-        _module_cache: &SorobanModuleCache,
-    ) -> Result<InvokeHostFunctionResult, HostError> {
-        e2e_invoke::invoke_host_function_with_trace_hook(
-            &budget,
-            enable_diagnostics,
-            encoded_host_fn,
-            encoded_resources,
-            encoded_source_account,
-            encoded_auth_entries,
-            ledger_info,
-            encoded_ledger_entries,
-            encoded_ttl_entries,
-            base_prng_seed,
-            diagnostic_events,
-            trace_hook,
-        )
-    }
-
-    pub(crate) fn wasm_module_memory_cost_wrapper(
-        _budget: &Budget,
-        _contract_code_entry: &ContractCodeEntry,
-    ) -> Result<u64, HostError> {
-        Err(INTERNAL_ERROR.into())
-    }
-
-    pub(crate) fn compute_rent_write_fee_per_1kb_wrapper(
-        bucket_list_size: i64,
-        fee_config: CxxRentWriteFeeConfiguration,
-    ) -> i64 {
-        compute_write_fee_per_1kb(bucket_list_size, &fee_config.into())
-    }
-
-    pub(crate) fn convert_transaction_resources(
-        value: &CxxTransactionResources,
-    ) -> TransactionResources {
-        TransactionResources {
-            instructions: value.instructions,
-            read_entries: value.disk_read_entries,
-            write_entries: value.write_entries,
-            read_bytes: value.disk_read_bytes,
-            write_bytes: value.write_bytes,
-            contract_events_size_bytes: value.contract_events_size_bytes,
-            transaction_size_bytes: value.transaction_size_bytes,
-        }
-    }
-
-    impl From<CxxRentWriteFeeConfiguration> for WriteFeeConfiguration {
-        fn from(value: CxxRentWriteFeeConfiguration) -> Self {
-            Self {
-                bucket_list_target_size_bytes: value.state_target_size_bytes,
-                write_fee_1kb_bucket_list_low: value.rent_fee_1kb_state_size_low,
-                write_fee_1kb_bucket_list_high: value.rent_fee_1kb_state_size_high,
-                bucket_list_write_fee_growth_factor: value.state_size_rent_fee_growth_factor,
-            }
-        }
-    }
-
-    pub(crate) fn convert_rent_fee_configuration(
-        value: &CxxRentFeeConfiguration,
-    ) -> RentFeeConfiguration {
-        RentFeeConfiguration {
-            fee_per_write_1kb: value.fee_per_rent_1kb,
-            fee_per_write_entry: value.fee_per_write_entry,
-            persistent_rent_rate_denominator: value.persistent_rent_rate_denominator,
-            temporary_rent_rate_denominator: value.temporary_rent_rate_denominator,
-        }
-    }
-
-    pub(crate) fn convert_fee_configuration(value: CxxFeeConfiguration) -> FeeConfiguration {
-        FeeConfiguration {
-            fee_per_instruction_increment: value.fee_per_instruction_increment,
-            fee_per_read_entry: value.fee_per_disk_read_entry,
-            fee_per_write_entry: value.fee_per_write_entry,
-            fee_per_read_1kb: value.fee_per_disk_read_1kb,
-            fee_per_write_1kb: value.fee_per_write_1kb,
-            fee_per_historical_1kb: value.fee_per_historical_1kb,
-            fee_per_contract_event_1kb: value.fee_per_contract_event_1kb,
-            fee_per_transaction_size_1kb: value.fee_per_transaction_size_1kb,
-        }
-    }
-
-    pub(crate) fn convert_ledger_entry_rent_change(
-        value: &CxxLedgerEntryRentChange,
-    ) -> LedgerEntryRentChange {
-        LedgerEntryRentChange {
-            is_persistent: value.is_persistent,
             old_size_bytes: value.old_size_bytes,
             new_size_bytes: value.new_size_bytes,
             old_live_until_ledger: value.old_live_until_ledger,
@@ -1414,12 +720,16 @@ pub(crate) struct HostModule {
             rent_fee_configuration: &CxxRentFeeConfiguration,
             module_cache: &SorobanModuleCache,
         ) -> Result<InvokeHostFunctionOutput, Box<dyn std::error::Error>>,
-    pub(crate) compute_transaction_resource_fee:
-        fn(tx_resources: CxxTransactionResources, fee_config: CxxFeeConfiguration) -> FeePair,
+    pub(crate) compute_transaction_resource_fee: fn(
+        tx_resources: CxxTransactionResources,
+        fee_config: CxxFeeConfiguration,
+        protocol_version: u32,
+    ) -> FeePair,
     pub(crate) compute_rent_fee: fn(
         changed_entries: &Vec<CxxLedgerEntryRentChange>,
         fee_config: CxxRentFeeConfiguration,
         current_ledger_seq: u32,
+        protocol_version: u32,
     ) -> i64,
     pub(crate) compute_rent_write_fee_per_1kb:
         fn(bucket_list_size: i64, fee_config: CxxRentWriteFeeConfiguration) -> i64,
@@ -1463,10 +773,13 @@ macro_rules! proto_versioned_functions_for_module {
 // NB: this list should be in ascending order. Out of order will cause
 // an assert to fail in the by-protocol-number lookup function below.
 const HOST_MODULES: &'static [HostModule] = &[
-    proto_versioned_functions_for_module!(p21),
-    proto_versioned_functions_for_module!(p22),
-    proto_versioned_functions_for_module!(p23),
-    proto_versioned_functions_for_module!(p24),
+    // p25 covers every Soroban-era protocol from 20 through 25. The p25 host
+    // protocol-gates its post-p22 behavioural changes (CAP-66 fee model,
+    // CAP-67 SAC event reshaping, `entry_size_for_rent`, the p25 code-entry
+    // rent discount, the wasmparser pre-validation, and the SelfAllowed
+    // reentry / frame-pop instance-storage changes) so that pre-25 ledgers
+    // replay byte-identically. See
+    // `src/rust/soroban/p25/soroban-env-host/src/host.rs` for the gates.
     proto_versioned_functions_for_module!(p25),
     proto_versioned_functions_for_module!(p26),
     #[cfg(feature = "next")]
@@ -1497,11 +810,13 @@ pub(crate) fn get_host_module_for_protocol(
 
 #[test]
 fn protocol_dispatches_as_expected() {
-    assert_eq!(get_host_module_for_protocol(20, 20).unwrap().max_proto, 21);
-    assert_eq!(get_host_module_for_protocol(21, 21).unwrap().max_proto, 21);
-    assert_eq!(get_host_module_for_protocol(22, 22).unwrap().max_proto, 22);
-    assert_eq!(get_host_module_for_protocol(23, 23).unwrap().max_proto, 23);
-    assert_eq!(get_host_module_for_protocol(24, 24).unwrap().max_proto, 24);
+    // Protocols 20 through 25 all route to the consolidated p25 host
+    // (max_proto=25), which protocol-gates every divergent behaviour.
+    assert_eq!(get_host_module_for_protocol(25, 20).unwrap().max_proto, 25);
+    assert_eq!(get_host_module_for_protocol(25, 21).unwrap().max_proto, 25);
+    assert_eq!(get_host_module_for_protocol(25, 22).unwrap().max_proto, 25);
+    assert_eq!(get_host_module_for_protocol(25, 23).unwrap().max_proto, 25);
+    assert_eq!(get_host_module_for_protocol(25, 24).unwrap().max_proto, 25);
     assert_eq!(get_host_module_for_protocol(25, 25).unwrap().max_proto, 25);
     assert_eq!(get_host_module_for_protocol(26, 26).unwrap().max_proto, 26);
 

@@ -70,6 +70,7 @@ pub(crate) fn compute_transaction_resource_fee(
     Ok((hm.compute_transaction_resource_fee)(
         tx_resources,
         fee_config,
+        protocol_version,
     ))
 }
 
@@ -95,6 +96,7 @@ pub(crate) fn compute_rent_fee(
         changed_entries,
         fee_config,
         current_ledger_seq,
+        protocol_version,
     ))
 }
 

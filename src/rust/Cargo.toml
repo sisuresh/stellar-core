@@ -130,34 +130,6 @@ package = "soroban-env-host"
 rev = "0a0c2df704edeb3cdafabfcc759eddccd6775337"
 optional = true
 
-[dependencies.soroban-env-host-p24]
-version = "=24.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
-package = "soroban-env-host"
-rev = "a37eeda815e626f416eff13f2eacb32a8b0c3729"
-optional = true
-
-[dependencies.soroban-env-host-p23]
-version = "=23.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
-package = "soroban-env-host"
-rev = "688bc34e6cd15c71742139e625268c7f30f55a92"
-optional = true
-
-[dependencies.soroban-env-host-p22]
-version = "=22.0.0"
-git = "https://github.com/stellar/rs-soroban-env"
-package = "soroban-env-host"
-rev = "1cd8b8dca9aeeca9ce45b129cd923992b32dc258"
-optional = true
-
-[dependencies.soroban-env-host-p21]
-version = "=21.2.2"
-git = "https://github.com/stellar/rs-soroban-env"
-package = "soroban-env-host"
-rev = "7eeddd897cfb0f700f938b0c8d6f0541150d1fcb"
-optional = true
-
 # The test wasms and synth-wasm crate should usually be taken from the highest
 # supported host, since test material usually just grows over time.
 
@@ -191,11 +163,7 @@ rev = "8b04a2b7a92b96ad90c09a9151ef97aa9a04a9f8"
 
 # Turn on the optional unified build. This is typically only useful in an IDE or when
 # orchestrated by the build system. See note above and in docs/CONTRIBUTING.md.
-unified = ["dep:soroban-env-host-p21",
-           "dep:soroban-env-host-p22",
-           "dep:soroban-env-host-p23",
-           "dep:soroban-env-host-p24",
-           "dep:soroban-env-host-p25",
+unified = ["dep:soroban-env-host-p25",
            "dep:soroban-env-host-p26",
            "dep:soroban-env-host-p27"]
 
