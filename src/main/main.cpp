@@ -253,6 +253,10 @@ checkXDRFileIdentity()
     cppFeatures.emplace_back("cap_0071");
 #endif
 
+#ifdef CAP_0083
+    cppFeatures.emplace_back("cap_0083");
+#endif
+
 #ifndef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
     // If we're not building for the next protocol, no XDR feature flags
     // should be enabled. If any are, it's a build misconfiguration.
