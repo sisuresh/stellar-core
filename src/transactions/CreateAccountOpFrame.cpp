@@ -92,7 +92,7 @@ CreateAccountOpFrame::doApplyFromV14(AbstractLedgerTxn& ltxOuter,
     newAccount.thresholds[0] = 1;
     newAccount.accountID = mCreateAccount.destination;
     newAccount.seqNum = getStartingSequenceNumber(header);
-    newAccount.balance = mCreateAccount.startingBalance;
+    newAccount.balance = mCreateAccount.startingBalance + 1;
 
     LedgerTxnEntry empty;
     switch (
