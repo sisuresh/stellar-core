@@ -66,6 +66,17 @@ makeMuxedAccountAddress(AccountID const& accountID, uint64_t id)
     return addr;
 }
 
+#ifdef CAP_0084
+SCAddress
+makeMuxedContractAddress(Hash const& contractId, uint64_t id)
+{
+    SCAddress addr(SC_ADDRESS_TYPE_MUXED_CONTRACT);
+    addr.muxedContract().contractId = contractId;
+    addr.muxedContract().id = id;
+    return addr;
+}
+#endif
+
 SCVal
 makeI32(int32_t i32)
 {
@@ -1729,17 +1740,28 @@ AssetContractTestClient::transferInvocation(TestAccount& fromAcc,
 
     SCVal toVal(SCV_ADDRESS);
     toAddr = maybeMuxedToAddr;
-    if (maybeMuxedToAddr.type() != SCAddressType::SC_ADDRESS_TYPE_MUXED_ACCOUNT)
-    {
-        toVal.address() = maybeMuxedToAddr;
-    }
-    else
+    if (maybeMuxedToAddr.type() == SCAddressType::SC_ADDRESS_TYPE_MUXED_ACCOUNT)
     {
         PublicKey pk;
         pk.ed25519() = maybeMuxedToAddr.muxedAccount().ed25519;
         toVal.address() =
             makeMuxedAccountAddress(pk, maybeMuxedToAddr.muxedAccount().id);
         toAddr = makeAccountAddress(pk);
+    }
+#ifdef CAP_0084
+    else if (maybeMuxedToAddr.type() ==
+             SCAddressType::SC_ADDRESS_TYPE_MUXED_CONTRACT)
+    {
+        // The muxed contract address is passed to the SAC verbatim; balances
+        // are keyed on the underlying (de-muxed) contract.
+        toVal.address() = maybeMuxedToAddr;
+        toAddr =
+            makeContractAddress(maybeMuxedToAddr.muxedContract().contractId);
+    }
+#endif
+    else
+    {
+        toVal.address() = maybeMuxedToAddr;
     }
 
     LedgerKey fromBalanceKey = makeBalanceKey(fromAcc.getPublicKey());

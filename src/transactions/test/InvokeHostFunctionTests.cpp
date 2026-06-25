@@ -600,7 +600,10 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SorobanTest test(cfg);
     auto& root = test.getRoot();
 
-    auto a1 = root.create("a1", 1'000'000'000);
+    // a1 makes several native transfers within a single run (100M + 300M +
+    // 400M for the muxed-contract case), so it needs enough balance to stay
+    // above its account reserve after all of them.
+    auto a1 = root.create("a1", 2'000'000'000);
     auto a2 = root.create("a2", 1'000'000'000);
     Asset asset = makeAsset(root.getSecretKey(), "USDC");
     a1.changeTrust(asset, 2'000'000'000);
@@ -685,6 +688,25 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
                 a1, makeClaimableBalanceAddress(ClaimableBalanceID()), 1));
             REQUIRE(client.lastEvent() == std::nullopt);
         }
+#ifdef CAP_0084
+        {
+            INFO("transfer to muxed contract (CAP-0084)");
+            // The destination is the SAC-transfer contract wrapped in a muxed
+            // contract address; the SAC de-muxes to the underlying contract for
+            // the balance and surfaces the id via the `to_muxed_id` event.
+            REQUIRE(client.transfer(
+                a1,
+                makeMuxedContractAddress(
+                    transferContract.getAddress().contractId(),
+                    987'654'321'987'654'321ULL),
+                400'000'000));
+            REQUIRE(*client.lastEvent() ==
+                    client.makeTransferEvent(a1Address,
+                                             transferContract.getAddress(),
+                                             400'000'000,
+                                             987'654'321'987'654'321ULL));
+        }
+#endif
     };
 
     SECTION("native asset")
