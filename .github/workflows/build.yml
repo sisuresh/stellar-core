@@ -100,8 +100,9 @@ jobs:
 
   protocol-version-check:
     # Check that a bump of CURRENT_LEDGER_PROTOCOL_VERSION is accompanied by
-    # a bump of OVERLAY_PROTOCOL_VERSION. Only runs on events that have a
-    # base revision to compare against (not on branch pushes).
+    # a bump of OVERLAY_PROTOCOL_VERSION since the last release. Only runs on
+    # events that have a base revision to compare against (not on branch
+    # pushes).
     if: github.event.repository.visibility != 'private' && github.event_name != 'push'
     runs-on:
       - namespace-profile-noble-24-04-stellar-core-x64-small
@@ -114,7 +115,7 @@ jobs:
         run: |
           BASE_SHA='${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}'
           git fetch --depth=1 origin "$BASE_SHA"
-          ./scripts/check-protocol-overlay-versions.sh "$BASE_SHA"
+          ./scripts/check-protocol-overlay-versions.sh --fetch-release origin "$BASE_SHA"
 
   build-linux:
     if: github.event.repository.visibility != 'private'

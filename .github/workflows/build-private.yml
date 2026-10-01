@@ -47,7 +47,7 @@ jobs:
 
   protocol-version-check:
     # Check that a bump of CURRENT_LEDGER_PROTOCOL_VERSION is accompanied by
-    # a bump of OVERLAY_PROTOCOL_VERSION.
+    # a bump of OVERLAY_PROTOCOL_VERSION since the last release.
     if: github.event.repository.visibility == 'private'
     runs-on: ubuntu-24.04
     steps:
@@ -56,7 +56,7 @@ jobs:
       run: |
         BASE_SHA='${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}'
         git fetch --depth=1 origin "$BASE_SHA"
-        ./scripts/check-protocol-overlay-versions.sh "$BASE_SHA"
+        ./scripts/check-protocol-overlay-versions.sh --fetch-release origin "$BASE_SHA"
 
   build:
     if: github.event.repository.visibility == 'private'
