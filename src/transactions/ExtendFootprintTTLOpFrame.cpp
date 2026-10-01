@@ -26,22 +26,33 @@ innerResult(OperationResult& res)
 
 struct ExtendFootprintTTLMetrics
 {
-    SorobanMetrics& mMetrics;
+    SorobanApplyMetrics& mMetrics;
 
     uint32 mLedgerReadByte{0};
 
-    ExtendFootprintTTLMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
+    // op execution wall time, captured via getExecTimer()
+    uint64_t mExecTimeNsecs{0};
+    bool mExecTimed{false};
+
+    explicit ExtendFootprintTTLMetrics(SorobanApplyMetrics& metrics)
+        : mMetrics(metrics)
     {
     }
 
     ~ExtendFootprintTTLMetrics()
     {
-        mMetrics.mExtFpTtlOpReadLedgerByte.Mark(mLedgerReadByte);
+        mMetrics.mExtFpTtlOpReadLedgerByte += mLedgerReadByte;
+        if (mExecTimed)
+        {
+            mMetrics.mExtFpTtlOpExecNsecs.push_back(
+                static_cast<int64_t>(mExecTimeNsecs));
+        }
     }
-    medida::TimerContext
+    ScopedNsecsTimer
     getExecTimer()
     {
-        return mMetrics.mExtFpTtlOpExec.TimeScope();
+        mExecTimed = true;
+        return ScopedNsecsTimer(mExecTimeNsecs);
     }
 };
 
@@ -81,7 +92,8 @@ class ExtendFootprintTTLApplyHelper : virtual public LedgerAccessHelper
         AppConnector& app, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta, ExtendFootprintTTLOpFrame const& opFrame,
-        SorobanNetworkConfig const& sorobanConfig)
+        SorobanNetworkConfig const& sorobanConfig,
+        SorobanApplyMetrics& sorobanMetrics)
         : mApp(app)
         , mRes(res)
         , mRefundableFeeTracker(refundableFeeTracker)
@@ -90,7 +102,7 @@ class ExtendFootprintTTLApplyHelper : virtual public LedgerAccessHelper
         , mResources(mOpFrame.mParentTx.sorobanResources())
         , mSorobanConfig(sorobanConfig)
         , mAppConfig(app.getConfig())
-        , mMetrics(app.getSorobanMetrics())
+        , mMetrics(sorobanMetrics)
         , mDiagnosticEvents(mOpMeta.getDiagnosticEventManager())
     {
     }
@@ -206,9 +218,10 @@ class ExtendFootprintTTLPreV23ApplyHelper
         AppConnector& app, AbstractLedgerTxn& ltx, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta, ExtendFootprintTTLOpFrame const& opFrame,
-        SorobanNetworkConfig const& sorobanConfig)
+        SorobanNetworkConfig const& sorobanConfig,
+        SorobanApplyMetrics& sorobanMetrics)
         : ExtendFootprintTTLApplyHelper(app, res, refundableFeeTracker, opMeta,
-                                        opFrame, sorobanConfig)
+                                        opFrame, sorobanConfig, sorobanMetrics)
         , PreV23LedgerAccessHelper(ltx)
     {
     }
@@ -241,9 +254,11 @@ class ExtendFootprintTTLParallelApplyHelper
         AppConnector& app, ThreadParallelApplyLedgerState const& threadState,
         ParallelLedgerInfo const& ledgerInfo, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
-        OperationMetaBuilder& opMeta, ExtendFootprintTTLOpFrame const& opFrame)
+        OperationMetaBuilder& opMeta, ExtendFootprintTTLOpFrame const& opFrame,
+        SorobanApplyMetrics& sorobanMetrics)
         : ExtendFootprintTTLApplyHelper(app, res, refundableFeeTracker, opMeta,
-                                        opFrame, threadState.getSorobanConfig())
+                                        opFrame, threadState.getSorobanConfig(),
+                                        sorobanMetrics)
         , ParallelLedgerAccessHelper(threadState, ledgerInfo)
     {
     }
@@ -264,7 +279,7 @@ std::optional<ParallelTxSuccessVal>
 ExtendFootprintTTLOpFrame::doParallelApply(
     AppConnector& app, ThreadParallelApplyLedgerState const& threadState,
     Config const& appConfig, Hash const& _txPrngSeed,
-    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    ParallelLedgerInfo const& ledgerInfo, SorobanApplyMetrics& sorobanMetrics,
     OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
     OperationMetaBuilder& opMeta) const
@@ -273,8 +288,9 @@ ExtendFootprintTTLOpFrame::doParallelApply(
     releaseAssertOrThrow(
         protocolVersionStartsFrom(ledgerInfo.getLedgerVersion(),
                                   PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
-    ExtendFootprintTTLParallelApplyHelper helper(
-        app, threadState, ledgerInfo, res, refundableFeeTracker, opMeta, *this);
+    ExtendFootprintTTLParallelApplyHelper helper(app, threadState, ledgerInfo,
+                                                 res, refundableFeeTracker,
+                                                 opMeta, *this, sorobanMetrics);
     return helper.takeResult(helper.apply());
 }
 
@@ -284,14 +300,15 @@ ExtendFootprintTTLOpFrame::doApplyForSoroban(
     SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
     OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
-    OperationMetaBuilder& opMeta) const
+    OperationMetaBuilder& opMeta, SorobanApplyMetrics& sorobanMetrics) const
 {
     ZoneNamedN(applyZone, "ExtendFootprintTTLOpFrame apply", true);
     releaseAssertOrThrow(
         protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
     ExtendFootprintTTLPreV23ApplyHelper helper(
-        app, ltx, res, refundableFeeTracker, opMeta, *this, sorobanConfig);
+        app, ltx, res, refundableFeeTracker, opMeta, *this, sorobanConfig,
+        sorobanMetrics);
     return helper.apply();
 }
 

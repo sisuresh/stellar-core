@@ -67,7 +67,7 @@ AppConnector::isStopping() const
     return mApp.isStopping();
 }
 
-SorobanMetrics&
+SorobanMetricsRegistry&
 AppConnector::getSorobanMetrics() const
 {
     return mApp.getLedgerManager().getSorobanMetrics();
@@ -167,6 +167,12 @@ bool
 AppConnector::threadIsType(Application::ThreadType type) const
 {
     return mApp.threadIsType(type);
+}
+
+BatchExecutor&
+AppConnector::getBatchExecutor()
+{
+    return mApp.getBatchExecutor();
 }
 
 ImmutableLedgerView

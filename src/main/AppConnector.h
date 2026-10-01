@@ -18,10 +18,11 @@ class Herder;
 class BanManager;
 struct OverlayMetrics;
 class SorobanNetworkConfig;
-class SorobanMetrics;
+class SorobanMetricsRegistry;
 class SearchableHotArchiveBucketListSnapshot;
 struct LedgerTxnDelta;
 class CapacityTrackedMessage;
+class BatchExecutor;
 
 // Helper class to isolate access to Application; all function helpers must
 // either be called from main or be thread-safe
@@ -48,7 +49,7 @@ class AppConnector
     Hash const& getNetworkID() const;
 
     // Thread-safe methods
-    SorobanMetrics& getSorobanMetrics() const;
+    SorobanMetricsRegistry& getSorobanMetrics() const;
     void postOnMainThread(
         std::function<void()>&& f, std::string&& message,
         Scheduler::ActionType type = Scheduler::ActionType::NORMAL_ACTION);
@@ -68,6 +69,7 @@ class AppConnector
     checkScheduledAndCache(std::shared_ptr<CapacityTrackedMessage> msgTracker);
     SorobanNetworkConfig const& getLastClosedSorobanNetworkConfig() const;
     bool threadIsType(Application::ThreadType type) const;
+    BatchExecutor& getBatchExecutor();
 
     MetricsRegistry& getMetrics() const;
 

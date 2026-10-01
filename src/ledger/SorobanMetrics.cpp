@@ -1,11 +1,81 @@
 #include "ledger/SorobanMetrics.h"
 #include "util/MetricsRegistry.h"
 
+#include <medida/histogram.h>
+#include <medida/meter.h>
 #include <medida/metrics_registry.h>
+#include <medida/timer.h>
 
 namespace stellar
 {
-SorobanMetrics::SorobanMetrics(MetricsRegistry& metrics)
+void
+SorobanApplyMetrics::merge(SorobanApplyMetrics&& other)
+{
+    auto drain = [](std::vector<int64_t>& dst, std::vector<int64_t>&& src) {
+        if (dst.empty())
+        {
+            dst = std::move(src);
+        }
+        else
+        {
+            dst.insert(dst.end(), src.begin(), src.end());
+        }
+    };
+
+    mHostFnOpReadEntry += other.mHostFnOpReadEntry;
+    mHostFnOpWriteEntry += other.mHostFnOpWriteEntry;
+    mHostFnOpReadKeyByte += other.mHostFnOpReadKeyByte;
+    mHostFnOpWriteKeyByte += other.mHostFnOpWriteKeyByte;
+    mHostFnOpReadLedgerByte += other.mHostFnOpReadLedgerByte;
+    mHostFnOpReadDataByte += other.mHostFnOpReadDataByte;
+    mHostFnOpReadCodeByte += other.mHostFnOpReadCodeByte;
+    mHostFnOpWriteLedgerByte += other.mHostFnOpWriteLedgerByte;
+    mHostFnOpWriteDataByte += other.mHostFnOpWriteDataByte;
+    mHostFnOpWriteCodeByte += other.mHostFnOpWriteCodeByte;
+    mHostFnOpEmitEvent += other.mHostFnOpEmitEvent;
+    mHostFnOpEmitEventByte += other.mHostFnOpEmitEventByte;
+    mHostFnOpCpuInsn += other.mHostFnOpCpuInsn;
+    mHostFnOpMemByte += other.mHostFnOpMemByte;
+    mHostFnOpCpuInsnExclVm += other.mHostFnOpCpuInsnExclVm;
+    mHostFnOpMaxRwKeyByte += other.mHostFnOpMaxRwKeyByte;
+    mHostFnOpMaxRwDataByte += other.mHostFnOpMaxRwDataByte;
+    mHostFnOpMaxRwCodeByte += other.mHostFnOpMaxRwCodeByte;
+    mHostFnOpMaxEmitEventByte += other.mHostFnOpMaxEmitEventByte;
+    mHostFnOpSuccess += other.mHostFnOpSuccess;
+    mHostFnOpFailure += other.mHostFnOpFailure;
+    mExtFpTtlOpReadLedgerByte += other.mExtFpTtlOpReadLedgerByte;
+    mRestoreFpOpReadLedgerByte += other.mRestoreFpOpReadLedgerByte;
+    mRestoreFpOpWriteLedgerByte += other.mRestoreFpOpWriteLedgerByte;
+
+    mLedgerTxCount += other.mLedgerTxCount;
+    mLedgerCpuInsn += other.mLedgerCpuInsn;
+    mLedgerTxsSizeByte += other.mLedgerTxsSizeByte;
+    mLedgerReadEntry += other.mLedgerReadEntry;
+    mLedgerReadByte += other.mLedgerReadByte;
+    mLedgerWriteEntry += other.mLedgerWriteEntry;
+    mLedgerWriteByte += other.mLedgerWriteByte;
+    mLedgerInsnsCount += other.mLedgerInsnsCount;
+    mLedgerInsnsExclVmCount += other.mLedgerInsnsExclVmCount;
+    mLedgerHostFnExecTimeNsecs += other.mLedgerHostFnExecTimeNsecs;
+
+    drain(mHostFnOpInvokeTimeNsecs, std::move(other.mHostFnOpInvokeTimeNsecs));
+    drain(mHostFnOpInvokeTimeNsecsExclVm,
+          std::move(other.mHostFnOpInvokeTimeNsecsExclVm));
+    drain(mHostFnOpInvokeTimeFsecsCpuInsnRatio,
+          std::move(other.mHostFnOpInvokeTimeFsecsCpuInsnRatio));
+    drain(mHostFnOpInvokeTimeFsecsCpuInsnRatioExclVm,
+          std::move(other.mHostFnOpInvokeTimeFsecsCpuInsnRatioExclVm));
+    drain(mHostFnOpDeclaredInsnsUsageRatio,
+          std::move(other.mHostFnOpDeclaredInsnsUsageRatio));
+    drain(mHostFnOpExecNsecs, std::move(other.mHostFnOpExecNsecs));
+    drain(mExtFpTtlOpExecNsecs, std::move(other.mExtFpTtlOpExecNsecs));
+    drain(mRestoreFpOpExecNsecs, std::move(other.mRestoreFpOpExecNsecs));
+    drain(mTxSizeByte, std::move(other.mTxSizeByte));
+    drain(mTxApplyNsecs, std::move(other.mTxApplyNsecs));
+    drain(mOpApplyNsecs, std::move(other.mOpApplyNsecs));
+}
+
+SorobanMetricsRegistry::SorobanMetricsRegistry(MetricsRegistry& metrics)
     : /* ledger-wide metrics */
     mLedgerTxCount(metrics.NewHistogram({"soroban", "ledger", "tx-count"}))
     , mLedgerCpuInsn(metrics.NewHistogram({"soroban", "ledger", "cpu-insn"}))
@@ -26,6 +96,8 @@ SorobanMetrics::SorobanMetrics(MetricsRegistry& metrics)
 
     /* tx-wide metrics */
     , mTxSizeByte(metrics.NewHistogram({"soroban", "tx", "size-byte"}))
+    , mTransactionApply(metrics.NewTimer({"ledger", "transaction", "apply"}))
+    , mOperationApply(metrics.NewTimer({"ledger", "operation", "apply"}))
     /* InvokeHostFunctionOp metrics */
     , mHostFnOpReadEntry(
           metrics.NewMeter({"soroban", "host-fn-op", "read-entry"}, "entry"))
@@ -142,8 +214,10 @@ SorobanMetrics::SorobanMetrics(MetricsRegistry& metrics)
           metrics.NewTimer({"soroban", "module-cache", "compilation-time"}))
     , mModuleCacheRebuildTime(
           metrics.NewTimer({"soroban", "module-cache", "rebuild-time"}))
-    , mModuleCacheRebuildBytes(
-          metrics.NewCounter({"soroban", "module-cache", "rebuild-bytes"}))
+    , mModuleCacheRebuildWasmBytes(
+          metrics.NewCounter({"soroban", "module-cache", "rebuild-wasm-bytes"}))
+    , mModuleCacheRebuildHeapBytes(
+          metrics.NewCounter({"soroban", "module-cache", "rebuild-heap-bytes"}))
     , mContractCodeStateSize(metrics.NewCounter(
           {"soroban", "in-memory-state", "contract-code-size"}))
     , mContractDataStateSize(metrics.NewCounter(
@@ -157,78 +231,70 @@ SorobanMetrics::SorobanMetrics(MetricsRegistry& metrics)
 }
 
 void
-SorobanMetrics::accumulateModelledCpuInsns(uint64_t insnsCount,
-                                           uint64_t insnsExclVmCount,
-                                           uint64_t hostFnExecTimeNsecs)
+SorobanMetricsRegistry::recordApplyMetrics(SorobanApplyMetrics const& metrics)
 {
-    mLedgerInsnsCount += insnsCount;
-    mLedgerInsnsExclVmCount += insnsExclVmCount;
-    mLedgerHostFnExecTimeNsecs += hostFnExecTimeNsecs;
-}
+    // Publish into the underlying medida metrics, one bulk call per metric.
+    // Zero meter increments are skipped (a Mark(0) does not change any
+    // observable value); empty sample metric vectors are no-ops in UpdateMany.
+    auto markIf = [](medida::Meter& meter, uint64_t value) {
+        if (value != 0)
+        {
+            meter.Mark(value);
+        }
+    };
+    markIf(mHostFnOpReadEntry, metrics.mHostFnOpReadEntry);
+    markIf(mHostFnOpWriteEntry, metrics.mHostFnOpWriteEntry);
+    markIf(mHostFnOpReadKeyByte, metrics.mHostFnOpReadKeyByte);
+    markIf(mHostFnOpWriteKeyByte, metrics.mHostFnOpWriteKeyByte);
+    markIf(mHostFnOpReadLedgerByte, metrics.mHostFnOpReadLedgerByte);
+    markIf(mHostFnOpReadDataByte, metrics.mHostFnOpReadDataByte);
+    markIf(mHostFnOpReadCodeByte, metrics.mHostFnOpReadCodeByte);
+    markIf(mHostFnOpWriteLedgerByte, metrics.mHostFnOpWriteLedgerByte);
+    markIf(mHostFnOpWriteDataByte, metrics.mHostFnOpWriteDataByte);
+    markIf(mHostFnOpWriteCodeByte, metrics.mHostFnOpWriteCodeByte);
+    markIf(mHostFnOpEmitEvent, metrics.mHostFnOpEmitEvent);
+    markIf(mHostFnOpEmitEventByte, metrics.mHostFnOpEmitEventByte);
+    markIf(mHostFnOpCpuInsn, metrics.mHostFnOpCpuInsn);
+    markIf(mHostFnOpMemByte, metrics.mHostFnOpMemByte);
+    markIf(mHostFnOpCpuInsnExclVm, metrics.mHostFnOpCpuInsnExclVm);
+    markIf(mHostFnOpMaxRwKeyByte, metrics.mHostFnOpMaxRwKeyByte);
+    markIf(mHostFnOpMaxRwDataByte, metrics.mHostFnOpMaxRwDataByte);
+    markIf(mHostFnOpMaxRwCodeByte, metrics.mHostFnOpMaxRwCodeByte);
+    markIf(mHostFnOpMaxEmitEventByte, metrics.mHostFnOpMaxEmitEventByte);
+    markIf(mHostFnOpSuccess, metrics.mHostFnOpSuccess);
+    markIf(mHostFnOpFailure, metrics.mHostFnOpFailure);
+    markIf(mExtFpTtlOpReadLedgerByte, metrics.mExtFpTtlOpReadLedgerByte);
+    markIf(mRestoreFpOpReadLedgerByte, metrics.mRestoreFpOpReadLedgerByte);
+    markIf(mRestoreFpOpWriteLedgerByte, metrics.mRestoreFpOpWriteLedgerByte);
 
-void
-SorobanMetrics::accumulateLedgerTxCount(uint64_t txCount)
-{
-    mCounterLedgerTxCount += txCount;
-}
-void
-SorobanMetrics::accumulateLedgerCpuInsn(uint64_t cpuInsn)
-{
-    mCounterLedgerCpuInsn += cpuInsn;
-}
-void
-SorobanMetrics::accumulateLedgerTxsSizeByte(uint64_t txsSizeByte)
-{
-    mCounterLedgerTxsSizeByte += txsSizeByte;
-}
-void
-SorobanMetrics::accumulateLedgerReadEntry(uint64_t readEntry)
-{
-    mCounterLedgerReadEntry += readEntry;
-}
-void
-SorobanMetrics::accumulateLedgerReadByte(uint64_t readByte)
-{
-    mCounterLedgerReadByte += readByte;
-}
-void
-SorobanMetrics::accumulateLedgerWriteEntry(uint64_t writeEntry)
-{
-    mCounterLedgerWriteEntry += writeEntry;
-}
-void
-SorobanMetrics::accumulateLedgerWriteByte(uint64_t writeByte)
-{
-    mCounterLedgerWriteByte += writeByte;
-}
+    mHostFnOpInvokeTimeNsecs.UpdateMany(metrics.mHostFnOpInvokeTimeNsecs);
+    mHostFnOpInvokeTimeNsecsExclVm.UpdateMany(
+        metrics.mHostFnOpInvokeTimeNsecsExclVm);
+    mHostFnOpInvokeTimeFsecsCpuInsnRatio.UpdateMany(
+        metrics.mHostFnOpInvokeTimeFsecsCpuInsnRatio);
+    mHostFnOpInvokeTimeFsecsCpuInsnRatioExclVm.UpdateMany(
+        metrics.mHostFnOpInvokeTimeFsecsCpuInsnRatioExclVm);
+    mHostFnOpDeclaredInsnsUsageRatio.UpdateMany(
+        metrics.mHostFnOpDeclaredInsnsUsageRatio);
+    mHostFnOpExec.UpdateMany(metrics.mHostFnOpExecNsecs);
+    mExtFpTtlOpExec.UpdateMany(metrics.mExtFpTtlOpExecNsecs);
+    mRestoreFpOpExec.UpdateMany(metrics.mRestoreFpOpExecNsecs);
+    mTxSizeByte.UpdateMany(metrics.mTxSizeByte);
+    mTransactionApply.UpdateMany(metrics.mTxApplyNsecs);
+    mOperationApply.UpdateMany(metrics.mOpApplyNsecs);
 
-void
-SorobanMetrics::publishAndResetLedgerWideMetrics()
-{
-    mLedgerTxCount.Update(mCounterLedgerTxCount);
-    mLedgerCpuInsn.Update(mCounterLedgerCpuInsn);
-    mLedgerTxsSizeByte.Update(mCounterLedgerTxsSizeByte);
-    mLedgerReadEntry.Update(mCounterLedgerReadEntry);
-    mLedgerReadLedgerByte.Update(mCounterLedgerReadByte);
-    mLedgerWriteEntry.Update(mCounterLedgerWriteEntry);
-    mLedgerWriteLedgerByte.Update(mCounterLedgerWriteByte);
+    mLedgerTxCount.Update(metrics.mLedgerTxCount);
+    mLedgerCpuInsn.Update(metrics.mLedgerCpuInsn);
+    mLedgerTxsSizeByte.Update(metrics.mLedgerTxsSizeByte);
+    mLedgerReadEntry.Update(metrics.mLedgerReadEntry);
+    mLedgerReadLedgerByte.Update(metrics.mLedgerReadByte);
+    mLedgerWriteEntry.Update(metrics.mLedgerWriteEntry);
+    mLedgerWriteLedgerByte.Update(metrics.mLedgerWriteByte);
     mLedgerHostFnCpuInsnsRatio.Update(
-        mLedgerHostFnExecTimeNsecs * 1000000 /
-        std::max(mLedgerInsnsCount.load(), uint64_t(1)));
-
+        metrics.mLedgerHostFnExecTimeNsecs * 1000000 /
+        std::max(metrics.mLedgerInsnsCount, uint64_t(1)));
     mLedgerHostFnCpuInsnsRatioExclVm.Update(
-        mLedgerHostFnExecTimeNsecs * 1000000 /
-        std::max(mLedgerInsnsExclVmCount.load(), uint64_t(1)));
-
-    mCounterLedgerTxCount = 0;
-    mCounterLedgerCpuInsn = 0;
-    mCounterLedgerTxsSizeByte = 0;
-    mCounterLedgerReadEntry = 0;
-    mCounterLedgerReadByte = 0;
-    mCounterLedgerWriteEntry = 0;
-    mCounterLedgerWriteByte = 0;
-    mLedgerHostFnExecTimeNsecs = 0;
-    mLedgerInsnsCount = 0;
-    mLedgerInsnsExclVmCount = 0;
+        metrics.mLedgerHostFnExecTimeNsecs * 1000000 /
+        std::max(metrics.mLedgerInsnsExclVmCount, uint64_t(1)));
 }
 }

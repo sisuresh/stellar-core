@@ -34,8 +34,9 @@ fi
 
 # NB: use `-gdwarf-3` (not -g or -gdwarf-4 or later) specifically as
 # it produces the highest-fidelity backtraces with our current
-# rust/gimli-backed backtrace system.
-test "${CFLAGS+set}" || CFLAGS="-gdwarf-3 -O2 -fno-omit-frame-pointer"
+# rust/gimli-backed backtrace system. pass -g1 to limit the size of
+# debuginfo and also the memory cost to create it.
+test "${CFLAGS+set}" || CFLAGS="-gdwarf-3 -g1 -O2 -fno-omit-frame-pointer"
 test "${CXXFLAGS+set}" || CXXFLAGS="$CFLAGS"
 
 AC_PROG_CC([clang gcc cc])
@@ -56,6 +57,13 @@ AX_APPEND_COMPILE_FLAGS([-pthread])
 
 # additional defines
 AX_APPEND_COMPILE_FLAGS([-DFMT_HEADER_ONLY=1])
+
+# xdrpp's operator<=> return type depends on XDRPP_STRONG_ORDER, so it must be
+# set identically program-wide. At the time of writing, xdrpp doesn't seem to
+# internally use <=>, but to avoid future footguns, we build all subprojects
+# with the same value of XDRPP_STRONG_ORDER (see the CXXFLAGS propagation to
+# ac_configure_args below).
+AX_APPEND_COMPILE_FLAGS([-DXDRPP_STRONG_ORDER=1])
 
 AC_MSG_CHECKING([whether defect report N4387 is resolved])
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <tuple>
@@ -97,10 +105,24 @@ AX_APPEND_COMPILE_FLAGS($WFLAGS)
 AX_APPEND_COMPILE_FLAGS([-pthread])
 AC_LANG_POP(C)
 
-AC_ARG_ENABLE(unified-rust-unsafe-for-production,
-    AS_HELP_STRING([--enable-unified-rust-unsafe-for-production],
-        [Build rust crates as a single cargo library, risking version drift]))
-AM_CONDITIONAL(UNIFIED_RUST, [test "x$enable_unified_rust_unsafe_for_production" = "xyes"])
+AC_ARG_ENABLE(fastdev-unsafe-for-production,
+    AS_HELP_STRING([--enable-fastdev-unsafe-for-production],
+        [Build in fast development mode UNSAFE FOR PRODUCTION]))
+AS_IF([test "x$enable_fastdev_unsafe_for_production" = "xyes"], [
+  AC_MSG_NOTICE([enabling fastdev build profile UNSAFE FOR PRODUCTION])
+  fastdev_cxx_version=`$CXX --version 2>/dev/null`
+  case "$fastdev_cxx_version" in
+    *clang*)
+      CXXFLAGS="$CXXFLAGS -gline-tables-only"
+      AC_MSG_NOTICE([added -gline-tables-only to CXXFLAGS])
+      ;;
+    *)
+      AC_MSG_ERROR([fastdev build requires clang compiler])
+      ;;
+  esac
+])
+AM_CONDITIONAL(ENABLE_FASTDEV_UNSAFE_FOR_PRODUCTION,
+    [test "x$enable_fastdev_unsafe_for_production" = "xyes"])
 
 unset sanitizeopts
 
@@ -110,8 +132,8 @@ AC_ARG_ENABLE([asan],
 AS_IF([test "x$enable_asan" = "xyes"], [
   AC_MSG_NOTICE([ Enabling asan, see https://clang.llvm.org/docs/AddressSanitizer.html ])
 
-  AS_IF([test "xyes" != "x$enable_unified_rust_unsafe_for_production"], [
-    AC_MSG_WARN(Asan will not instrument rust without --enable-unified-rust-unsafe-for-production)
+  AS_IF([test "xyes" != "x$enable_fastdev_unsafe_for_production"], [
+    AC_MSG_WARN(Asan will not instrument rust without --enable-fastdev-unsafe-for-production)
   ])
 
   sanitizeopts="address"
@@ -134,8 +156,8 @@ AC_ARG_ENABLE([threadsanitizer],
 AS_IF([test "x$enable_threadsanitizer" = "xyes"], [
   AC_MSG_NOTICE([ enabling thread-sanitizer, see https://clang.llvm.org/docs/ThreadSanitizer.html ])
 
-  AS_IF([test "xyes" != "x$enable_unified_rust_unsafe_for_production"], [
-    AC_MSG_ERROR(Enabling tsan requires --enable-unified-rust-unsafe-for-production)
+  AS_IF([test "xyes" != "x$enable_fastdev_unsafe_for_production"], [
+    AC_MSG_ERROR(Enabling tsan requires --enable-fastdev-unsafe-for-production)
   ])
   AS_IF([test x != "x$sanitizeopts"], [
     AC_MSG_ERROR(Cannot enable multiple sanitizers at once)
@@ -456,14 +478,20 @@ AM_CONDITIONAL(USE_POSTGRES, [test -n "$have_postgres"])
 # tcmalloc_minimal - enabled by default on Linux for improved memory allocation performance
 # Disabled when using sanitizers (asan, memcheck, tsan) as they replace malloc
 # Uses vendored gperftools from lib/gperftools
+AC_ARG_ENABLE(tcmalloc,
+    AS_HELP_STRING([--disable-tcmalloc],
+        [Disable tcmalloc support]))
 unset have_tcmalloc
-if test "x$enable_asan" = "xyes" -o "x$enable_memcheck" = "xyes" -o "x$enable_threadsanitizer" = "xyes"; then
+unset gperftools_configure_args
+if test x"$enable_tcmalloc" = xno; then
+    AC_MSG_NOTICE([tcmalloc disabled by user])
+elif test "x$enable_asan" = "xyes" -o "x$enable_memcheck" = "xyes" -o "x$enable_threadsanitizer" = "xyes"; then
     AC_MSG_NOTICE([tcmalloc disabled due to sanitizer being enabled])
 else
     case "${host_os}" in
         linux*)
             # Configure gperftools for minimal tcmalloc only
-            ac_configure_args="$ac_configure_args --enable-minimal --disable-cpu-profiler --disable-heap-profiler --disable-heap-checker --disable-debugalloc"
+            gperftools_configure_args="--enable-minimal --disable-cpu-profiler --disable-heap-profiler --disable-heap-checker --disable-debugalloc"
             AC_CONFIG_SUBDIRS([lib/gperftools])
             have_tcmalloc=1
             AC_DEFINE([USE_TCMALLOC], [1], [Define to 1 if using tcmalloc])
@@ -480,6 +508,19 @@ fi
 AM_CONDITIONAL(USE_TCMALLOC, [test -n "$have_tcmalloc"])
 AC_SUBST(libtcmalloc_CFLAGS)
 AC_SUBST(libtcmalloc_LIBS)
+
+# config.status has already captured the top-level recheck arguments when
+# AC_CONFIG_COMMANDS_POST runs, but sub-configure recursion has not yet begun.
+AC_CONFIG_COMMANDS_POST([
+  AS_IF([test -n "$gperftools_configure_args"], [
+    ac_configure_args="$ac_configure_args $gperftools_configure_args"
+  ])
+])
+
+# AC_CONFIG_SUBDIRS disables option checking so options can be forwarded to
+# recursive configures. Re-enable it for the top-level configure by default;
+# generated recursion still passes --disable-option-checking to sub-configures.
+m4_divert_text([DEFAULTS], [enable_option_checking=fatal])
 
 AC_ARG_ENABLE(tests,
     AS_HELP_STRING([--disable-tests],
@@ -515,7 +556,12 @@ AC_ARG_ENABLE(tracy-memory-tracking,
     AS_HELP_STRING([--enable-tracy-memory-tracking],
         [Enable 'tracy' profiler/tracer memory tracking code (slow)]))
 AM_CONDITIONAL(USE_TRACY_MEMORY_TRACKING, [test x$enable_tracy_memory_tracking = xyes])
-
+if test x"$enable_tracy_memory_tracking" = xyes -a x"$have_tcmalloc" = x1; then
+  AC_MSG_ERROR([--enable-tracy-memory-tracking requires --disable-tcmalloc])
+fi
+if test x"$enable_tracy_memory_tracking" = xyes -a x"$enable_tracy" != xyes; then
+  AC_MSG_ERROR([--enable-tracy-memory-tracking requires --enable-tracy])
+fi
 if test x"$enable_tracy" = xyes -a x"$enable_asan" = xyes; then
        AC_MSG_ERROR([--enable-asan is not compatible with --enable-tracy])
 fi
@@ -550,6 +596,11 @@ AC_ARG_ENABLE(tracy-csvexport,
         [Enable 'tracy' profiler/tracer csvexport program]))
 AM_CONDITIONAL(USE_TRACY_CSVEXPORT, [test x$enable_tracy_csvexport = xyes])
 
+AC_ARG_ENABLE(tracy-import-chrome,
+    AS_HELP_STRING([--enable-tracy-import-chrome],
+        [Enable 'tracy' profiler/tracer chrome-trace-format importer]))
+AM_CONDITIONAL(USE_TRACY_IMPORT_CHROME, [test x$enable_tracy_import_chrome = xyes])
+
 AC_ARG_ENABLE(spdlog,
     AS_HELP_STRING([--disable-spdlog],
         [Disable spdlog]))
@@ -558,10 +609,16 @@ AM_CONDITIONAL(USE_SPDLOG, [test x$enable_spdlog != xno])
 AC_ARG_ENABLE(next-protocol-version-unsafe-for-production,
     AS_HELP_STRING([--enable-next-protocol-version-unsafe-for-production],
         [Enable next protocol version UNSAFE FOR PRODUCTION]))
+AS_IF([test "x$enable_fastdev_unsafe_for_production" = "xyes"], [
+  AS_IF([test "x$enable_next_protocol_version_unsafe_for_production" != "xyes"], [
+    AC_MSG_NOTICE([enabling next protocol version due to fastdev build profile])
+  ])
+  enable_next_protocol_version_unsafe_for_production=yes
+])
 AM_CONDITIONAL(ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION,
     [test x$enable_next_protocol_version_unsafe_for_production = xyes])
 
-AM_CONDITIONAL(CAP_0083,
+AM_CONDITIONAL(CAP_0084_MUXED_CONTRACT,
     [test x$enable_next_protocol_version_unsafe_for_production = xyes])
 
 AC_PATH_PROG(CARGO, cargo)

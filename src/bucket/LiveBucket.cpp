@@ -10,6 +10,7 @@
 #include "bucket/BucketOutputIterator.h"
 #include "bucket/BucketUtils.h"
 #include "bucket/LedgerCmp.h"
+#include <future>
 #include <medida/counter.h>
 
 namespace stellar
@@ -376,11 +377,24 @@ LiveBucket::getRangeForType(LedgerEntryType type) const
     return getIndex().getRangeForType(type);
 }
 
+#ifdef BUILD_TESTS
 std::vector<BucketEntry>
 LiveBucket::convertToBucketEntry(bool useInit,
                                  std::vector<LedgerEntry> const& initEntries,
                                  std::vector<LedgerEntry> const& liveEntries,
                                  std::vector<LedgerKey> const& deadEntries)
+{
+    auto initRefs = toRefs(initEntries);
+    auto liveRefs = toRefs(liveEntries);
+    auto deadRefs = toRefs(deadEntries);
+    return convertToBucketEntry(useInit, initRefs, liveRefs, deadRefs);
+}
+#endif
+
+std::vector<BucketEntry>
+LiveBucket::convertToBucketEntry(bool useInit, LedgerEntryRefs initEntries,
+                                 LedgerEntryRefs liveEntries,
+                                 LedgerKeyRefs deadEntries)
 {
     ZoneScoped;
     size_t totalSize =
@@ -392,21 +406,21 @@ LiveBucket::convertToBucketEntry(bool useInit,
     std::vector<BucketEntry*> sortedEntries;
     sortedEntries.reserve(totalSize);
 
-    for (auto const& e : initEntries)
+    for (LedgerEntry const& e : initEntries)
     {
         auto& ce = entries.emplace_back();
         ce.type(useInit ? INITENTRY : LIVEENTRY);
         ce.liveEntry() = e;
         sortedEntries.push_back(&ce);
     }
-    for (auto const& e : liveEntries)
+    for (LedgerEntry const& e : liveEntries)
     {
         auto& ce = entries.emplace_back();
         ce.type(LIVEENTRY);
         ce.liveEntry() = e;
         sortedEntries.push_back(&ce);
     }
-    for (auto const& e : deadEntries)
+    for (LedgerKey const& e : deadEntries)
     {
         auto& ce = entries.emplace_back();
         ce.type(DEADENTRY);
@@ -432,12 +446,27 @@ LiveBucket::convertToBucketEntry(bool useInit,
     return bucket;
 }
 
+#ifdef BUILD_TESTS
 std::shared_ptr<LiveBucket>
 LiveBucket::fresh(BucketManager& bucketManager, uint32_t protocolVersion,
                   std::vector<LedgerEntry> const& initEntries,
                   std::vector<LedgerEntry> const& liveEntries,
                   std::vector<LedgerKey> const& deadEntries,
                   bool countMergeEvents, asio::io_context& ctx, bool doFsync)
+{
+    auto initRefs = toRefs(initEntries);
+    auto liveRefs = toRefs(liveEntries);
+    auto deadRefs = toRefs(deadEntries);
+    return fresh(bucketManager, protocolVersion, initRefs, liveRefs, deadRefs,
+                 countMergeEvents, ctx, doFsync);
+}
+#endif
+
+std::shared_ptr<LiveBucket>
+LiveBucket::fresh(BucketManager& bucketManager, uint32_t protocolVersion,
+                  LedgerEntryRefs initEntries, LedgerEntryRefs liveEntries,
+                  LedgerKeyRefs deadEntries, bool countMergeEvents,
+                  asio::io_context& ctx, bool doFsync)
 {
     ZoneScoped;
     // When building fresh buckets after protocol version 10 (i.e. version
@@ -479,10 +508,9 @@ LiveBucket::fresh(BucketManager& bucketManager, uint32_t protocolVersion,
 std::shared_ptr<LiveBucket>
 LiveBucket::freshInMemoryOnly(BucketManager& bucketManager,
                               uint32_t protocolVersion,
-                              std::vector<LedgerEntry> const& initEntries,
-                              std::vector<LedgerEntry> const& liveEntries,
-                              std::vector<LedgerKey> const& deadEntries,
-                              bool countMergeEvents)
+                              LedgerEntryRefs initEntries,
+                              LedgerEntryRefs liveEntries,
+                              LedgerKeyRefs deadEntries, bool countMergeEvents)
 {
     ZoneScoped;
     // When building fresh buckets after protocol version 10 (i.e. version
@@ -608,6 +636,14 @@ LiveBucket::mergeInMemory(BucketManager& bucketManager,
         bucketManager.incrMergeCounters<LiveBucket>(mc);
     }
 
+    // Start index construction on a worker thread, the inputs are all
+    // read-only from that point on.
+    auto indexFuture = std::async(
+        std::launch::async, [&bucketManager, &mergedEntries, &meta]() {
+            return std::make_shared<LiveBucketIndex const>(bucketManager,
+                                                           mergedEntries, meta);
+        });
+
     // Write merge output to a bucket and save to disk
     LiveBucketOutputIterator out(bucketManager.getTmpDir(),
                                  /*keepTombstoneEntries=*/true, meta, mc, ctx,
@@ -618,11 +654,14 @@ LiveBucket::mergeInMemory(BucketManager& bucketManager,
         out.put(e);
     }
 
+    auto preBuiltIndex = indexFuture.get();
+
     // Store the merged entries in memory in the new bucket in case this
     // bucket sees another incoming merge as level 0 curr.
     return out.getBucket(
         bucketManager, nullptr,
-        std::make_unique<std::vector<BucketEntry>>(std::move(mergedEntries)));
+        std::make_unique<std::vector<BucketEntry>>(std::move(mergedEntries)),
+        std::move(preBuiltIndex));
 }
 
 BucketEntryCounters const&

@@ -188,6 +188,7 @@ CapacityTrackedMessage::CapacityTrackedMessage(std::weak_ptr<Peer> peer,
     // Whether to check transaction signatures in the background, adding them to
     // the signature cache in the process.
     bool const checkTxSig =
+        self->isAuthenticatedAtomic() &&
         self->mAppConnector.getConfig().BACKGROUND_TX_SIG_VERIFICATION &&
         self->useBackgroundThread();
 
@@ -311,7 +312,7 @@ Peer::endMessageProcessing(StellarMessage const& msg)
     }
 
     // If throttled, schedule read as soon as a full batch is processed
-    if (mFlowControl->isThrottled() && res.numTotalMessages > 0)
+    if (mFlowControl->isThrottled() && mFlowControl->canRead())
     {
         mFlowControl->stopThrottling();
 #ifdef BUILD_TESTS
@@ -1419,7 +1420,8 @@ Peer::recvDontHave(StellarMessage const& msg)
 }
 
 bool
-Peer::process(QueryInfo& queryInfo, std::optional<uint32_t> maxQueriesPerWindow)
+Peer::process(QueryInfo& queryInfo, std::optional<Hash> queryKey,
+              std::optional<uint32_t> maxQueriesPerWindow)
 {
     auto const& cfg = mAppConnector.getConfig();
     std::chrono::seconds const QUERY_WINDOW =
@@ -1432,8 +1434,27 @@ Peer::process(QueryInfo& queryInfo, std::optional<uint32_t> maxQueriesPerWindow)
     {
         queryInfo.mLastTimeStamp = mAppConnector.now();
         queryInfo.mNumQueries = 0;
+        queryInfo.mRequestedObjects.clear();
     }
-    return queryInfo.mNumQueries < QUERIES_PER_WINDOW;
+    // NB: check the rate _before_ the table, to cap table size.
+    if (queryInfo.mNumQueries < QUERIES_PER_WINDOW)
+    {
+        if (queryKey.has_value())
+        {
+            auto [it, _] =
+                queryInfo.mRequestedObjects.try_emplace(queryKey.value(), 0);
+            if (it->second < QUERY_RESPONSE_MULTIPLIER)
+            {
+                it->second++;
+                return true;
+            }
+        }
+        else
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 #ifdef BUILD_TESTS
@@ -1460,7 +1481,7 @@ Peer::recvGetTxSet(StellarMessage const& msg)
 {
     ZoneScoped;
     releaseAssert(threadIsMain());
-    if (!process(mTxSetQueryInfo))
+    if (!process(mTxSetQueryInfo, msg.txSetHash()))
     {
         return;
     }
@@ -1601,7 +1622,7 @@ Peer::recvGetSCPQuorumSet(StellarMessage const& msg)
 {
     ZoneScoped;
     releaseAssert(threadIsMain());
-    if (!process(mQSetQueryInfo))
+    if (!process(mQSetQueryInfo, msg.qSetHash()))
     {
         return;
     }
@@ -1685,7 +1706,7 @@ Peer::recvGetSCPState(StellarMessage const& msg)
 {
     ZoneScoped;
     releaseAssert(threadIsMain());
-    if (!process(mSCPStateQueryInfo, GET_SCP_STATE_MAX_RATE))
+    if (!process(mSCPStateQueryInfo, std::nullopt, GET_SCP_STATE_MAX_RATE))
     {
         CLOG_DEBUG(Overlay, "Dropping GET_SCP_STATE request from {}",
                    KeyUtils::toShortString(mPeerID));
@@ -1965,7 +1986,7 @@ Peer::recvAuth(StellarMessage const& msg)
     }
 
     uint32_t fcBytes =
-        mAppConnector.getOverlayManager().getFlowControlBytesTotal();
+        mAppConnector.getOverlayManager().getFlowControlFloodByteCapacity();
 
     // Subtle: after successful auth, must send sendMore message first to
     // tell the other peer about the local node's reading capacity.
@@ -2018,7 +2039,12 @@ Peer::recvPeers(StellarMessage const& msg)
         releaseAssert(peer.ip.type() == IPv4);
         auto address = PeerBareAddress{peer};
 
-        if (address.isPrivate())
+        bool allowPrivateAddresses = false;
+#ifdef BUILD_TESTS
+        allowPrivateAddresses =
+            mAppConnector.getConfig().ALLOW_PRIVATE_ADDRESSES_FOR_TESTING;
+#endif
+        if (address.isPrivate() && !allowPrivateAddresses)
         {
             CLOG_DEBUG(Overlay, "ignoring received private address {}",
                        address.toString());

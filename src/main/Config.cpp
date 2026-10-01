@@ -31,7 +31,7 @@
 
 namespace stellar
 {
-uint32 const Config::CURRENT_LEDGER_PROTOCOL_VERSION = 27
+uint32 const Config::CURRENT_LEDGER_PROTOCOL_VERSION = 29
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
                                                        + 1
 #endif
@@ -64,10 +64,12 @@ static std::unordered_set<std::string> const TESTING_ONLY_OPTIONS = {
     "LOADGEN_TX_SIZE_BYTES_DISTRIBUTION_FOR_TESTING",
     "LOADGEN_INSTRUCTIONS_FOR_TESTING",
     "LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING",
+    "LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING",
     "CATCHUP_WAIT_MERGES_TX_APPLY_FOR_TESTING",
     "ARTIFICIALLY_SET_SURVEY_PHASE_DURATION_FOR_TESTING",
     "ARTIFICIALLY_DELAY_BUCKET_APPLICATION_FOR_TESTING",
     "ARTIFICIALLY_SLEEP_MAIN_THREAD_FOR_TESTING",
+    "ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING",
     "ARTIFICIALLY_SKIP_CONNECTION_ADJUSTMENT_FOR_TESTING",
     "ARTIFICIALLY_DELAY_LEDGER_CLOSE_FOR_TESTING",
     "SKIP_HIGH_CRITICAL_VALIDATOR_CHECKS_FOR_TESTING",
@@ -76,7 +78,7 @@ static std::unordered_set<std::string> const TESTING_ONLY_OPTIONS = {
 
 // Options that should only be used for testing
 static std::unordered_set<std::string> const TESTING_SUGGESTED_OPTIONS = {
-    "ALLOW_LOCALHOST_FOR_TESTING"};
+    "ALLOW_LOCALHOST_FOR_TESTING", "ALLOW_PRIVATE_ADDRESSES_FOR_TESTING"};
 
 namespace
 {
@@ -139,6 +141,7 @@ Config::Config() : NODE_SEED(SecretKey::random())
     LOADGEN_TX_SIZE_BYTES_DISTRIBUTION_FOR_TESTING = {};
     LOADGEN_INSTRUCTIONS_FOR_TESTING = {};
     LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING = {};
+    LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING = false;
     CATCHUP_WAIT_MERGES_TX_APPLY_FOR_TESTING = false;
     ARTIFICIALLY_SET_SURVEY_PHASE_DURATION_FOR_TESTING =
         std::chrono::minutes::zero();
@@ -154,14 +157,15 @@ Config::Config() : NODE_SEED(SecretKey::random())
     IGNORE_MESSAGE_LIMITS_FOR_TESTING = false;
     TESTING_IGNORE_LEDGER_TIME_UPGRADE_BOUNDS = false;
     TESTING_NOMINATE_RANDOM_VALUES = false;
+    ALLOW_PRIVATE_ADDRESSES_FOR_TESTING = false;
 #endif
 
     FORCE_SCP = false;
     LEDGER_PROTOCOL_VERSION = CURRENT_LEDGER_PROTOCOL_VERSION;
     LEDGER_PROTOCOL_MIN_VERSION_INTERNAL_ERROR_REPORT = 18;
 
-    OVERLAY_PROTOCOL_MIN_VERSION = 38;
-    OVERLAY_PROTOCOL_VERSION = 41;
+    OVERLAY_PROTOCOL_MIN_VERSION = 41;
+    OVERLAY_PROTOCOL_VERSION = 42;
 
     VERSION_STR = STELLAR_CORE_VERSION;
 
@@ -176,6 +180,8 @@ Config::Config() : NODE_SEED(SecretKey::random())
     DISABLE_SOROBAN_METRICS_FOR_TESTING = false;
     DISABLE_TX_META_FOR_TESTING = false;
     BACKGROUND_TX_SIG_VERIFICATION = true;
+    FORCE_OLD_STYLE_PREPARE_START_TRIGGER_TIMER = false;
+    NTP_DRIFT_CHECK_SERVER = "pool.ntp.org";
     BUCKETLIST_DB_INDEX_PAGE_SIZE_EXPONENT = 14; // 2^14 == 16 kb
     BUCKETLIST_DB_INDEX_CUTOFF = 20;             // 20 mb
     BUCKETLIST_DB_MEMORY_FOR_CACHING = 0;
@@ -280,6 +286,7 @@ Config::Config() : NODE_SEED(SecretKey::random())
     PEER_FLOOD_READING_CAPACITY_BYTES = 0;
     FLOW_CONTROL_SEND_MORE_BATCH_SIZE_BYTES = 0;
     OUTBOUND_TX_QUEUE_BYTE_LIMIT = 1024 * 1024 * 3;
+    PEER_TOTAL_READING_CAPACITY_BYTES = 1024 * 1024;
 
     // WORKER_THREADS: setting this too low risks a form of priority inversion
     // where a long-running background task occupies all worker threads and
@@ -304,6 +311,12 @@ Config::Config() : NODE_SEED(SecretKey::random())
     QUORUM_INTERSECTION_CHECKER = true;
     USE_QUORUM_INTERSECTION_CHECKER_V2 = false;
     QUORUM_INTERSECTION_CHECKER_TIME_LIMIT_MS = 5000; // 5 secs
+    // NB: this budget is compared against a conservative over-estimate of the
+    // solver's memory (charged per clause/variable), not measured allocator
+    // usage. Under the current tier-1 network configuration (7 orgs) usage
+    // stays well under this limit, but the solver's encoding grows
+    // combinatorially with a vertex's degree, so if the number of tier-1
+    // organizations ever increases we will have to revisit this limit.
     QUORUM_INTERSECTION_CHECKER_MEMORY_LIMIT_BYTES =
         100 * 1024 * 1024; // 100 MiB
 
@@ -343,8 +356,6 @@ Config::Config() : NODE_SEED(SecretKey::random())
     BACKFILL_STELLAR_ASSET_EVENTS = false;
     BACKFILL_RESTORE_META = false;
 
-    FILTERED_G_ADDRESSES = {};
-
     LOADGEN_BYTE_COUNT_FOR_TESTING = {};
     LOADGEN_BYTE_COUNT_DISTRIBUTION_FOR_TESTING = {};
     COMMANDS = {};
@@ -360,6 +371,10 @@ Config::Config() : NODE_SEED(SecretKey::random())
     CATCHUP_SKIP_KNOWN_RESULTS_FOR_TESTING = false;
     MODE_USES_IN_MEMORY_LEDGER = false;
     SKIP_HIGH_CRITICAL_VALIDATOR_CHECKS_FOR_TESTING = false;
+    ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING =
+        std::chrono::milliseconds::zero();
+    ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING =
+        std::chrono::milliseconds::zero();
 #endif
 
 #ifdef BEST_OFFER_DEBUGGING
@@ -1126,6 +1141,11 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                      PEER_FLOOD_READING_CAPACITY_BYTES =
                          readInt<uint32_t>(item, 0);
                  }},
+                {"PEER_TOTAL_READING_CAPACITY_BYTES",
+                 [&]() {
+                     PEER_TOTAL_READING_CAPACITY_BYTES =
+                         readInt<uint32_t>(item, 1);
+                 }},
                 {"FLOW_CONTROL_SEND_MORE_BATCH_SIZE_BYTES",
                  [&]() {
                      FLOW_CONTROL_SEND_MORE_BATCH_SIZE_BYTES =
@@ -1209,6 +1229,13 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                  }},
                 {"BACKGROUND_TX_SIG_VERIFICATION",
                  [&]() { BACKGROUND_TX_SIG_VERIFICATION = readBool(item); }},
+                {"FORCE_OLD_STYLE_PREPARE_START_TRIGGER_TIMER",
+                 [&]() {
+                     FORCE_OLD_STYLE_PREPARE_START_TRIGGER_TIMER =
+                         readBool(item);
+                 }},
+                {"NTP_DRIFT_CHECK_SERVER",
+                 [&]() { NTP_DRIFT_CHECK_SERVER = readString(item); }},
                 {"ARTIFICIALLY_DELAY_LEDGER_CLOSE_FOR_TESTING",
                  [&]() {
                      ARTIFICIALLY_DELAY_LEDGER_CLOSE_FOR_TESTING =
@@ -1267,6 +1294,10 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                  }},
                 {"IGNORE_MESSAGE_LIMITS_FOR_TESTING",
                  [&]() { IGNORE_MESSAGE_LIMITS_FOR_TESTING = readBool(item); }},
+                {"ALLOW_PRIVATE_ADDRESSES_FOR_TESTING",
+                 [&]() {
+                     ALLOW_PRIVATE_ADDRESSES_FOR_TESTING = readBool(item);
+                 }},
 #endif // BUILD_TESTS
                 {"ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING",
                  [&]() {
@@ -1604,17 +1635,17 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                  }},
                 {"FILTERED_G_ADDRESSES",
                  [&]() {
-                     FILTERED_G_ADDRESSES = readArray<std::string>(item);
-                     for (auto const& addr : FILTERED_G_ADDRESSES)
-                     {
-                         KeyUtils::fromStrKey<PublicKey>(addr);
-                     }
+                     // The account banning feature has been removed; accept
+                     // the entry for backwards compatibility but ignore it.
+                     readArray<std::string>(item);
                      CLOG_WARNING(
-                         Overlay,
-                         "FILTERED_G_ADDRESSES is deprecated. It will be "
-                         "removed in a future release. Please use "
-                         "`banaccounts` HTTP endpoint instead to ban accounts "
-                         "from submitting transactions to this node.");
+                         Herder,
+                         "FILTERED_G_ADDRESSES is deprecated and has no "
+                         "effect; account banning has been removed. Please "
+                         "remove it from the config. See CAP-0077 "
+                         "(https://github.com/stellar/stellar-protocol/blob/"
+                         "master/core/cap-0077.md) for a more robust "
+                         "alternative.");
                  }},
                 {"LOADGEN_BYTE_COUNT_FOR_TESTING",
                  [&]() {
@@ -1675,6 +1706,11 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                  [&]() {
                      LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING =
                          readIntArray<uint32_t>(item);
+                 }},
+                {"LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING",
+                 [&]() {
+                     LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING =
+                         readBool(item);
                  }},
 #ifdef BUILD_TESTS
                 {"OP_APPLY_SLEEP_TIME_DURATION_FOR_TESTING",
@@ -1925,6 +1961,18 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
                      ARTIFICIALLY_SLEEP_MAIN_THREAD_FOR_TESTING =
                          std::chrono::microseconds(readInt<uint32_t>(item));
                  }},
+#ifdef BUILD_TESTS
+                {"ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING",
+                 [&]() {
+                     ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING =
+                         std::chrono::milliseconds(readInt<int64_t>(item));
+                 }},
+                {"ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING",
+                 [&]() {
+                     ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING =
+                         std::chrono::milliseconds(readInt<uint32_t>(item));
+                 }},
+#endif
                 {"MAX_DEX_TX_OPERATIONS_IN_TX_SET",
                  [&]() {
                      auto value = readInt<uint32_t>(item);
@@ -2016,7 +2064,7 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
             throw std::runtime_error(msg);
         }
 
-        if (PARALLEL_LEDGER_APPLY && !parallelLedgerClose())
+        if (PARALLEL_LEDGER_APPLY && !backgroundLedgerApply())
         {
             LOG_WARNING(DEFAULT_LOG,
                         "PARALLEL_LEDGER_APPLY is not supported with "
@@ -2595,9 +2643,15 @@ Config::allBucketsInMemory() const
 }
 
 bool
-Config::parallelLedgerClose() const
+Config::backgroundLedgerApply() const
 {
     return PARALLEL_LEDGER_APPLY && DATABASE.value != "sqlite3://:memory:";
+}
+
+bool
+Config::ntpDriftCheckEnabled() const
+{
+    return NODE_IS_VALIDATOR && !NTP_DRIFT_CHECK_SERVER.empty();
 }
 
 void

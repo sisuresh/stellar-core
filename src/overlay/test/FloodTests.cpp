@@ -35,7 +35,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
     Hash networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     Simulation::pointer simulation;
 
-    int const nbTx = 100;
+    int const nbTx = 20;
 
     std::vector<TestAccount> sources;
     SequenceNumber expectedSeq = 0;
@@ -64,7 +64,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             for (int i = 0; i < nbTx; i++)
             {
                 sources.emplace_back(
-                    TestAccount{*app0, SecretKey::pseudoRandomForTesting(), 0});
+                    TestAccount{*app0, SecretKey::pseudoRandomForTesting()});
                 gen.data.account().accountID = sources.back();
 
                 // need to create on all nodes
@@ -362,8 +362,8 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
                         messagesUnfulfilled);
 
                     // There are four peers.
-                    // Each node starts with 25 txns.
-                    // For every node to get all the 100 txns,
+                    // Each node starts with 5 txns.
+                    // For every node to get all the 20 txns,
                     // every node has to advertise, demand, and fulfill demands
                     // at least once.
                     // No node should do so more than 3 * nbTx times.

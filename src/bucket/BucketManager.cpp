@@ -1024,9 +1024,9 @@ BucketManager::forgetUnreferencedBuckets(HistoryArchiveState const& has)
 
 void
 BucketManager::addLiveBatch(Application& app, LedgerHeader header,
-                            std::vector<LedgerEntry> const& initEntries,
-                            std::vector<LedgerEntry> const& liveEntries,
-                            std::vector<LedgerKey> const& deadEntries)
+                            LedgerEntryRefs initEntries,
+                            LedgerEntryRefs liveEntries,
+                            LedgerKeyRefs deadEntries)
 {
     ZoneScoped;
 #ifdef BUILD_TESTS
@@ -1393,15 +1393,24 @@ BucketManager::assumeState(Application& app, HistoryArchiveState const& has,
 
     if (restartMerges)
     {
-        mLiveBucketList->restartMerges(app, maxProtocolVersion,
-                                       has.currentLedger);
-        if (has.hasHotArchiveBuckets())
-        {
-            mHotArchiveBucketList->restartMerges(app, maxProtocolVersion,
-                                                 has.currentLedger);
-        }
+        this->restartMerges(app, has, maxProtocolVersion);
     }
     cleanupStaleFiles(has);
+}
+
+void
+BucketManager::restartMerges(Application& app, HistoryArchiveState const& has,
+                             uint32_t maxProtocolVersion)
+{
+    ZoneScoped;
+    releaseAssert(threadIsMain());
+
+    mLiveBucketList->restartMerges(app, maxProtocolVersion, has.currentLedger);
+    if (has.hasHotArchiveBuckets())
+    {
+        mHotArchiveBucketList->restartMerges(app, maxProtocolVersion,
+                                             has.currentLedger);
+    }
 }
 
 void

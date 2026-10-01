@@ -4,9 +4,11 @@
 
 #include "bucket/BucketManager.h"
 #include "bucket/test/BucketTestUtils.h"
+#include "catchup/ApplyCheckpointWork.h"
 #include "catchup/DownloadApplyTxsWork.h"
 #include "catchup/LedgerApplyManagerImpl.h"
 #include "catchup/test/CatchupWorkTests.h"
+#include "crypto/SHA.h"
 #include "herder/HerderPersistence.h"
 #include "history/CheckpointBuilder.h"
 #include "history/FileTransferInfo.h"
@@ -26,6 +28,7 @@
 #include "test/test.h"
 #include "util/Fs.h"
 #include "util/Logging.h"
+#include "util/ProtocolVersion.h"
 #include "work/WorkScheduler.h"
 
 #include "historywork/BatchDownloadWork.h"
@@ -1127,6 +1130,201 @@ TEST_CASE("History catchup with extra validation", "[history][publish]")
     REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger, true));
 }
 
+TEST_CASE("History catchup over empty-tx-set ledgers", "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+
+    // Generate a few random ledgers
+    while (
+        catchupSimulation.getApp().getLedgerManager().getLastClosedLedgerNum() <
+        8)
+    {
+        catchupSimulation.generateRandomLedger();
+    }
+
+    // One isolated empty-tx-set ledger, a normal ledger, then two consecutive
+    // empty-tx-set ledgers, all within the first published checkpoint.
+    catchupSimulation.generateEmptyTxSetLedger();
+    catchupSimulation.generateRandomLedger();
+    catchupSimulation.generateEmptyTxSetLedger();
+    catchupSimulation.generateEmptyTxSetLedger();
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
+
+    SECTION("offline")
+    {
+        auto app = catchupSimulation.createCatchupApplication(
+            std::numeric_limits<uint32_t>::max(),
+            Config::TESTDB_BUCKET_DB_PERSISTENT, "skip-offline");
+        REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger, true));
+    }
+
+    SECTION("online")
+    {
+        auto app = catchupSimulation.createCatchupApplication(
+            std::numeric_limits<uint32_t>::max(),
+            Config::TESTDB_BUCKET_DB_PERSISTENT, "skip-online");
+        REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
+    }
+}
+
+TEST_CASE("History catchup rejects empty-tx-set ledgers with transactions",
+          "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+    auto& simApp = catchupSimulation.getApp();
+
+    while (simApp.getLedgerManager().getLastClosedLedgerNum() < 8)
+    {
+        catchupSimulation.generateRandomLedger();
+    }
+    catchupSimulation.generateEmptyTxSetLedger();
+    uint32_t const emptyTxSetSeq =
+        simApp.getLedgerManager().getLastClosedLedgerNum();
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOfflineCatchupPossible(checkpointLedger);
+
+    // Forge a non-empty TransactionHistoryEntry for the empty-tx-set ledger
+    // into the published transactions file, keeping the file sorted by
+    // ledgerSeq.
+    std::string archiveDir =
+        catchupSimulation.getHistoryConfigurator().getArchiveDirName();
+    FileTransferInfo txFileInfo(FileType::HISTORY_FILE_TYPE_TRANSACTIONS,
+                                checkpointLedger, simApp.getConfig());
+    std::string gzPath = archiveDir + "/" + txFileInfo.remoteName();
+    fs::checkGzipSuffix(gzPath);
+    auto nonGzPath = gzPath.substr(0, gzPath.size() - 3);
+
+    auto& wm = simApp.getWorkScheduler();
+    REQUIRE(wm.executeWork<GunzipFileWork>(gzPath)->getState() ==
+            BasicWork::State::WORK_SUCCESS);
+    {
+        XDRInputFileStream in;
+        in.open(nonGzPath);
+        std::vector<TransactionHistoryEntry> txs;
+        TransactionHistoryEntry tx;
+        while (in && in.readOne(tx))
+        {
+            txs.push_back(tx);
+        }
+        in.close();
+        REQUIRE(!txs.empty());
+        REQUIRE(std::filesystem::remove(nonGzPath));
+
+        // Copy an existing non-empty entry and retarget it at the empty-tx-set
+        // ledger
+        TransactionHistoryEntry forged = txs.front();
+        forged.ledgerSeq = emptyTxSetSeq;
+        auto insertAt =
+            std::find_if(txs.begin(), txs.end(), [&](auto const& e) {
+                return e.ledgerSeq > emptyTxSetSeq;
+            });
+        txs.insert(insertAt, forged);
+
+        XDROutputFileStream out(simApp.getClock().getIOContext(), true);
+        out.open(nonGzPath);
+        for (auto const& e : txs)
+        {
+            out.writeOne(e);
+        }
+        out.close();
+    }
+    REQUIRE(wm.executeWork<GzipFileWork>(nonGzPath)->getState() ==
+            BasicWork::State::WORK_SUCCESS);
+
+    // Catch up a fresh node through the tampered checkpoint, driving the
+    // works directly
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(),
+        Config::TESTDB_BUCKET_DB_PERSISTENT, "skip-tamper");
+
+    auto& appWm = app->getWorkScheduler();
+    auto tmpDir = app->getTmpDirManager().tmpDir("skip-tamper-download");
+    LedgerRange range = LedgerRange::inclusive(
+        LedgerManager::GENESIS_LEDGER_SEQ + 1, checkpointLedger);
+    CheckpointRange checkpointRange{range, app->getHistoryManager()};
+
+    auto downloadHeaders = appWm.executeWork<BatchDownloadWork>(
+        checkpointRange, FileType::HISTORY_FILE_TYPE_LEDGER, tmpDir);
+    REQUIRE(downloadHeaders->getState() == BasicWork::State::WORK_SUCCESS);
+
+    auto lastApplied = app->getLedgerManager().getLastClosedLedgerHeader();
+    auto work = appWm.executeWork<DownloadApplyTxsWork>(
+        tmpDir, range, lastApplied, /*waitForPublish=*/true, nullptr);
+    REQUIRE(work->getState() == BasicWork::State::WORK_FAILURE);
+    // Replay stops exactly at the skip ledger whose forged entry was rejected
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() ==
+            emptyTxSetSeq - 1);
+}
+
+TEST_CASE("ApplyCheckpointWork rejects malformed empty-tx-set ledger headers",
+          "[history][catchup]")
+{
+    auto runWithFabricatedHeader =
+        [](uint32_t genesisVersion, std::function<void(StellarValue&)> mutate) {
+            Config cfg(getTestConfig(0));
+            cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION = genesisVersion;
+            VirtualClock clock;
+            auto app = createTestApplication(clock, cfg);
+            auto const& lcl =
+                app->getLedgerManager().getLastClosedLedgerHeader();
+
+            LedgerHeaderHistoryEntry entry;
+            entry.header.ledgerSeq = lcl.header.ledgerSeq + 1;
+            entry.header.previousLedgerHash = lcl.hash;
+            entry.header.ledgerVersion = lcl.header.ledgerVersion;
+            mutate(entry.header.scpValue);
+            entry.hash = sha256(xdr::xdr_to_opaque(entry.header));
+
+            auto checkpoint = HistoryManager::checkpointContainingLedger(
+                entry.header.ledgerSeq, app->getConfig());
+            auto tmpDir =
+                app->getTmpDirManager().tmpDir("malformed-empty-tx-set-header");
+            FileTransferInfo hi(tmpDir, FileType::HISTORY_FILE_TYPE_LEDGER,
+                                checkpoint);
+            {
+                XDROutputFileStream out(app->getClock().getIOContext(), true);
+                out.open(hi.localPath_nogz());
+                out.writeOne(entry);
+            }
+            // The transactions file must exist even when empty
+            FileTransferInfo ti(
+                tmpDir, FileType::HISTORY_FILE_TYPE_TRANSACTIONS, checkpoint);
+            {
+                XDROutputFileStream out(app->getClock().getIOContext(), true);
+                out.open(ti.localPath_nogz());
+            }
+
+            auto range = LedgerRange::inclusive(lcl.header.ledgerSeq,
+                                                entry.header.ledgerSeq);
+            auto w = app->getWorkScheduler().executeWork<ApplyCheckpointWork>(
+                tmpDir, range, OnFailureCallback{});
+            return w->getState();
+        };
+
+    SECTION("empty-tx-set hash without empty-tx-set value")
+    {
+        REQUIRE(runWithFabricatedHeader(Config::CURRENT_LEDGER_PROTOCOL_VERSION,
+                                        [](StellarValue& sv) {
+                                            sv.txSetHash =
+                                                Herder::EMPTY_TX_SET_HASH;
+                                            // ext stays STELLAR_VALUE_BASIC
+                                        }) == BasicWork::State::WORK_FAILURE);
+    }
+
+    SECTION("empty-tx-set value before protocol support")
+    {
+        REQUIRE(runWithFabricatedHeader(
+                    static_cast<uint32_t>(EMPTY_TX_SET_PROTOCOL_VERSION) - 1,
+                    [](StellarValue& sv) {
+                        sv.txSetHash = Herder::EMPTY_TX_SET_HASH;
+                        sv.ext.v(STELLAR_VALUE_EMPTY_TX_SET);
+                    }) == BasicWork::State::WORK_FAILURE);
+    }
+}
+
 TEST_CASE("Publish works correctly post shadow removal", "[history]")
 {
     // Given a HAS, verify that appropriate levels have "next" cleared, while
@@ -1474,17 +1672,17 @@ TEST_CASE("History catchup with different modes",
     }
 }
 
-TEST_CASE("Retriggering catchups after trimming mSyncingLedgers",
+TEST_CASE("Retriggering catchups after trimming mBufferedLedgers",
           "[history][catchup]")
 {
     CatchupSimulation catchupSimulation{};
 
     // Try to get to ledger 1000 with 200 ledgers buffered
     // when there are 20 checkpoints available.
-    // In order to prevent mSyncingLedgers from growing indefinitely,
+    // In order to prevent mBufferedLedgers from growing indefinitely,
     // it gets trimmed periodically.
     // This test makes sure that we are able to catch up to the network
-    // even when some ledgers get trimmed from mSyncingLedgers.
+    // even when some ledgers get trimmed from mBufferedLedgers.
 
     auto const bufferLedgers = 200;
     auto const initLedger = 1000;
@@ -1496,7 +1694,7 @@ TEST_CASE("Retriggering catchups after trimming mSyncingLedgers",
 
     auto app = catchupSimulation.createCatchupApplication(
         std::numeric_limits<uint32_t>::max(), Config::TESTDB_DEFAULT,
-        std::string("Retriggering catchups after trimming mSyncingLedgers"));
+        std::string("Retriggering catchups after trimming mBufferedLedgers"));
     auto& lm = app->getLedgerManager();
 
     auto& herder = static_cast<HerderImpl&>(app->getHerder());
@@ -1539,7 +1737,7 @@ TEST_CASE("Retriggering catchups after trimming mSyncingLedgers",
         firstLedgerInCheckpoint, app->getConfig());
 
     // 1. The app hears initLedger, ..., dividingLedger - 1.
-    //    NB: dividingLedger must be chosen such that mSyncingLedgers gets
+    //    NB: dividingLedger must be chosen such that mBufferedLedgers gets
     //    trimmed in this step.
     // 2. We will let Catchup run right after hearing (dividingLedger - 1).
     // 3. The app hears dividingLedger, ..., triggerLedger + bufferLedgers.
@@ -1553,20 +1751,20 @@ TEST_CASE("Retriggering catchups after trimming mSyncingLedgers",
 
         // Let the catchup run.
         // We expect that it'll land at the checkpoint containing (initLedger -
-        // 1). It can't apply the buffered ledgers because mSyncingLedgers must
+        // 1). It can't apply the buffered ledgers because mBufferedLedgers must
         // have popped some elements in order to prevent it from growing
         // exponentially, and thus there is a gap between the LCL and
-        // mSyncingLedgers.
+        // mBufferedLedgers.
         runCatchup(HistoryManager::checkpointContainingLedger(
             initLedger - 1, app->getConfig()));
 
-        // As mentioned above, mSyncingLedgers must have been trimmed
+        // As mentioned above, mBufferedLedgers must have been trimmed
         // after hearing up to (dividingLedger - 1).
         // And if it has been trimmed, CatchupWork should not be able to catch
         // up without being re-triggered.
         REQUIRE(!lm.isSynced());
 
-        // In order to close the gap between the LCL and mSyncingLedgers,
+        // In order to close the gap between the LCL and mBufferedLedgers,
         // we need to run a CatchupWork again.
         // processLedger is responsible for that, and thus we call it
         // by externalizing ledgers.
@@ -1605,14 +1803,14 @@ TEST_CASE("Retriggering catchups after trimming mSyncingLedgers",
         runTest(dividingLedger);
     }
 
-    SECTION(
-        "mSyncingLedgers gets trimmed between the first and second Catchup run")
+    SECTION("mBufferedLedgers gets trimmed between the first and second "
+            "Catchup run")
     {
         // When adding the second ledger in a checkpoint,
         // we become certain that nodes started publishing the checkpoint.
         // Thus the ledgers before the checkpoint will be trimmed.
         // By setting dividingLedger to the second ledger in a checkpoint,
-        // we can make sure that mSyncingLedgers gets trimmed between the first
+        // we can make sure that mBufferedLedgers gets trimmed between the first
         // and second Catchup run.
         auto dividingLedger =
             HistoryManager::firstLedgerInCheckpointContaining(
@@ -2226,7 +2424,7 @@ TEST_CASE("Catchup failure recovery with buffered checkpoint",
     // ledger 133 (= init + 60) will be missing.
     // The app hears up to ledger 189 close. (189 = 129 + 60 where 129
     // is the trigger ledger and 60 is the number of ledgers to buffer.)
-    // Then mSyncingLedgers = {128, 129, ..., 132, 134, ..., 189}.
+    // Then mBufferedLedgers = {128, 129, ..., 132, 134, ..., 189}.
     // We get up to 127 using checkpoint data, and apply {128, ..., 132}.
     LOG_INFO(DEFAULT_LOG, "Starting catchup (with gap) from {}", init);
     REQUIRE(!catchupSimulation.catchupOnline(app, init, 60, init + 60));

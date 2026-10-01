@@ -42,6 +42,7 @@
 #include "main/AppConnector.h"
 #include "main/ApplicationUtils.h"
 #include "main/CommandHandler.h"
+#include "main/NtpProbe.h"
 #include "main/StellarCoreVersion.h"
 #include "medida/counter.h"
 #include "medida/meter.h"
@@ -52,6 +53,7 @@
 #include "overlay/OverlayManagerImpl.h"
 #include "process/ProcessManager.h"
 #include "transactions/SignatureChecker.h"
+#include "util/BatchExecutor.h"
 #include "util/GlobalChecks.h"
 #include "util/JitterInjection.h"
 #include "util/LogSlowExecution.h"
@@ -99,15 +101,16 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
     , mOverlayWork(mOverlayIOContext ? std::make_unique<asio::io_context::work>(
                                            *mOverlayIOContext)
                                      : nullptr)
-    , mLedgerCloseIOContext(mConfig.parallelLedgerClose()
+    , mLedgerApplyIOContext(mConfig.backgroundLedgerApply()
                                 ? std::make_unique<asio::io_context>(1)
                                 : nullptr)
-    , mLedgerCloseWork(
-          mLedgerCloseIOContext
-              ? std::make_unique<asio::io_context::work>(*mLedgerCloseIOContext)
+    , mLedgerApplyWork(
+          mLedgerApplyIOContext
+              ? std::make_unique<asio::io_context::work>(*mLedgerApplyIOContext)
               : nullptr)
     , mWorkerThreads()
     , mEvictionThread()
+    , mBatchExecutor(std::make_unique<BatchExecutor>())
     , mStopSignals(clock.getIOContext(), SIGINT)
     , mStarted(false)
     , mStopping(false)
@@ -123,7 +126,9 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
           mMetrics->NewTimer({"app", "post-on-background-thread", "delay"}))
     , mPostOnOverlayThreadDelay(
           mMetrics->NewTimer({"app", "post-on-overlay-thread", "delay"}))
-    , mPostOnLedgerCloseThreadDelay(
+    , mPostOnLedgerApplyThreadDelay(
+          // Metric key retains the thread's historical "ledger-close" name;
+          // external dashboards depend on it.
           mMetrics->NewTimer({"app", "post-on-ledger-close-thread", "delay"}))
     , mStartedOn(clock.system_now())
 {
@@ -147,6 +152,17 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
     std::string homeStr("HomeDomain: ");
     homeStr += mConfig.NODE_HOME_DOMAIN;
     TracyAppInfo(homeStr.c_str(), homeStr.size());
+
+#ifdef BUILD_TESTS
+    if (mConfig.ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING !=
+        std::chrono::milliseconds::zero())
+    {
+        mVirtualClock.setSystemTimeOffset(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                mConfig.ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING));
+        mStartedOn = clock.system_now();
+    }
+#endif
 
     mStopSignals.async_wait([this](asio::error_code const& ec, int sig) {
         if (!ec)
@@ -198,11 +214,11 @@ ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
         mThreadTypes[mOverlayThread->get_id()] = ThreadType::OVERLAY;
     }
 
-    if (mConfig.parallelLedgerClose())
+    if (mConfig.backgroundLedgerApply())
     {
-        mLedgerCloseThread = std::make_unique<std::thread>(
-            [this]() { mLedgerCloseIOContext->run(); });
-        mThreadTypes[mLedgerCloseThread->get_id()] = ThreadType::APPLY;
+        mLedgerApplyThread = std::make_unique<std::thread>(
+            [this]() { mLedgerApplyIOContext->run(); });
+        mThreadTypes[mLedgerApplyThread->get_id()] = ThreadType::APPLY;
     }
 }
 
@@ -239,20 +255,13 @@ maybeRebuildLedger(Application& app, bool applyBuckets)
 void
 ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
 {
-    // Subtle: initialize the bucket manager first before initializing the
-    // database. This is needed as some modes in core (such as in-memory) use a
-    // small database inside the bucket directory.
     mAppConnector = std::make_unique<AppConnector>(*this);
-    mBucketManager = BucketManager::create(getAppConnector());
 
     bool initNewDB =
         createNewDB || mConfig.DATABASE.value == "sqlite3://:memory:";
-    if (initNewDB)
-    {
-        mBucketManager->maybeDropAndCreateNew();
-    }
 
     mDatabase = createDatabase();
+    mBucketManager = BucketManager::create(getAppConnector());
     mPersistentState = std::make_unique<PersistentState>(*this);
     mOverlayManager = createOverlayManager();
     mLedgerManager = createLedgerManager();
@@ -322,6 +331,12 @@ ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
 
     enableInvariantsFromConfig();
 
+    // Create CommandHandler before newDB/ledger loading so that
+    // advanceLastClosedLedgerState can push snapshots to the QueryServer.
+    // This is safe because endpoints are blocked until we call setReady() after
+    // ledger loading is complete.
+    mCommandHandler = std::make_unique<CommandHandler>(*this);
+
     if (initNewDB)
     {
         newDB();
@@ -335,13 +350,6 @@ ApplicationImpl::initialize(bool createNewDB, bool forceRebuild)
     // initialization and newDB run, as it relies on tmp dir created in the
     // constructor
     mProcessManager = ProcessManager::create(*this);
-
-    // Initialize banned accounts persistence and migrate any deprecated
-    // FILTERED_G_ADDRESSES config entries into the persistent table.
-    mBannedAccountsPersistor = std::make_unique<BannedAccountsPersistor>(*this);
-
-    // After everything is initialized, start accepting HTTP commands
-    mCommandHandler = std::make_unique<CommandHandler>(*this);
 
     LOG_DEBUG(DEFAULT_LOG, "Application constructed");
 }
@@ -374,6 +382,7 @@ void
 ApplicationImpl::newDB()
 {
     mDatabase->initialize();
+    mBucketManager->maybeDropAndCreateNew();
     upgradeToCurrentSchemaAndMaybeRebuildLedger(false, true);
     mLedgerManager->startNewLedger();
 }
@@ -782,6 +791,14 @@ ApplicationImpl::startServices()
     {
         mHerder->setUpgrades(mConfig);
     }
+
+    // Start NTP-based clock-drift detection
+    if (mConfig.ntpDriftCheckEnabled() &&
+        mVirtualClock.getMode() == VirtualClock::REAL_TIME)
+    {
+        mNtpProbe = NtpProbe::create(*this);
+        mNtpProbe->start();
+    }
 }
 
 void
@@ -824,11 +841,11 @@ ApplicationImpl::idempotentShutdown(bool forgetBuckets)
     // is still valid, join all worker threads, and finally allow destructors to
     // run once no asynchronous activity remains.
 
-    // Shutdown state-modifying ledger close thread first, while all subsystems
+    // Shutdown state-modifying ledger apply thread first, while all subsystems
     // are live and valid. Note that `joinAllThreads` will also attempt to
-    // shutdown mLedgerCloseThread for completeness, but since this method is
+    // shutdown mLedgerApplyThread for completeness, but since this method is
     // idempotent, the extra call is harmless.
-    shutdownThread(mLedgerCloseThread, mLedgerCloseWork, "ledger close");
+    shutdownThread(mLedgerApplyThread, mLedgerApplyWork, "ledger apply");
 
     if (mCommandHandler)
     {
@@ -839,6 +856,10 @@ ApplicationImpl::idempotentShutdown(bool forgetBuckets)
         mOverlayManager->shutdown();
     }
     mSelfCheckTimer.cancel();
+    if (mNtpProbe)
+    {
+        mNtpProbe->shutdown();
+    }
     shutdownWorkScheduler();
     if (mProcessManager)
     {
@@ -928,7 +949,7 @@ ApplicationImpl::joinAllThreads()
 {
     uint32_t joined = 0;
     joined +=
-        shutdownThread(mLedgerCloseThread, mLedgerCloseWork, "ledger close");
+        shutdownThread(mLedgerApplyThread, mLedgerApplyWork, "ledger apply");
     for (auto& w : mWorkerThreads)
     {
         joined += shutdownThread(w, mWork, "worker");
@@ -1201,17 +1222,17 @@ ApplicationImpl::applyCfgCommands()
         mCommandHandler->manualCmd(cmd);
     }
 
-    // Warn if COMMANDS contains banaccounts entries (after persisting
-    // those accounts)
     for (auto const& cmd : mConfig.COMMANDS)
     {
         if (cmd.find("banaccounts") != std::string::npos)
         {
-            CLOG_WARNING(Herder,
-                         "COMMANDS entry '{}' is no longer needed: banned "
-                         "accounts are now persisted across restarts. "
-                         "Consider removing this entry.",
-                         cmd);
+            CLOG_WARNING(
+                Herder,
+                "COMMANDS entry '{}' is deprecated and has no effect; "
+                "account banning has been removed. Please remove this entry. "
+                "See CAP-0077 (https://github.com/stellar/stellar-protocol/"
+                "blob/master/core/cap-0077.md) for a more robust alternative.",
+                cmd);
         }
     }
 }
@@ -1481,12 +1502,6 @@ ApplicationImpl::getBanManager()
     return *mBanManager;
 }
 
-BannedAccountsPersistor&
-ApplicationImpl::getBannedAccountsPersistor()
-{
-    return *mBannedAccountsPersistor;
-}
-
 StatusManager&
 ApplicationImpl::getStatusManager()
 {
@@ -1514,10 +1529,17 @@ ApplicationImpl::getOverlayIOContext()
 }
 
 asio::io_context&
-ApplicationImpl::getLedgerCloseIOContext()
+ApplicationImpl::getLedgerApplyIOContext()
 {
-    releaseAssert(mLedgerCloseIOContext);
-    return *mLedgerCloseIOContext;
+    releaseAssert(mLedgerApplyIOContext);
+    return *mLedgerApplyIOContext;
+}
+
+BatchExecutor&
+ApplicationImpl::getBatchExecutor()
+{
+    releaseAssert(mBatchExecutor);
+    return *mBatchExecutor;
 }
 
 void
@@ -1588,17 +1610,17 @@ ApplicationImpl::postOnOverlayThread(std::function<void()>&& f,
 }
 
 void
-ApplicationImpl::postOnLedgerCloseThread(std::function<void()>&& f,
+ApplicationImpl::postOnLedgerApplyThread(std::function<void()>&& f,
                                          std::string jobName)
 {
     JITTER_INJECT_DELAY();
-    releaseAssert(mLedgerCloseIOContext);
+    releaseAssert(mLedgerApplyIOContext);
     getClock().newBackgroundWork();
     LogSlowExecution isSlow{std::move(jobName), LogSlowExecution::Mode::MANUAL,
                             "executed after"};
-    asio::post(*mLedgerCloseIOContext, [this, f = std::move(f), isSlow]() {
+    asio::post(*mLedgerApplyIOContext, [this, f = std::move(f), isSlow]() {
         JITTER_INJECT_DELAY();
-        mPostOnLedgerCloseThreadDelay.Update(isSlow.checkElapsedTime());
+        mPostOnLedgerApplyThreadDelay.Update(isSlow.checkElapsedTime());
         try
         {
             f();

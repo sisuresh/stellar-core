@@ -132,7 +132,6 @@ class TestSCP : public SCPDriver
         return TX_SET_TIMEOUT;
     }
 
-#ifdef CAP_0083
     Value
     makeEmptyTxSetValueFromValue(Value const& value) const override
     {
@@ -148,7 +147,6 @@ class TestSCP : public SCPDriver
         std::copy(value.begin(), value.end(), emptyTxSetValue.begin() + 6);
         return emptyTxSetValue;
     }
-#endif // CAP_0083
 
     bool
     isEmptyTxSetValue(Value const& v) const override
@@ -3485,7 +3483,6 @@ TEST_CASE("nomination tests core5", "[scp][nominationprotocol]")
     }
 }
 
-#ifdef CAP_0087
 TEST_CASE("nomination times out structurally-valid value into empty tx set",
           "[scp][nomination]")
 {
@@ -3939,6 +3936,5 @@ TEST_CASE("incoming PREPARE with non-tx-set-invalid value is dropped",
     // No local emit triggered.
     REQUIRE(scp.mEnvs.empty());
 }
-#endif // CAP_0087
 
 }

@@ -22,13 +22,10 @@ class ApplyLoad
     // of values is [0,1.0].
     double successRate();
 
-    // Closes a ledger with the given transactions and optional upgrades.
-    // `recordSorobanUtilization` indicates whether to record utilization of
-    // Soroban resources in transaction set, this should only be necessary for
-    // the benchmark runs.
+    // Closes a setup ledger through direct externalization. Setup and upgrades
+    // are excluded from benchmark phase timings.
     void closeLedger(std::vector<TransactionFrameBasePtr> const& txs,
-                     xdr::xvector<UpgradeType, 6> const& upgrades = {},
-                     bool recordSorobanUtilization = false);
+                     xdr::xvector<UpgradeType, 6> const& upgrades = {});
 
     // These metrics track what percentage of available resources were used when
     // creating the list of transactions in benchmark().
@@ -48,6 +45,15 @@ class ApplyLoad
     uint32_t getTotalHotArchiveEntries() const;
 
   private:
+    // Times construction, cold validation and application of a benchmark
+    // ledger through local consensus.
+    void closeBenchmarkLedger(std::vector<TransactionFrameBasePtr> const& txs,
+                              bool recordUtilization);
+    void recordSorobanUtilization(ApplicableTxSetFrame const& txSet);
+
+    // Logs the phase timings recorded by closeBenchmarkLedger.
+    void logTxSetPhaseStats() const;
+
     uint32_t calculateRequiredHotArchiveEntries(Config const& cfg);
 
     void setup();
@@ -66,12 +72,9 @@ class ApplyLoad
     void benchmarkLimits();
 
     // Runs for `execute() in `ApplyLoadMode::MAX_SAC_TPS` mode.
-    // Generates SAC transactions and times just the application phase (fee and
-    // sequence number processing, tx execution, and post process, but no disk
-    // writes). This will do a binary search from APPLY_LOAD_MAX_SAC_TPS_MIN_TPS
-    // to APPLY_LOAD_MAX_SAC_TPS_MAX_TPS, attempting to find the largest
-    // transaction set we can execute in under
-    // APPLY_LOAD_TARGET_CLOSE_TIME_MS.
+    // Reports all phases while searching for the largest SAC load that applies
+    // within APPLY_LOAD_TARGET_CLOSE_TIME_MS. Only application timing drives
+    // the search; APPLY_LOAD_TIME_WRITES controls whether it includes writes.
     void findMaxSacTps();
 
     // Runs for `execute() in `ApplyLoadMode::BENCHMARK_MODEL_TX` mode.
@@ -95,8 +98,7 @@ class ApplyLoad
     // parameters.
     double benchmarkLimitsIteration();
 
-    // Generates APPLY_LOAD_CLASSIC_TXS_PER_LEDGER classic payment TXs
-    // using accounts starting at startAccountIdx.
+    // Generate classic payment candidates from accounts at startAccountIdx.
     void generateClassicPayments(std::vector<TransactionFrameBasePtr>& txs,
                                  uint32_t startAccountIdx);
 
@@ -122,6 +124,9 @@ class ApplyLoad
     // to execute, taking APPLY_LOAD_BATCH_SAC_COUNT into account.
     uint32_t calculateBenchmarkModelTxCount() const;
 
+    // Number of classic payment candidates generated per ledger.
+    uint32_t classicTxCount() const;
+
     // Iterate over all available accounts to make sure they are loaded into the
     // BucketListDB cache. Note that this should be run every time an account
     // entry is modified.
@@ -140,6 +145,21 @@ class ApplyLoad
     ApplyLoadMode mMode;
     ApplyLoadModelTx mModelTx;
     ApplyLoadTxProfile mLimitsBasedTxProfile;
+
+    // Construction is timed separately from receiver-side decoding, cold
+    // validation and ledger close. Ledger close includes prepareForApply.
+    std::vector<double> mPhaseConstructionMs;
+    std::vector<double> mPhaseValidationMs;
+    std::vector<double> mPhaseLedgerCloseMs;
+    std::vector<double> mPhaseReceiveToCloseMs;
+
+    // Signature cache totals and the transaction counts used to interpret
+    // them: candidates offered to the tx-set builder, and transactions it
+    // included in the built sets.
+    uint64_t mLedgerSigCacheHits = 0;
+    uint64_t mLedgerSigCacheMisses = 0;
+    uint64_t mBenchmarkCandidateTxCount = 0;
+    uint64_t mBenchmarkTxCount = 0;
 
     uint32_t mTotalHotArchiveEntries;
 
@@ -178,6 +198,12 @@ class ApplyLoad
 
     // Counter for generating unique destination addresses for SAC payments
     uint32_t mDestCounter = 0;
+
+    // Monotonic memo id assigned to generated classic payments to keep their
+    // tx hashes unique within a run and across runs. Seeded from the wall-clock
+    // time at construction (see constructor) so that separate runs start from
+    // different values.
+    uint64_t mNextClassicPaymentMemoId = 0;
 };
 
 #ifdef BUILD_TESTS

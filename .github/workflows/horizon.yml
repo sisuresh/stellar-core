@@ -1,0 +1,21 @@
+name: Horizon Integration Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  horizon:
+    if: github.event.repository.visibility != 'private'
+    uses: stellar/stellar-horizon/.github/workflows/integration-tests.yml@c9e78ebefea9721fcb0b386fc898e4c0e76cee33
+    with:
+      horizon_git_ref: protocol-next
+      core_git_ref: ${{ github.sha }}
+      protocol_version: '28'
+      stellar_rpc_docker_img: 'stellar/stellar-rpc:29.0.0'

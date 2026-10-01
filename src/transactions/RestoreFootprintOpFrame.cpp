@@ -27,24 +27,34 @@ innerResult(OperationResult& res)
 
 struct RestoreFootprintMetrics
 {
-    SorobanMetrics& mMetrics;
+    SorobanApplyMetrics& mMetrics;
 
     uint32_t mLedgerReadByte{0};
     uint32_t mLedgerWriteByte{0};
 
-    RestoreFootprintMetrics(SorobanMetrics& metrics) : mMetrics(metrics)
+    // op execution wall time, captured via getExecTimer()
+    uint64_t mExecTimeNsecs{0};
+    bool mExecTimed{false};
+
+    RestoreFootprintMetrics(SorobanApplyMetrics& metrics) : mMetrics(metrics)
     {
     }
 
     ~RestoreFootprintMetrics()
     {
-        mMetrics.mRestoreFpOpReadLedgerByte.Mark(mLedgerReadByte);
-        mMetrics.mRestoreFpOpWriteLedgerByte.Mark(mLedgerWriteByte);
+        mMetrics.mRestoreFpOpReadLedgerByte += mLedgerReadByte;
+        mMetrics.mRestoreFpOpWriteLedgerByte += mLedgerWriteByte;
+        if (mExecTimed)
+        {
+            mMetrics.mRestoreFpOpExecNsecs.push_back(
+                static_cast<int64_t>(mExecTimeNsecs));
+        }
     }
-    medida::TimerContext
+    ScopedNsecsTimer
     getExecTimer()
     {
-        return mMetrics.mRestoreFpOpExec.TimeScope();
+        mExecTimed = true;
+        return ScopedNsecsTimer(mExecTimeNsecs);
     }
 };
 
@@ -77,7 +87,8 @@ class RestoreFootprintApplyHelper : virtual public LedgerAccessHelper
         AppConnector& app, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta, RestoreFootprintOpFrame const& opFrame,
-        SorobanNetworkConfig const& sorobanConfig)
+        SorobanNetworkConfig const& sorobanConfig,
+        SorobanApplyMetrics& sorobanMetrics)
         : mApp(app)
         , mRes(res)
         , mRefundableFeeTracker(refundableFeeTracker)
@@ -86,7 +97,7 @@ class RestoreFootprintApplyHelper : virtual public LedgerAccessHelper
         , mResources(mOpFrame.mParentTx.sorobanResources())
         , mSorobanConfig(sorobanConfig)
         , mAppConfig(app.getConfig())
-        , mMetrics(app.getSorobanMetrics())
+        , mMetrics(sorobanMetrics)
         , mDiagnosticEvents(mOpMeta.getDiagnosticEventManager())
     {
     }
@@ -254,9 +265,10 @@ class RestoreFootprintPreV23ApplyHelper
         AppConnector& app, AbstractLedgerTxn& ltx, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
         OperationMetaBuilder& opMeta, RestoreFootprintOpFrame const& opFrame,
-        SorobanNetworkConfig const& sorobanConfig)
+        SorobanNetworkConfig const& sorobanConfig,
+        SorobanApplyMetrics& sorobanMetrics)
         : RestoreFootprintApplyHelper(app, res, refundableFeeTracker, opMeta,
-                                      opFrame, sorobanConfig)
+                                      opFrame, sorobanConfig, sorobanMetrics)
         , PreV23LedgerAccessHelper(ltx)
     {
     }
@@ -295,9 +307,11 @@ class RestoreFootprintParallelApplyHelper
         AppConnector& app, ThreadParallelApplyLedgerState const& threadState,
         ParallelLedgerInfo const& ledgerInfo, OperationResult& res,
         std::optional<RefundableFeeTracker>& refundableFeeTracker,
-        OperationMetaBuilder& opMeta, RestoreFootprintOpFrame const& opFrame)
+        OperationMetaBuilder& opMeta, RestoreFootprintOpFrame const& opFrame,
+        SorobanApplyMetrics& sorobanMetrics)
         : RestoreFootprintApplyHelper(app, res, refundableFeeTracker, opMeta,
-                                      opFrame, threadState.getSorobanConfig())
+                                      opFrame, threadState.getSorobanConfig(),
+                                      sorobanMetrics)
         , ParallelLedgerAccessHelper(threadState, ledgerInfo)
         , mApplyLedgerView(threadState.getSnapshot())
     {
@@ -370,7 +384,7 @@ std::optional<ParallelTxSuccessVal>
 RestoreFootprintOpFrame::doParallelApply(
     AppConnector& app, ThreadParallelApplyLedgerState const& threadState,
     Config const& appConfig, Hash const& txPrngSeed,
-    ParallelLedgerInfo const& ledgerInfo, SorobanMetrics& sorobanMetrics,
+    ParallelLedgerInfo const& ledgerInfo, SorobanApplyMetrics& sorobanMetrics,
     OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
     OperationMetaBuilder& opMeta) const
@@ -380,8 +394,9 @@ RestoreFootprintOpFrame::doParallelApply(
         protocolVersionStartsFrom(ledgerInfo.getLedgerVersion(),
                                   PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
     releaseAssertOrThrow(refundableFeeTracker);
-    RestoreFootprintParallelApplyHelper helper(
-        app, threadState, ledgerInfo, res, refundableFeeTracker, opMeta, *this);
+    RestoreFootprintParallelApplyHelper helper(app, threadState, ledgerInfo,
+                                               res, refundableFeeTracker,
+                                               opMeta, *this, sorobanMetrics);
     return helper.takeResult(helper.apply());
 }
 
@@ -391,14 +406,15 @@ RestoreFootprintOpFrame::doApplyForSoroban(
     SorobanNetworkConfig const& sorobanConfig, Hash const& sorobanBasePrngSeed,
     OperationResult& res,
     std::optional<RefundableFeeTracker>& refundableFeeTracker,
-    OperationMetaBuilder& opMeta) const
+    OperationMetaBuilder& opMeta, SorobanApplyMetrics& sorobanMetrics) const
 {
     releaseAssertOrThrow(
         protocolVersionIsBefore(ltx.loadHeader().current().ledgerVersion,
                                 PARALLEL_SOROBAN_PHASE_PROTOCOL_VERSION));
     releaseAssertOrThrow(refundableFeeTracker);
     RestoreFootprintPreV23ApplyHelper helper(
-        app, ltx, res, refundableFeeTracker, opMeta, *this, sorobanConfig);
+        app, ltx, res, refundableFeeTracker, opMeta, *this, sorobanConfig,
+        sorobanMetrics);
     return helper.apply();
 }
 

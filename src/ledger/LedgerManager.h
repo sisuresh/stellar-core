@@ -19,7 +19,8 @@ namespace stellar
 
 class LedgerCloseData;
 class Database;
-class SorobanMetrics;
+class SorobanMetricsRegistry;
+struct SorobanApplyMetrics;
 class InMemorySorobanState;
 
 // This diagram provides a schematic of the flow of (logical) ledgers coming in
@@ -58,7 +59,7 @@ class InMemorySorobanState;
 //      m │    │ i │    │  │  (or triggers catchup)    │
 //      e │    │ n │    │  │                           │
 //        │    │   │    │  │ ┌───────────────────┐     │    ┌───┐
-//      p │    │ T │    │  ▼ │  mSyncingLedgers  │─────┼───►│   │
+//      p │    │ T │    │  ▼ │  mBufferedLedgers │─────┼───►│   │
 //      a │    │ h │    │    └───────────────────┘     │    │   │
 //      s │    │ r │    │   H                     Q    │    │   │
 //      s │    │ e │    └──────────────────────────────┘    │   │
@@ -99,12 +100,12 @@ class InMemorySorobanState;
 //
 //     H -- LedgerApplyManagerImpl::mLargestLedgerSeqHeard tracks this, it is
 //          the ledger sequence number of the most recent ledger added to
-//          mSyncingLedgers (whether or not any ledgers are still _in_
-//          mSyncingLedgers, it may have been emptied by the apply thread).
+//          mBufferedLedgers (whether or not any ledgers are still _in_
+//          mBufferedLedgers, it may have been emptied by the apply thread).
 //
 //     Q -- LedgerApplyManagerImpl::mLastQueuedToApply tracks this, it is the
 //          ledger sequence number of the most recent ledger _dequeued_ from
-//          mSyncingLedgers and posted over to the apply thread. This does not
+//          mBufferedLedgers and posted over to the apply thread. This does not
 //          mean it has been applied! Just posted to the apply thread.
 //
 //     A -- The LedgerCloseData::mLedgerSeq of the argument passed to
@@ -157,6 +158,26 @@ class InMemorySorobanState;
 // the actions taken and variables updated by the main thread _after_ apply, and
 // the term "apply" to refer to actions taken and variables updated by the apply
 // thread.
+//
+// Concretely, there are three distinct ledger states in flight at any time,
+// and identifiers are named for which one they refer to:
+//
+//   - "lastClosed" / LCL: the CANONICAL state, owned by the main thread
+//     (mLastClosedLedgerState, guarded by mLastClosedLedgerStateMutex). This
+//     is the only state that consensus, transaction admission, fee/limit
+//     queries, overlay, and HTTP responses may read. A ledger is "closed"
+//     only once the main thread has adopted it as LCL in
+//     completeLedgerClose.
+//
+//   - "apply": the WORKING state of the apply pipeline (mApplyState, the
+//     live bucketlist and DB, ledger A on the ladder above). It may be up to
+//     MAX_EXTERNALIZE_LEDGER_APPLY_DRIFT ledgers ahead of LCL and is mutated
+//     while the main thread runs.
+//
+//   - "applied": the OUTPUT of apply for one ledger (ImmutableLedgerData):
+//     committed and immutable, but not yet adopted as LCL. It is handed off by
+//     value from the apply thread to the main thread, which adopts it in
+//     completeLedgerClose.
 class LedgerManager
 {
 
@@ -299,6 +320,16 @@ class LedgerManager
     virtual ::rust::Box<rust_bridge::SorobanModuleCache>
     getModuleCacheForTesting() = 0;
     virtual uint64_t getSorobanInMemoryStateSizeForTesting() = 0;
+
+    // Records the submission time of a self-submitted transaction for the
+    // tx-latency metrics. No-op unless
+    // Config::LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING is set.
+    virtual void recordTxSubmission(Hash const& contentsHash) = 0;
+
+    // Begins/ends a load-generation latency measurement window. No-op unless
+    // Config::LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING is set.
+    virtual void beginTxLatencyMeasurement(uint32_t expectedTxCount) = 0;
+    virtual void finalizeTxLatencyMeasurement() = 0;
 #endif
 
     // Return the (changing) number of seconds since the LCL closed.
@@ -343,11 +374,11 @@ class LedgerManager
     // upgradeApplied should be true if a protocol or network config setting
     // upgrade occurred during the ledger close. If inMemorySnapshotForInvariant
     // is not null, this will kick off a snapshot invariant check.
-    virtual void
-    advanceLedgerStateAndPublish(uint32_t ledgerSeq, bool calledViaExternalize,
-                                 LedgerCloseData const& ledgerData,
-                                 ImmutableLedgerDataPtr newLedgerState,
-                                 bool upgradeApplied) = 0;
+    virtual void completeLedgerClose(
+        uint32_t ledgerSeq, bool calledViaExternalize,
+        LedgerCloseData const& ledgerData,
+        ImmutableLedgerDataPtr appliedLedgerState, bool upgradeApplied,
+        std::vector<SorobanApplyMetrics>&& sorobanApplyMetrics) = 0;
 
     virtual void assertSetupPhase() const = 0;
 #ifdef BUILD_TESTS
@@ -368,7 +399,7 @@ class LedgerManager
 
     virtual void manuallyAdvanceLedgerHeader(LedgerHeader const& header) = 0;
 
-    virtual SorobanMetrics& getSorobanMetrics() = 0;
+    virtual SorobanMetricsRegistry& getSorobanMetrics() = 0;
     virtual ::rust::Box<rust_bridge::SorobanModuleCache> getModuleCache() = 0;
 
     virtual ~LedgerManager()

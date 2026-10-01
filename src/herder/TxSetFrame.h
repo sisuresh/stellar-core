@@ -119,12 +119,15 @@ makeTxSetFromTransactions(
     uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset
 #ifdef BUILD_TESTS
-    // Skips the tx set validation and preserves the pointers
-    // to the passed-in transactions - use in conjunction with
-    // `enforceTxsApplyOrder` argument in test-only overrides.
+    // `enforceTxsApplyOrder` forces the transactions to be ordered the same
+    // way as in the provided container. This is used by the test `closeLedger`
+    // helpers with the `strictOrder` flag enabled.
+    // `disableTxValidationForLegacyScenario` is used in the same helpers
+    // and it disables the input transaction validation.
     ,
-    bool skipValidation = false,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {}
+    bool enforceTxsApplyOrder = false,
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {},
+    bool disableTxValidationForLegacyScenario = false
 #endif
 );
 std::pair<TxSetXDRFrameConstPtr, ApplicableTxSetFrameConstPtr>
@@ -133,12 +136,15 @@ makeTxSetFromTransactions(
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset,
     PerPhaseTransactionList& invalidTxsPerPhase
 #ifdef BUILD_TESTS
-    // Skips the tx set validation and preserves the pointers
-    // to the passed-in transactions - use in conjunction with
-    // `enforceTxsApplyOrder` argument in test-only overrides.
+    // `enforceTxsApplyOrder` forces the transactions to be ordered the same
+    // way as in the provided container. This is used by the test `closeLedger`
+    // helpers with the `strictOrder` flag enabled.
+    // `disableTxValidationForLegacyScenario` is used in the same helpers
+    // and it disables the input transaction validation.
     ,
-    bool skipValidation = false,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {}
+    bool enforceTxsApplyOrder = false,
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {},
+    bool disableTxValidationForLegacyScenario = false
 #endif
 );
 
@@ -147,13 +153,15 @@ std::pair<TxSetXDRFrameConstPtr, ApplicableTxSetFrameConstPtr>
 makeTxSetFromTransactions(
     TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset, bool enforceTxsApplyOrder = false,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {});
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {},
+    bool disableTxValidationForLegacyScenario = false);
 std::pair<TxSetXDRFrameConstPtr, ApplicableTxSetFrameConstPtr>
 makeTxSetFromTransactions(
     TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset, TxFrameList& invalidTxs,
     bool enforceTxsApplyOrder = false,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {});
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder = {},
+    bool disableTxValidationForLegacyScenario = false);
 #endif
 
 // `TxSetFrame` is a wrapper around `TransactionSet` or
@@ -378,8 +386,9 @@ class TxSetPhaseFrame
         PerPhaseTransactionList& invalidTxsPerPhase
 #ifdef BUILD_TESTS
         ,
-        bool skipValidation,
-        txtest::ParallelSorobanOrder const& parallelSorobanOrder
+        bool enforceTxsApplyOrder,
+        txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+        bool disableTxValidationForLegacyScenario
 #endif
     );
 #ifdef BUILD_TESTS
@@ -388,7 +397,8 @@ class TxSetPhaseFrame
         TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
         uint64_t upperBoundCloseTimeOffset, TxFrameList& invalidTxs,
         bool enforceTxsApplyOrder,
-        txtest::ParallelSorobanOrder const& parallelSorobanOrder);
+        txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+        bool disableTxValidationForLegacyScenario);
 #endif
     TxSetPhaseFrame(TxSetPhase phase, TxFrameList const& txs,
                     std::shared_ptr<InclusionFeeMap> inclusionFeeMap);
@@ -508,11 +518,12 @@ class ApplicableTxSetFrame
         return mPhases.size();
     }
 
-    // Returns the sum of all fees that this transaction set would take.
+    // Returns the sum of all fees that this transaction set would take. Clamps
+    // at INT64_MAX.
     int64_t getTotalFees(LedgerHeader const& lh) const;
 
     // Returns the sum of all _inclusion fee_ bids for all transactions in this
-    // set.
+    // set. Clamps at INT64_MAX.
     int64_t getTotalInclusionFees() const;
 
     // Returns whether this transaction set is generalized, i.e. representable
@@ -550,8 +561,9 @@ class ApplicableTxSetFrame
         PerPhaseTransactionList& invalidTxsPerPhase
 #ifdef BUILD_TESTS
         ,
-        bool skipValidation,
-        txtest::ParallelSorobanOrder const& parallelSorobanOrder
+        bool enforceTxsApplyOrder,
+        txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+        bool disableTxValidationForLegacyScenario
 #endif
     );
 #ifdef BUILD_TESTS
@@ -560,7 +572,8 @@ class ApplicableTxSetFrame
         TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
         uint64_t upperBoundCloseTimeOffset, TxFrameList& invalidTxs,
         bool enforceTxsApplyOrder,
-        txtest::ParallelSorobanOrder const& parallelSorobanOrder);
+        txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+        bool disableTxValidationForLegacyScenario);
 #endif
 
     ApplicableTxSetFrame(Application& app,

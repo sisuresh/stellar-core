@@ -22,7 +22,11 @@
 #include "util/ProtocolVersion.h"
 #include "util/XDRCereal.h"
 #include "util/XDROperators.h"
+#include "util/numeric.h"
 #include "xdrpp/marshal.h"
+#ifdef BUILD_TESTS
+#include "test/Catch2.h"
+#endif
 
 #include <Tracy.hpp>
 #include <algorithm>
@@ -798,8 +802,9 @@ makeTxSetFromTransactions(
     uint64_t lowerBoundCloseTimeOffset, uint64_t upperBoundCloseTimeOffset
 #ifdef BUILD_TESTS
     ,
-    bool skipValidation,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder
+    bool enforceTxsApplyOrder,
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+    bool disableTxValidationForLegacyScenario
 #endif
 )
 {
@@ -809,7 +814,8 @@ makeTxSetFromTransactions(
                                      upperBoundCloseTimeOffset, invalidTxs
 #ifdef BUILD_TESTS
                                      ,
-                                     skipValidation, parallelSorobanOrder
+                                     enforceTxsApplyOrder, parallelSorobanOrder,
+                                     disableTxValidationForLegacyScenario
 #endif
     );
 }
@@ -821,8 +827,9 @@ makeTxSetFromTransactions(
     PerPhaseTransactionList& invalidTxs
 #ifdef BUILD_TESTS
     ,
-    bool skipValidation,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder
+    bool enforceTxsApplyOrder,
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+    bool disableTxValidationForLegacyScenario
 #endif
 )
 {
@@ -849,8 +856,12 @@ makeTxSetFromTransactions(
         auto& invalid = invalidTxs[i];
         TxFrameList validatedTxs;
 #ifdef BUILD_TESTS
-        if (skipValidation)
+        if (disableTxValidationForLegacyScenario)
         {
+            REQUIRE(protocolVersionIsBefore(app.getLedgerManager()
+                                                .getLastClosedLedgerHeader()
+                                                .header.ledgerVersion,
+                                            ProtocolVersion::V_20));
             validatedTxs = phaseTxs;
         }
         else
@@ -860,6 +871,21 @@ makeTxSetFromTransactions(
                 phaseTxs, app, accountFeeMap, lowerBoundCloseTimeOffset,
                 upperBoundCloseTimeOffset, invalid);
 #ifdef BUILD_TESTS
+            // In tests we shouldn't be really trying to close ledgers with
+            // invalid transactions trimmed (which is unfortunately a very
+            // common footgun that many tests have hit).
+            // However, enforcing that generically is quite involved as test
+            // builds are used for e.g. loadgen scenarios. This method is also
+            // expectedly used in the tests that test tx trimming.
+            // So for now we only ensure that a subset of test-only scenarios
+            // which also historically had a lot of issues due to skipping
+            // validation only deals with the valid transactions now.
+            // Ideally we clean this up further in the future and ensure that
+            // tests always close ledgers with valid transactions.
+            if (enforceTxsApplyOrder)
+            {
+                REQUIRE(invalid.empty());
+            }
         }
 #endif
         auto phaseType = static_cast<TxSetPhase>(i);
@@ -867,7 +893,7 @@ makeTxSetFromTransactions(
             applySurgePricing(phaseType, validatedTxs, app
 #ifdef BUILD_TESTS
                               ,
-                              skipValidation, parallelSorobanOrder
+                              enforceTxsApplyOrder, parallelSorobanOrder
 #endif
             );
         auto inclusionFeeMap = inclusionFeeMapBinding;
@@ -907,7 +933,7 @@ makeTxSetFromTransactions(
     // for nomination.
     auto outputTxSet = preliminaryApplicableTxSet->toWireTxSetFrame();
 #ifdef BUILD_TESTS
-    if (skipValidation)
+    if (enforceTxsApplyOrder)
     {
         // Fill in the contents hash if we're skipping the normal roundtrip
         // and validation flow.
@@ -1004,12 +1030,14 @@ std::pair<TxSetXDRFrameConstPtr, ApplicableTxSetFrameConstPtr>
 makeTxSetFromTransactions(
     TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset, bool enforceTxsApplyOrder,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder)
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+    bool disableTxValidationForLegacyScenario)
 {
     TxFrameList invalid;
-    return makeTxSetFromTransactions(
-        txs, app, lowerBoundCloseTimeOffset, upperBoundCloseTimeOffset, invalid,
-        enforceTxsApplyOrder, parallelSorobanOrder);
+    return makeTxSetFromTransactions(txs, app, lowerBoundCloseTimeOffset,
+                                     upperBoundCloseTimeOffset, invalid,
+                                     enforceTxsApplyOrder, parallelSorobanOrder,
+                                     disableTxValidationForLegacyScenario);
 }
 
 std::pair<TxSetXDRFrameConstPtr, ApplicableTxSetFrameConstPtr>
@@ -1017,7 +1045,8 @@ makeTxSetFromTransactions(
     TxFrameList txs, Application& app, uint64_t lowerBoundCloseTimeOffset,
     uint64_t upperBoundCloseTimeOffset, TxFrameList& invalidTxs,
     bool enforceTxsApplyOrder,
-    txtest::ParallelSorobanOrder const& parallelSorobanOrder)
+    txtest::ParallelSorobanOrder const& parallelSorobanOrder,
+    bool disableTxValidationForLegacyScenario)
 {
     releaseAssert(threadIsMain());
     releaseAssert(!app.getLedgerManager().isApplying());
@@ -1042,7 +1071,8 @@ makeTxSetFromTransactions(
     invalid.resize(perPhaseTxs.size());
     auto res = makeTxSetFromTransactions(
         perPhaseTxs, app, lowerBoundCloseTimeOffset, upperBoundCloseTimeOffset,
-        invalid, enforceTxsApplyOrder, parallelSorobanOrder);
+        invalid, enforceTxsApplyOrder, parallelSorobanOrder,
+        disableTxValidationForLegacyScenario);
     if (enforceTxsApplyOrder)
     {
         auto const& resPhases = res.second->getPhases();
@@ -2277,7 +2307,8 @@ ApplicableTxSetFrame::getTotalFees(LedgerHeader const& lh) const
     {
         for (auto const& tx : phaseTxs)
         {
-            total += tx->getFee(lh, getTxBaseFee(tx), true);
+            total =
+                saturatingAdd(total, tx->getFee(lh, getTxBaseFee(tx), true));
         }
     }
     return total;
@@ -2292,7 +2323,7 @@ ApplicableTxSetFrame::getTotalInclusionFees() const
     {
         for (auto const& tx : phaseTxs)
         {
-            total += tx->getInclusionFee();
+            total = saturatingAdd(total, tx->getInclusionFee());
         }
     }
     return total;

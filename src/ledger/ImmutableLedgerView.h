@@ -10,6 +10,7 @@
 #include "ledger/NetworkConfig.h"
 #include "util/NonCopyable.h"
 #include <functional>
+#include <optional>
 #include <variant>
 
 namespace stellar
@@ -157,9 +158,6 @@ class ImmutableLedgerView : public virtual AbstractLedgerView
     std::vector<LedgerEntry>
     loadLiveKeys(std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
                  std::string const& label) const;
-    std::optional<std::vector<LedgerEntry>>
-    loadLiveKeysFromLedger(std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-                           uint32_t ledgerSeq) const;
     std::vector<LedgerEntry>
     loadPoolShareTrustLinesByAccountAndAsset(AccountID const& accountID,
                                              Asset const& asset) const;
@@ -169,18 +167,26 @@ class ImmutableLedgerView : public virtual AbstractLedgerView
         uint32_t ledgerSeq, EvictionMetrics& metrics, EvictionIterator iter,
         std::shared_ptr<EvictionStatistics> stats,
         StateArchivalSettings const& sas, uint32_t ledgerVers) const;
+
+    // Scan the live bucket list for entries of a given type. Note this iterates
+    // over all BucketEntry, so some may be shadowed and outdated.
     void scanLiveEntriesOfType(
         LedgerEntryType type,
         std::function<Loop(BucketEntry const&)> callback) const;
+
+    // Scan the live bucket list for entries of a given type. Calls callback
+    // with the latest live version for each entry.
+    void scanCurrentLiveEntriesOfType(
+        LedgerEntryType type,
+        std::function<void(LedgerEntry const&, LedgerKey const&)> callback)
+        const;
 
     // === Hot Archive BucketList methods ===
     std::shared_ptr<HotArchiveBucketEntry const>
     loadArchiveEntry(LedgerKey const& k) const;
     std::vector<HotArchiveBucketEntry>
-    loadArchiveKeys(std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys) const;
-    std::optional<std::vector<HotArchiveBucketEntry>> loadArchiveKeysFromLedger(
-        std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-        uint32_t ledgerSeq) const;
+    loadArchiveKeys(std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
+                    std::string const& label) const;
     void scanAllArchiveEntries(
         std::function<Loop(HotArchiveBucketEntry const&)> callback) const;
 };
@@ -204,15 +210,59 @@ class ApplyLedgerView : private ImmutableLedgerView,
     using ImmutableLedgerView::load;
     using ImmutableLedgerView::loadArchiveEntry;
     using ImmutableLedgerView::loadArchiveKeys;
-    using ImmutableLedgerView::loadArchiveKeysFromLedger;
     using ImmutableLedgerView::loadInflationWinners;
     using ImmutableLedgerView::loadLiveEntry;
     using ImmutableLedgerView::loadLiveKeys;
-    using ImmutableLedgerView::loadLiveKeysFromLedger;
     using ImmutableLedgerView::loadPoolShareTrustLinesByAccountAndAsset;
     using ImmutableLedgerView::scanAllArchiveEntries;
+    using ImmutableLedgerView::scanCurrentLiveEntriesOfType;
     using ImmutableLedgerView::scanForEviction;
     using ImmutableLedgerView::scanLiveEntriesOfType;
+};
+
+// A ledger view used by the read-only phase of the Soroban pre-apply.
+//
+// It's a thin wrapper around the entries updated so far in the current ledger,
+// and the LCL view, which allows the pre-apply phase to observe the changes
+// that happened in the classic phase.
+//
+// Lookups are first attempted among the updated entries, and only then in the
+// LCL view.
+class SorobanPreApplyLedgerView : public AbstractLedgerView
+{
+  public:
+    // A function for retrieving a ledger entry by key from an incomprehensive
+    // set of ledger entries (i.e. the entries that have been updated so far in
+    // the ledger).
+    // `nullopt` represents that the entry is not present in the updated set.
+    // When optional is non-nullopt, `nullptr` entry represents a deleted entry,
+    // and a non-null `shared_ptr` represents an existing updated entry.
+    using UpdatedEntryGetter =
+        std::function<std::optional<std::shared_ptr<LedgerEntry const>>(
+            LedgerKey const&)>;
+
+    // Creates a view from the provided LCL view and a getter for the entries
+    // that have been updated so far in the ledger.
+    SorobanPreApplyLedgerView(std::shared_ptr<LedgerHeader const> header,
+                              UpdatedEntryGetter getUpdatedEntry,
+                              ApplyLedgerView const& lclView);
+
+    LedgerHeaderWrapper getLedgerHeader() const override;
+    LedgerEntryWrapper getAccount(AccountID const& account) const override;
+    LedgerEntryWrapper getAccount(LedgerHeaderWrapper const& header,
+                                  TransactionFrame const& tx) const override;
+    LedgerEntryWrapper getAccount(LedgerHeaderWrapper const& header,
+                                  TransactionFrame const& tx,
+                                  AccountID const& accountID) const override;
+    LedgerEntryWrapper load(LedgerKey const& key) const override;
+    void executeWithMaybeInnerSnapshot(
+        std::function<void(CheckValidLedgerViewWrapper const&)> f)
+        const override;
+
+  private:
+    std::shared_ptr<LedgerHeader const> mHeader;
+    UpdatedEntryGetter mGetUpdatedEntry;
+    ApplyLedgerView mLclView;
 };
 
 // A helper class to create and query read-only snapshots
@@ -231,6 +281,8 @@ class CheckValidLedgerViewWrapper : public NonMovableOrCopyable
     CheckValidLedgerViewWrapper(AbstractLedgerTxn& ltx);
     CheckValidLedgerViewWrapper(Application& app);
     explicit CheckValidLedgerViewWrapper(ImmutableLedgerView const& ledgerView);
+    explicit CheckValidLedgerViewWrapper(
+        std::unique_ptr<AbstractLedgerView const> getter);
 #ifdef BUILD_TESTS
     // Set by overlay-only mode call sites so commonValid skips the seqnum
     // equality check: on-disk seqnums are frozen at genesis while
@@ -283,15 +335,17 @@ class ImmutableLedgerData : public NonMovableOrCopyable
     // Raw immutable bucket data for the live and hot archive bucket lists
     std::shared_ptr<BucketListSnapshotData<LiveBucket> const> const
         mLiveBucketData;
-    std::map<uint32_t,
-             std::shared_ptr<BucketListSnapshotData<LiveBucket> const>> const
-        mLiveHistoricalSnapshots;
     std::shared_ptr<BucketListSnapshotData<HotArchiveBucket> const> const
         mHotArchiveBucketData;
-    std::map<
-        uint32_t,
-        std::shared_ptr<BucketListSnapshotData<HotArchiveBucket> const>> const
-        mHotArchiveHistoricalSnapshots;
+
+    // Pre-resolved metric references shared by all views over this state.
+    // Resolving metrics takes the global registry lock, so they are resolved
+    // once here instead of in every view construction, which is on the
+    // per-transaction hot path.
+    std::shared_ptr<BucketSnapshotMetrics<LiveBucket> const> const
+        mLiveSnapshotMetrics;
+    std::shared_ptr<BucketSnapshotMetrics<HotArchiveBucket> const> const
+        mHotArchiveSnapshotMetrics;
 
     std::optional<SorobanNetworkConfig const> const mSorobanConfig;
     LedgerHeaderHistoryEntry const mLastClosedLedgerHeader;
@@ -302,8 +356,7 @@ class ImmutableLedgerData : public NonMovableOrCopyable
     friend class ImmutableLedgerView;
 
   public:
-    // Construct a new ledger state, rotating historical snapshots from
-    // prevState. If prevState is null, history maps will be empty.
+    // Construct a new immutable ledger state snapshot.
     // sorobanConfig is nullopt for pre-Soroban protocol versions, or when
     // building the empty initial state at startup.
     ImmutableLedgerData(LiveBucketList const& liveBL,
@@ -311,16 +364,14 @@ class ImmutableLedgerData : public NonMovableOrCopyable
                         LedgerHeaderHistoryEntry const& lcl,
                         HistoryArchiveState const& has,
                         std::optional<SorobanNetworkConfig> sorobanConfig,
-                        ImmutableLedgerDataPtr prevState,
-                        uint32_t numHistoricalSnapshots);
+                        MetricsRegistry& metrics);
 
     // Factory: constructs a ImmutableLedgerData, auto-loading the
     // SorobanNetworkConfig from the bucket list when the protocol requires it.
     static ImmutableLedgerDataPtr createAndMaybeLoadConfig(
         LiveBucketList const& liveBL, HotArchiveBucketList const& hotArchiveBL,
         LedgerHeaderHistoryEntry const& lcl, HistoryArchiveState const& has,
-        MetricsRegistry& metrics, ImmutableLedgerDataPtr prevState,
-        uint32_t numHistoricalSnapshots);
+        MetricsRegistry& metrics);
 
     SorobanNetworkConfig const& getSorobanConfig() const;
     bool hasSorobanConfig() const;

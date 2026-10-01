@@ -47,6 +47,7 @@ bucketlistDB-live.bulk.poolshareTrustlines  | timer     | time to load poolshare
 bucketlistDB-live.bulk.prefetch             | timer     | time to prefetch
 bucketlistDB-live.bulk.eviction           | timer     | time to load for eviction scan
 bucketlistDB-live.bulk.query              | timer     | time to load for query server
+bucketlistDB-hotArchive.bulk.hot-query    | timer     | time to load hot archive entries for query server
 bucketlistDB-<X>.<Y>.sum                  | counter   | sum of time (microseconds) to load single entry of type <Y> on BucketList <X> (live/hotArchive)
 bucketlistDB-<X>.<Y>.count                | counter   | number of times single entry of type <Y> on BucketList <X> (live/hotArchive) is loaded
 bucketlistDB-<X>.<Y>.max                  | counter   | max (since last metrics call) of time (microseconds) to load single entry of type <Y> on BucketList <X> (live/hotArchive)
@@ -54,22 +55,22 @@ bucketlistDB-cache.hit                    | meter     | number of cache hits on 
 bucketlistDB-cache.miss                   | meter     | number of cache misses on Live BucketList Disk random eviction cache
 bucketlistDB.cache.entries                | counter   | number of entries currently in Live BucketList index cache
 bucketlistDB.cache.bytes                  | counter   | estimated size in bytes of entries in Live BucketList index cache
+clock.ntp.offset-ms                       | counter   | last measured offset (ms) between the local clock and the configured NTP server (signed; positive means the local clock is behind true time). Requires NTP_DRIFT_CHECK_SERVER
+clock.ntp.probe-failure                   | meter     | NTP drift-check probe failed to reach NTP server
 crypto.verify.hit                         | meter     | number of signature cache hits
 crypto.verify.miss                        | meter     | number of signature cache misses
 crypto.verify.total                       | meter     | sum of both hits and misses
 crypto.verify.tx-valid-hit                | meter     | signature cache hits that occurred while validating transactions (outside of background signature validation)
 crypto.verify.tx-valid-total              | meter     | sum of both hits and misses during transaction validation (outside of background signature validation)
+herder.txset.build                        | timer     | time spent building the tx set proposed at nomination from the transaction queues
+herder.txset.validate                     | timer     | time spent turning a received tx set into an applicable tx set and validating it on a validity-cache miss
 herder.pending[-soroban]-txs.age0         | counter   | number of gen0 pending transactions
 herder.pending[-soroban]-txs.age1         | counter   | number of gen1 pending transactions
 herder.pending[-soroban]-txs.age2         | counter   | number of gen2 pending transactions
 herder.pending[-soroban]-txs.age3         | counter   | number of gen3 pending transactions
 herder.pending[-soroban]-txs.banned       | counter   | number of transactions that got banned
-herder.pending[-soroban]-txs.sum          | counter   | sum of time (milliseconds) for transactions to be included in a ledger
-herder.pending[-soroban]-txs.count        | counter   | number of transactions to be included in a ledger
-herder.pending[-soroban]-txs.max          | counter   | largest time (milliseconds) for a transaction to be included in a ledger since last metrics call
-herder.pending[-soroban]-txs.self-sum     | counter   | sum of time (milliseconds) for transactions submitted from this node to be included in a ledger
-herder.pending[-soroban]-txs.self-count   | counter   | number of transactions submitted from this node to be included in a ledger
-herder.pending[-soroban]-txs.self-max     | counter   | largest time (milliseconds) for a transaction submitted from this node to be included in a ledger since last metrics call
+herder.pending[-soroban]-txs.delay        | timer     | time for transactions to be included in a ledger
+herder.pending[-soroban]-txs.self-delay   | timer     | time for transactions submitted from this node to be included in a ledger
 herder.pending[-soroban]-txs.evicted-due-to-low-fee-count   | counter   | Count of transactions evicted by higher fee txs when queue is near its capacity.
 herder.pending[-soroban]-txs.evicted-due-to-age-count   | counter   | Count of transactions that had low fee for too long and have not been included into several ledgers in a row.
 herder.pending[-soroban]-txs.not-included-due-to-low-fee-count   | counter   | Count of transactions that were not included into queue because it is at capacity and the fee is too low to replace other txs.
@@ -165,10 +166,7 @@ overlay.outbound.attempt                  | meter     | outbound connection atte
 overlay.outbound.cancel                   | meter     | outbound connection cancelled
 overlay.outbound.drop                     | meter     | outbound connection dropped
 overlay.outbound.establish                | meter     | outbound connection established (added to pending)
-overlay.recv.<X>                          | timer     | received message <X> (except transaction)
-overlay.recv-transaction.sum              | counter   | sum of time (microseconds) to receive transaction message
-overlay.recv-transaction.count            | counter   | number of transaction messages received
-overlay.recv-transaction.max              | counter   | maximum time (microseconds) to receive transaction message since last metrics call
+overlay.recv.<X>                          | timer     | received message <X>
 overlay.send.<X>                          | meter     | sent message <X>
 overlay.timeout.idle                      | meter     | idle peer timeout
 overlay.timeout.straggler                 | meter     | straggler peer timeout
@@ -198,6 +196,7 @@ scp.timing.externalized                   | timer     | time spent in ballot pro
 scp.timing.first-to-self-externalize-lag  | timer     | delay between first externalize message and local node externalizing
 scp.timing.self-to-others-externalize-lag | timer     | delay between local node externalizing and later externalize messages from other nodes
 scp.timing.ballot-blocked-on-txset        | timer     | time balloting was blocked waiting for a txset download (milliseconds)
+scp.trigger.prepare-start-fallback        | meter     | trigger timer fell back from the network-close-time anchor to the local prepare-start anchor
 scp.value.invalid                         | meter     | SCP value is invalid
 scp.value.valid                           | meter     | SCP value is valid
 scp.slot.values-referenced                | histogram | number of values referenced per consensus round
@@ -280,7 +279,8 @@ soroban.config.bucket-list-target-size-byte  | counter   | soroban config settin
 soroban.module-cache.num-entries             | counter   | current number of entries in module cache
 soroban.module-cache.compilation-time        | timer     | times each contract compilation when adding to module cache
 soroban.module-cache.rebuild-time            | timer     | times each rebuild of module cache (including all compilations)
-soroban.module-cache.rebuild-bytes           | counter   | bytes of WASM bytecode compiled in last rebuild of module cache
+soroban.module-cache.rebuild-wasm-bytes      | counter   | bytes of WASM bytecode compiled in last rebuild of module cache
+soroban.module-cache.rebuild-heap-bytes      | counter   | bytes of heap memory allocated in last rebuild of module cache
 soroban.in-memory-state.contract-code-size   | counter   | size in bytes of non-evicted ContractCode entries according to memory cost model
 soroban.in-memory-state.contract-data-size   | counter   | size in bytes of ContractData entries in memory
 soroban.in-memory-state.contract-code-entries   | counter   | number of ContractCode entries in memory

@@ -8,7 +8,8 @@
 *.lib
 *.user
 *.xdr
-!test-lcm/**/*.xdr
+!test-lcm-current/**/*.xdr
+!test-lcm-next/**/*.xdr
 *.cache
 *.tlog
 *.lastbuildstate
@@ -99,6 +100,7 @@ compile_commands.json
 # tracy binaries
 /tracy-capture
 /tracy-gui
+/tracy-import-chrome
 
 # test output
 stellar-core-test-*

@@ -188,6 +188,12 @@ CheckValidLedgerViewWrapper::CheckValidLedgerViewWrapper(
 {
 }
 
+CheckValidLedgerViewWrapper::CheckValidLedgerViewWrapper(
+    std::unique_ptr<AbstractLedgerView const> getter)
+    : mGetter(std::move(getter))
+{
+}
+
 LedgerHeaderWrapper
 CheckValidLedgerViewWrapper::getLedgerHeader() const
 {
@@ -222,62 +228,19 @@ ImmutableLedgerData::checkInvariant() const
     releaseAssert(mHotArchiveBucketData);
 }
 
-namespace
-{
-// Build the next historical snapshot map by copying the previous map,
-// evicting the oldest entry if at capacity, and inserting the previous
-// state's current snapshot keyed by its ledger sequence number.
-template <class BucketT>
-auto
-rotateHistorical(
-    std::shared_ptr<BucketListSnapshotData<BucketT> const> const& prevData,
-    std::map<uint32_t,
-             std::shared_ptr<BucketListSnapshotData<BucketT> const>> const&
-        prevHistorical,
-    uint32_t prevLedgerSeq, uint32_t numHistorical)
-{
-    std::map<uint32_t, std::shared_ptr<BucketListSnapshotData<BucketT> const>>
-        result;
-    if (numHistorical == 0 || !prevData)
-    {
-        return result;
-    }
-    result = prevHistorical;
-    if (result.size() == numHistorical)
-    {
-        result.erase(result.begin());
-    }
-    result.emplace(prevLedgerSeq, prevData);
-    return result;
-}
-} // anonymous namespace
-
 ImmutableLedgerData::ImmutableLedgerData(
     LiveBucketList const& liveBL, HotArchiveBucketList const& hotArchiveBL,
     LedgerHeaderHistoryEntry const& lcl, HistoryArchiveState const& has,
-    std::optional<SorobanNetworkConfig> sorobanConfig,
-    ImmutableLedgerDataPtr prevState, uint32_t numHistorical)
+    std::optional<SorobanNetworkConfig> sorobanConfig, MetricsRegistry& metrics)
     : mLiveBucketData(
           std::make_shared<BucketListSnapshotData<LiveBucket>>(liveBL))
-    , mLiveHistoricalSnapshots(
-          prevState ? rotateHistorical<LiveBucket>(
-                          prevState->mLiveBucketData,
-                          prevState->mLiveHistoricalSnapshots,
-                          prevState->mLastClosedLedgerHeader.header.ledgerSeq,
-                          numHistorical)
-                    : std::map<uint32_t, std::shared_ptr<BucketListSnapshotData<
-                                             LiveBucket> const>>{})
     , mHotArchiveBucketData(
           std::make_shared<BucketListSnapshotData<HotArchiveBucket>>(
               hotArchiveBL))
-    , mHotArchiveHistoricalSnapshots(
-          prevState ? rotateHistorical<HotArchiveBucket>(
-                          prevState->mHotArchiveBucketData,
-                          prevState->mHotArchiveHistoricalSnapshots,
-                          prevState->mLastClosedLedgerHeader.header.ledgerSeq,
-                          numHistorical)
-                    : std::map<uint32_t, std::shared_ptr<BucketListSnapshotData<
-                                             HotArchiveBucket> const>>{})
+    , mLiveSnapshotMetrics(
+          std::make_shared<BucketSnapshotMetrics<LiveBucket>>(metrics))
+    , mHotArchiveSnapshotMetrics(
+          std::make_shared<BucketSnapshotMetrics<HotArchiveBucket>>(metrics))
     , mSorobanConfig(std::move(sorobanConfig))
     , mLastClosedLedgerHeader(lcl)
     , mLastClosedHistoryArchiveState(has)
@@ -313,35 +276,31 @@ ImmutableLedgerDataPtr
 ImmutableLedgerData::createAndMaybeLoadConfig(
     LiveBucketList const& liveBL, HotArchiveBucketList const& hotArchiveBL,
     LedgerHeaderHistoryEntry const& lcl, HistoryArchiveState const& has,
-    MetricsRegistry& metrics, ImmutableLedgerDataPtr prevState,
-    uint32_t numHistoricalSnapshots)
+    MetricsRegistry& metrics)
 {
     std::optional<SorobanNetworkConfig> sorobanConfig;
     if (protocolVersionStartsFrom(lcl.header.ledgerVersion,
                                   SOROBAN_PROTOCOL_VERSION))
     {
-        // Bootstrap: build a lightweight temporary state (no historical
-        // snapshots) just to load config from the current live bucket list.
+        // Bootstrap: build a lightweight temporary state just to load config
+        // from the current live bucket list.
         auto tempState = std::make_shared<ImmutableLedgerData>(
             liveBL, hotArchiveBL, lcl, has, /*sorobanConfig*/ std::nullopt,
-            /*prevState*/ nullptr, /*numHistoricalSnapshots*/ 0);
+            metrics);
         ImmutableLedgerView tempView(tempState, metrics);
         sorobanConfig = SorobanNetworkConfig::loadFromLedger(tempView);
     }
     return std::make_shared<ImmutableLedgerData>(
-        liveBL, hotArchiveBL, lcl, has, std::move(sorobanConfig),
-        std::move(prevState), numHistoricalSnapshots);
+        liveBL, hotArchiveBL, lcl, has, std::move(sorobanConfig), metrics);
 }
 
 ImmutableLedgerView::ImmutableLedgerView(ImmutableLedgerDataPtr state,
                                          MetricsRegistry& metrics)
     : mState(state)
-    , mLiveSnapshot(metrics, state->mLiveBucketData,
-                    state->mLiveHistoricalSnapshots,
-                    state->mLastClosedLedgerHeader.header.ledgerSeq)
-    , mHotArchiveSnapshot(metrics, state->mHotArchiveBucketData,
-                          state->mHotArchiveHistoricalSnapshots,
-                          state->mLastClosedLedgerHeader.header.ledgerSeq)
+    , mLiveSnapshot(metrics, state->mLiveSnapshotMetrics,
+                    state->mLiveBucketData)
+    , mHotArchiveSnapshot(metrics, state->mHotArchiveSnapshotMetrics,
+                          state->mHotArchiveBucketData)
     , mMetrics(metrics)
 {
 }
@@ -403,6 +362,66 @@ ImmutableLedgerView::executeWithMaybeInnerSnapshot(
         "ImmutableLedgerView has no nested snapshots");
 }
 
+SorobanPreApplyLedgerView::SorobanPreApplyLedgerView(
+    std::shared_ptr<LedgerHeader const> header,
+    UpdatedEntryGetter getUpdatedEntry, ApplyLedgerView const& lclView)
+    : mHeader(std::move(header))
+    , mGetUpdatedEntry(std::move(getUpdatedEntry))
+    , mLclView(lclView)
+{
+    releaseAssert(mGetUpdatedEntry);
+}
+
+LedgerHeaderWrapper
+SorobanPreApplyLedgerView::getLedgerHeader() const
+{
+    return LedgerHeaderWrapper(mHeader);
+}
+
+LedgerEntryWrapper
+SorobanPreApplyLedgerView::getAccount(AccountID const& account) const
+{
+    return load(accountKey(account));
+}
+
+LedgerEntryWrapper
+SorobanPreApplyLedgerView::getAccount(LedgerHeaderWrapper const& header,
+                                      TransactionFrame const& tx) const
+{
+    return getAccount(tx.getSourceID());
+}
+
+LedgerEntryWrapper
+SorobanPreApplyLedgerView::getAccount(LedgerHeaderWrapper const& header,
+                                      TransactionFrame const& tx,
+                                      AccountID const& accountID) const
+{
+    return getAccount(accountID);
+}
+
+LedgerEntryWrapper
+SorobanPreApplyLedgerView::load(LedgerKey const& key) const
+{
+    auto updatedEntry = mGetUpdatedEntry(key);
+    if (updatedEntry)
+    {
+        // Modified in this ledger, so this is the authoritative version.
+        // A null entry means it has been deleted.
+        return LedgerEntryWrapper(*updatedEntry);
+    }
+    // Not modified in this ledger, so the last closed ledger snapshot is
+    // up to date.
+    return LedgerEntryWrapper(mLclView.loadLiveEntry(key));
+}
+
+void
+SorobanPreApplyLedgerView::executeWithMaybeInnerSnapshot(
+    std::function<void(CheckValidLedgerViewWrapper const& ledgerView)> f) const
+{
+    throw std::runtime_error("SorobanPreApplyLedgerView::"
+                             "executeWithMaybeInnerSnapshot is not supported");
+}
+
 // === Live BucketList wrapper methods ===
 
 std::shared_ptr<LedgerEntry const>
@@ -417,14 +436,6 @@ ImmutableLedgerView::loadLiveKeys(
     std::string const& label) const
 {
     return mLiveSnapshot.loadKeys(inKeys, label);
-}
-
-std::optional<std::vector<LedgerEntry>>
-ImmutableLedgerView::loadLiveKeysFromLedger(
-    std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-    uint32_t ledgerSeq) const
-{
-    return mLiveSnapshot.loadKeysFromLedger(inKeys, ledgerSeq);
 }
 
 std::vector<LedgerEntry>
@@ -462,6 +473,14 @@ ImmutableLedgerView::scanLiveEntriesOfType(
     mLiveSnapshot.scanForEntriesOfType(type, std::move(callback));
 }
 
+void
+ImmutableLedgerView::scanCurrentLiveEntriesOfType(
+    LedgerEntryType type,
+    std::function<void(LedgerEntry const&, LedgerKey const&)> callback) const
+{
+    mLiveSnapshot.scanForLiveEntriesOfType(type, std::move(callback));
+}
+
 // === Hot Archive BucketList wrapper methods ===
 
 std::shared_ptr<HotArchiveBucketEntry const>
@@ -472,17 +491,10 @@ ImmutableLedgerView::loadArchiveEntry(LedgerKey const& k) const
 
 std::vector<HotArchiveBucketEntry>
 ImmutableLedgerView::loadArchiveKeys(
-    std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys) const
-{
-    return mHotArchiveSnapshot.loadKeys(inKeys);
-}
-
-std::optional<std::vector<HotArchiveBucketEntry>>
-ImmutableLedgerView::loadArchiveKeysFromLedger(
     std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-    uint32_t ledgerSeq) const
+    std::string const& label) const
 {
-    return mHotArchiveSnapshot.loadKeysFromLedger(inKeys, ledgerSeq);
+    return mHotArchiveSnapshot.loadKeys(inKeys, label);
 }
 
 void

@@ -21,7 +21,7 @@ using namespace stellar::overlaytestutils;
 
 namespace stellar
 {
-TEST_CASE("TCPPeer lifetime", "[overlay]")
+TEST_CASE("TCPPeer lifetime", "[overlay][tcppeer]")
 {
     Hash networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     Simulation::pointer s = std::make_shared<Simulation>(
@@ -77,17 +77,11 @@ TEST_CASE("TCPPeer lifetime", "[overlay]")
                     .count() == 0);
     }
 
-    auto p0 = n0->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n1->getConfig().PEER_PORT});
-
-    auto p1 = n1->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n0->getConfig().PEER_PORT});
-
-    REQUIRE(!p0);
-    REQUIRE(!p1);
+    REQUIRE(!getPeerConnectedTo(*n0, *n1));
+    REQUIRE(!getPeerConnectedTo(*n1, *n0));
 }
 
-TEST_CASE("TCPPeer can communicate", "[overlay]")
+TEST_CASE("TCPPeer can communicate", "[overlay][tcppeer]")
 {
     Hash networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     Simulation::ConfigGen cfgGen = [](int i) { return getTestConfig(i); };
@@ -111,18 +105,10 @@ TEST_CASE("TCPPeer can communicate", "[overlay]")
     s->addPendingConnection(v10SecretKey.getPublicKey(),
                             v11SecretKey.getPublicKey());
     s->startAllNodes();
-    s->crankForAtLeast(std::chrono::seconds(1), false);
 
-    auto p0 = n0->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n1->getConfig().PEER_PORT});
-
-    auto p1 = n1->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n0->getConfig().PEER_PORT});
-
-    REQUIRE(p0);
-    REQUIRE(p1);
-    REQUIRE(p0->isAuthenticatedForTesting());
-    REQUIRE(p1->isAuthenticatedForTesting());
+    auto peers = crankUntilAuthenticated(s, *n0, *n1);
+    auto p0 = peers.first;
+    auto p1 = peers.second;
     s->stopOverlayTick();
 
     // Now drop peer, ensure ERROR containing "drop reason" is properly flushed
@@ -131,16 +117,14 @@ TEST_CASE("TCPPeer can communicate", "[overlay]")
 
     p0->sendGetTxSet(Hash());
     p0->sendErrorAndDrop(ERR_MISC, "test drop");
-    s->crankForAtLeast(std::chrono::seconds(1), false);
-    REQUIRE(!p0->isConnectedForTesting());
-    REQUIRE(!p1->isConnectedForTesting());
+    crankUntilDisconnected(s, p0, p1);
 
     // p0 actually sent GET_TX_SET and ERROR
     REQUIRE(msgWrite.count() == prevMsgWrite + 2);
     s->stopAllNodes();
 }
 
-TEST_CASE("TCPPeer read malformed messages", "[overlay]")
+TEST_CASE("TCPPeer read malformed messages", "[overlay][tcppeer]")
 {
     Hash networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     Simulation::pointer s = std::make_shared<Simulation>(
@@ -149,6 +133,10 @@ TEST_CASE("TCPPeer read malformed messages", "[overlay]")
             // Slow down the main thread to delay drops
             cfg.ARTIFICIALLY_SLEEP_MAIN_THREAD_FOR_TESTING =
                 std::chrono::milliseconds(300);
+            // Don't run SCP: this test counts messages received by each
+            // peer, and SCP traffic between the nodes would pollute the
+            // counts nondeterministically
+            cfg.FORCE_SCP = false;
             return cfg;
         });
 
@@ -164,51 +152,32 @@ TEST_CASE("TCPPeer read malformed messages", "[overlay]")
                             v11SecretKey.getPublicKey());
     s->startAllNodes();
     s->stopOverlayTick();
-    // Use generous timeouts: ARTIFICIALLY_SLEEP_MAIN_THREAD_FOR_TESTING
-    // adds 300ms per postOnMainThread callback. With background ledger
-    // apply, there are additional callbacks that each incur this sleep.
-    s->crankForAtLeast(std::chrono::seconds(15), false);
-    auto p0 = n0->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n1->getConfig().PEER_PORT});
 
-    auto p1 = n1->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n0->getConfig().PEER_PORT});
-
-    REQUIRE(p0);
-    REQUIRE(p1);
-    REQUIRE(p0->isAuthenticatedForTesting());
-    REQUIRE(p1->isAuthenticatedForTesting());
+    auto peers = crankUntilAuthenticated(s, *n0, *n1);
+    auto p0 = peers.first;
+    auto p1 = peers.second;
 
     auto& p0recvError =
         n0->getOverlayManager().getOverlayMetrics().mRecvErrorTimer;
     auto p0recvErrorCount = p0recvError.count();
 
-    auto const& msgRead =
-        n1->getOverlayManager().getOverlayMetrics().mMessageRead;
-    auto msgReadPrev = msgRead.count();
+    auto const& recvTx =
+        n1->getOverlayManager().getOverlayMetrics().mRecvTransactionTimer;
+    auto recvTxPrev = recvTx.count();
 
     auto msg = makeStellarMessage(1);
 
     auto crankAndValidateDrop = [&](std::string const& dropReason,
                                     bool shouldSendError) {
-        s->crankUntil(
-            [&]() {
-                // p0 should drop p1
-                return !p0->isConnectedForTesting() &&
-                       !p1->isConnectedForTesting();
-            },
-            std::chrono::seconds(30), false);
-        REQUIRE(!p0->isConnectedForTesting());
-        REQUIRE(!p1->isConnectedForTesting());
+        // p0 should drop p1
+        crankUntilDisconnected(s, p0, p1);
         REQUIRE(p1->getDropReason() == dropReason);
 
         if (shouldSendError)
         {
             // p0 received ERROR from p1
             REQUIRE(p0recvErrorCount + 1 == p0recvError.count());
-            // p1 did not read the next message in the socket after receiving a
-            // malformed message
-            REQUIRE(msgReadPrev + 1 == msgRead.count());
+            REQUIRE(recvTx.count() == recvTxPrev);
         }
     };
 
@@ -252,14 +221,14 @@ TEST_CASE("TCPPeer read malformed messages", "[overlay]")
     }
 }
 
-TEST_CASE("TCPPeer drop at capacity", "[overlay][flowcontrol]")
+TEST_CASE("TCPPeer drop at capacity", "[overlay][tcppeer][flowcontrol]")
 {
     Hash networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     auto txMsgPtr = makeStellarMessage(1);
     uint32 txSize = static_cast<uint32>(xdr::xdr_argpack_size(*txMsgPtr));
 
     Simulation::pointer s = std::make_shared<Simulation>(
-        Simulation::OVER_TCP, networkID, [txSize](int i) {
+        Simulation::OVER_TCP, networkID, [](int i) {
             Config cfg = getTestConfig(i);
             cfg.ARTIFICIALLY_SLEEP_MAIN_THREAD_FOR_TESTING =
                 std::chrono::milliseconds(300);
@@ -285,29 +254,15 @@ TEST_CASE("TCPPeer drop at capacity", "[overlay][flowcontrol]")
     n0->getHerder().setMaxClassicTxSize(txSize);
     n1->getHerder().setMaxClassicTxSize(txSize);
     s->stopOverlayTick();
-    s->crankForAtLeast(std::chrono::seconds(5), false);
 
-    auto p0 = n0->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n1->getConfig().PEER_PORT});
-    auto p1 = n1->getOverlayManager().getConnectedPeer(
-        PeerBareAddress{"127.0.0.1", n0->getConfig().PEER_PORT});
-
-    REQUIRE(p0);
-    REQUIRE(p1);
-    REQUIRE(p0->isAuthenticatedForTesting());
-    REQUIRE(p1->isAuthenticatedForTesting());
+    auto peers = crankUntilAuthenticated(s, *n0, *n1);
+    auto p0 = peers.first;
+    auto p1 = peers.second;
 
     p0->sendAuthenticatedMessageForTesting(txMsgPtr);
     p0->sendAuthenticatedMessageForTesting(txMsgPtr);
 
-    s->crankUntil(
-        [&]() {
-            return !p0->isConnectedForTesting() && !p1->isConnectedForTesting();
-        },
-        std::chrono::seconds(10), false);
-
-    REQUIRE(!p0->isConnectedForTesting());
-    REQUIRE(!p1->isConnectedForTesting());
+    crankUntilDisconnected(s, p0, p1);
     REQUIRE(p1->getDropReason() ==
             "unexpected flood message, peer at capacity");
 

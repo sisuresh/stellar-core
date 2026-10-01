@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "ledger/ImmutableLedgerView.h"
 #include "lib/http/server.hpp"
 #include "main/QueryServer.h"
 #include "util/ProtocolVersion.h"
@@ -52,6 +53,10 @@ class CommandHandler
     // "core is booting" response for every request.
     void setReady();
 
+    // Forward new ledger state to QueryServer (no-op if query server is
+    // not enabled).
+    void addSnapshot(ImmutableLedgerDataPtr state);
+
     std::string manualCmd(std::string const& cmd);
 
     void fileNotFound(std::string const& params, std::string& retStr);
@@ -72,15 +77,10 @@ class CommandHandler
     void tx(std::string const& params, std::string& retStr);
     void unban(std::string const& params, std::string& retStr);
     void upgrades(std::string const& params, std::string& retStr);
+    // Deprecated: account banning has been removed. These endpoints are kept
+    // for backwards compatibility and only return a deprecation warning.
     void banaccounts(std::string const& params, std::string& retStr);
     void unbanaccounts(std::string const& params, std::string& retStr);
-
-    // Parse a comma-separated list of accountids from the given value,
-    // validating each as a valid StrKey. On error, sets retStr and returns
-    // false.
-    bool parseAccountIds(std::string const& value,
-                         std::vector<std::string>& addresses,
-                         std::string& retStr);
 
     void dumpProposedSettings(std::string const& params, std::string& retStr);
     void surveyTopology(std::string const&, std::string& retStr);
@@ -97,6 +97,13 @@ class CommandHandler
     void testAcc(std::string const& params, std::string& retStr);
     void testTx(std::string const& params, std::string& retStr);
     void toggleOverlayOnlyMode(std::string const& params, std::string& retStr);
+
+    QueryServer&
+    getQueryServer()
+    {
+        releaseAssert(mQueryServer);
+        return *mQueryServer;
+    }
 #endif
 };
 }

@@ -183,10 +183,8 @@ class SCPDriver
         return nullptr;
     }
 
-#ifdef CAP_0083
     // Helper function to craft an empty-tx-set value from a Value.
     virtual Value makeEmptyTxSetValueFromValue(Value const& v) const = 0;
-#endif
 
     // `isEmptyTxSetValue` checks if a value is an empty-tx-set value.
     virtual bool isEmptyTxSetValue(Value const& v) const = 0;
@@ -252,6 +250,14 @@ class SCPDriver
     // quorum can exchange 4 messages
     virtual std::chrono::milliseconds computeTimeout(uint32 roundNumber,
                                                      bool isNomination) = 0;
+
+#ifdef BUILD_TESTS
+    virtual std::chrono::milliseconds
+    getNominationEmitDelayForTesting() const
+    {
+        return std::chrono::milliseconds::zero();
+    }
+#endif
 
     // returns the weight of the node within the qset normalized between
     // 0-UINT64_MAX. If `nodeID` is the local node, then set `isLocalNode` to

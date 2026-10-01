@@ -83,39 +83,53 @@ FeeBumpTransactionFrame::FeeBumpTransactionFrame(
 #endif
 
 void
-FeeBumpTransactionFrame::preParallelApply(
-    AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
-    MutableTransactionResultBase& txResult,
-    SorobanNetworkConfig const& sorobanConfig) const
+FeeBumpTransactionFrame::preParallelApplyReadOnly(
+    AppConnector& app, CheckValidLedgerViewWrapper const& ls,
+    TransactionMetaBuilder& meta, MutableTransactionResultBase& txResult,
+    SorobanNetworkConfig const& sorobanConfig,
+    SorobanApplyMetrics& sorobanMetrics) const
 {
     try
     {
-        LedgerTxn ltxTx(ltx);
-        removeOneTimeSignerKeyFromFeeSource(ltxTx);
-        meta.pushTxChangesBefore(ltxTx);
-        ltxTx.commit();
+        mInnerTx->preParallelApplyReadOnlyWithOptionallyChargedFee(
+            /*chargeFee=*/false, app, ls, meta, txResult, sorobanConfig,
+            getContentsHash(), sorobanMetrics);
     }
     catch (std::exception& e)
     {
-        printErrorAndAbort("Exception in preParallelApply ", e.what());
+        printErrorAndAbort("Exception during read-only preParallelApply: ",
+                           e.what());
     }
     catch (...)
     {
-        printErrorAndAbort("Unknown exception in preParallelApply");
+        printErrorAndAbort(
+            "Unknown exception during read-only preParallelApply");
     }
+}
 
+void
+FeeBumpTransactionFrame::preParallelApplyWrite(
+    AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
+    MutableTransactionResultBase const& txResult) const
+{
     try
     {
-        mInnerTx->preParallelApply(/*chargeFee=*/false, app, ltx, meta,
-                                   txResult, sorobanConfig, getContentsHash());
+        {
+            LedgerTxn ltxTx(ltx);
+            removeOneTimeSignerKeyFromFeeSource(ltxTx);
+            meta.pushTxChangesBefore(ltxTx);
+            ltxTx.commit();
+        }
+        mInnerTx->preParallelApplyWrite(app, ltx, meta, txResult);
     }
     catch (std::exception& e)
     {
-        printErrorAndAbort("Exception during preParallelApply: ", e.what());
+        printErrorAndAbort("Exception during preParallelApply writes: ",
+                           e.what());
     }
     catch (...)
     {
-        printErrorAndAbort("Unknown exception during preParallelApply");
+        printErrorAndAbort("Unknown exception during preParallelApply writes");
     }
 }
 
@@ -123,7 +137,7 @@ std::optional<ParallelTxSuccessVal>
 FeeBumpTransactionFrame::parallelApply(
     AppConnector& app, ThreadParallelApplyLedgerState const& threadState,
     Config const& config, ParallelLedgerInfo const& ledgerInfo,
-    MutableTransactionResultBase& txResult, SorobanMetrics& sorobanMetrics,
+    MutableTransactionResultBase& txResult, SorobanApplyMetrics& sorobanMetrics,
     Hash const& txPrngSeed, TxEffects& effects) const
 {
     try
@@ -154,7 +168,7 @@ FeeBumpTransactionFrame::apply(
     AppConnector& app, AbstractLedgerTxn& ltx, TransactionMetaBuilder& meta,
     MutableTransactionResultBase& txResult,
     std::optional<SorobanNetworkConfig const> const& sorobanConfig,
-    Hash const& sorobanBasePrngSeed) const
+    Hash const& sorobanBasePrngSeed, SorobanApplyMetrics& sorobanMetrics) const
 {
     try
     {
@@ -180,7 +194,8 @@ FeeBumpTransactionFrame::apply(
         // If this throws, then we may not have the correct TransactionResult so
         // we must crash.
         return mInnerTx->apply(false, app, ltx, meta, txResult, sorobanConfig,
-                               sorobanBasePrngSeed, getContentsHash());
+                               sorobanBasePrngSeed, getContentsHash(),
+                               sorobanMetrics);
     }
     catch (std::exception& e)
     {
@@ -277,7 +292,9 @@ FeeBumpTransactionFrame::checkValidImpl(
     DiagnosticEventManager& diagnosticEvents, bool isOverlayValidation,
     std::optional<uint32_t> validationLedgerSeq) const
 {
-    if (!xdr::check_xdr_depth(mEnvelope, 500) || !XDRProvidesValidFee())
+    auto ledgerVersion = ledgerView.getLedgerHeader().current().ledgerVersion;
+    if (!validateXDRForProtocol(ledgerVersion, app.getConfig(), mEnvelope) ||
+        !XDRProvidesValidFee())
     {
         return FeeBumpMutableTransactionResult::createTxError(txMALFORMED);
     }
@@ -292,7 +309,6 @@ FeeBumpTransactionFrame::checkValidImpl(
     auto txResult = FeeBumpMutableTransactionResult::createSuccess(
         *mInnerTx, feeCharged, 0);
 
-    auto ledgerVersion = ledgerView.getLedgerHeader().current().ledgerVersion;
     SignatureChecker signatureChecker{ledgerVersion, getContentsHash(),
                                       mEnvelope.feeBump().signatures,
                                       isOverlayValidation};
@@ -517,24 +533,6 @@ FeeBumpTransactionFrame::validateSorobanTxForFlooding(
     UnorderedSet<LedgerKey> const& keysToFilter) const
 {
     return mInnerTx->validateSorobanTxForFlooding(keysToFilter);
-}
-
-bool
-FeeBumpTransactionFrame::validateAccountFilterForFlooding(
-    std::set<AccountID> const& filteredAccounts) const
-{
-    if (filteredAccounts.empty())
-    {
-        return true;
-    }
-
-    // Check fee-bump fee source account
-    if (filteredAccounts.find(getFeeSourceID()) != filteredAccounts.end())
-    {
-        return false;
-    }
-
-    return mInnerTx->validateAccountFilterForFlooding(filteredAccounts);
 }
 
 bool

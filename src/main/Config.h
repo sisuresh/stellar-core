@@ -330,6 +330,10 @@ class Config : public std::enable_shared_from_this<Config>
     std::vector<uint32_t> LOADGEN_INSTRUCTIONS_FOR_TESTING;
     std::vector<uint32_t> LOADGEN_INSTRUCTIONS_DISTRIBUTION_FOR_TESTING;
 
+    // Defaults to false. When set, measure the latency of self-submitted
+    // transactions from submission to meta generation.
+    bool LOADGEN_MEASURE_TX_E2E_LATENCY_FOR_TESTING;
+
 #ifdef BUILD_TESTS
     // Config parameters that force transaction application during ledger
     // close to sleep for a certain amount of time.
@@ -482,6 +486,12 @@ class Config : public std::enable_shared_from_this<Config>
     uint32_t PEER_FLOOD_READING_CAPACITY_BYTES;
     uint32_t FLOW_CONTROL_SEND_MORE_BATCH_SIZE_BYTES;
 
+    // The number of total input bytes on a TCP connection that a receiver will
+    // read and start processing, before it temporarily pauses reading to finish
+    // processing them. As input-processing completes, the balance of this
+    // capacity is replenished.
+    uint32_t PEER_TOTAL_READING_CAPACITY_BYTES;
+
     // Byte limit for outbound transaction queue.
     uint32_t OUTBOUND_TX_QUEUE_BYTE_LIMIT;
 
@@ -516,10 +526,10 @@ class Config : public std::enable_shared_from_this<Config>
     // index.
     size_t BUCKETLIST_DB_INDEX_CUTOFF;
 
-    // Enable parallel processing of overlay operations (experimental)
+    // Enable parallel processing of overlay operations
     bool BACKGROUND_OVERLAY_PROCESSING;
 
-    // Enable parallel block application (experimental)
+    // Enable parallel block application
     bool PARALLEL_LEDGER_APPLY;
 
     // Allow downloading of transaction sets in parallel with SCP (experimental)
@@ -541,6 +551,18 @@ class Config : public std::enable_shared_from_this<Config>
     // over the network. Does nothing if `BACKGROUND_OVERLAY_PROCESSING` is not
     // also enabled.
     bool BACKGROUND_TX_SIG_VERIFICATION;
+
+    // Starting from protocol 28 the trigger-next-ledger timer is anchored on
+    // the externalized consensus close time. Setting this flag to true forces
+    // the older prepare-start based timer even on protocol 28 and later. This
+    // is an emergency fallback and defaults to false.
+    bool FORCE_OLD_STYLE_PREPARE_START_TRIGGER_TIMER;
+
+    // Hostname of an NTP server to periodically query in order to detect drift
+    // of this node's local clock. This is detection only: core never adjusts
+    // the system clock. Defaults to a pool.ntp.org; set to the empty string to
+    // disable the check entirely.
+    std::string NTP_DRIFT_CHECK_SERVER;
 
     // When set to true, BucketListDB indexes are persisted on-disk so that the
     // BucketList does not need to be reindexed on startup. Defaults to true.
@@ -742,6 +764,14 @@ class Config : public std::enable_shared_from_this<Config>
     // Number of ledger snapshots to maintain for querying
     uint32_t QUERY_SNAPSHOT_LEDGERS;
 
+#ifdef BUILD_TESTS
+    // When true, CommandHandler creates a QueryServer using the main thread
+    // for snapshot lookups (no network I/O). This allows tests to call
+    // QueryServer functions directly and ensures it has
+    // all snapshots from startup.
+    bool QUERY_SERVER_FOR_TESTING{false};
+#endif
+
     // process-management config
     size_t MAX_CONCURRENT_SUBPROCESSES;
 
@@ -904,6 +934,13 @@ class Config : public std::enable_shared_from_this<Config>
     // When set to true, ignores all message and tx set size limits for testing
     bool IGNORE_MESSAGE_LIMITS_FOR_TESTING;
 
+    // A config to allow gossiping (advertising and accepting in PEERS
+    // messages) and connecting to RFC1918 private addresses (10/8, 172.16/12,
+    // 192.168/16). Private addresses are normally filtered out of peer
+    // exchange, which disables gossip-based peer discovery in environments
+    // where every node has a private address (e.g. a Kubernetes pod network).
+    bool ALLOW_PRIVATE_ADDRESSES_FOR_TESTING;
+
     // When set, disables validation of the ledger target close time
     // bounds on config upgrades (for testing only).
     bool TESTING_IGNORE_LEDGER_TIME_UPGRADE_BOUNDS;
@@ -912,6 +949,14 @@ class Config : public std::enable_shared_from_this<Config>
     // leader. This is useful for testing CAP-0083 behavior. This is a testing
     // only flag.
     bool TESTING_NOMINATE_RANDOM_VALUES;
+
+    // Injects a signed wall-clock offset into the node's system clock for
+    // testing. Expressed in milliseconds.
+    std::chrono::milliseconds ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING;
+
+    // Delay emission of updated nomination messages for testing nomination
+    // timeout behavior. Expressed in milliseconds.
+    std::chrono::milliseconds ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING;
 
     // Set QUORUM_SET using automatic quorum set configuration based on
     // `validators`.
@@ -932,11 +977,6 @@ class Config : public std::enable_shared_from_this<Config>
     // Any transaction that reaches the TransactionQueue will be rejected if it
     // contains an operation in this list.
     std::vector<OperationType> EXCLUDE_TRANSACTIONS_CONTAINING_OPERATION_TYPE;
-
-    // Any transaction that reaches the TransactionQueue will be rejected if
-    // its source account, any operation source account, or (for Soroban txs)
-    // any ACCOUNT-type write footprint entry matches an address in this list.
-    std::vector<std::string> FILTERED_G_ADDRESSES;
 
     Config();
 
@@ -964,7 +1004,16 @@ class Config : public std::enable_shared_from_this<Config>
     bool modeDoesCatchupWithBucketList() const;
     bool allBucketsInMemory() const;
     void logBasicInfo() const;
-    bool parallelLedgerClose() const;
+    // Whether ledgers are applied on the background apply thread rather than
+    // the main thread. NB: can be false even when PARALLEL_LEDGER_APPLY is
+    // set (in-memory SQLite doesn't support it; a warning is logged and the
+    // flag is cleared during config validation).
+    bool backgroundLedgerApply() const;
+
+    // Returns true if this node should run the NTP clock-drift check: an NTP
+    // server is configured and the node is a validator (clock drift only hurts
+    // nodes that participate in consensus).
+    bool ntpDriftCheckEnabled() const;
     void setNoListen();
     void setNoPublish();
 

@@ -7,13 +7,53 @@ Guide](https://github.com/stellar/.github/blob/master/CONTRIBUTING.md) for detai
 to stellar-core and Stellar's other repositories, especially with regard to our code of conduct and
 contributor license agreement.
 
-## Submitting Changes
+The repository-specific requirements below take precedence where they are more restrictive than the
+general Stellar Contribution Guide.
 
-Fork the `stellar/stellar-core` repo on github and submit a pull request from a branch in your fork. 
-Key things to keep in mind:
-* Keep your branch up-to-date by rebasing on `stellar/stellar-core` `master`
-* Ensure your branch focuses on a single issue at a time
-* Before merging, squash your commits and ensure you have a descriptive commit message
+## Before Contributing
+
+Stellar Core processes live financial transactions. Correctness is critical, and maintainer and
+reviewer time is limited. We welcome contributions that address a demonstrated, material problem or
+advance work that maintainers have agreed is a priority.
+
+### Start With an Issue
+
+Before creating an issue, search the existing issues and join a relevant discussion if an existing issue is present. 
+When creating a new issue, you should establish:
+
+* The concrete problem that needs solving.
+* For a bug, include a minimal reproducer with the expected and actual behavior whenever possible.
+* Relevant alternatives, if any, and their tradeoffs.
+* For a performance change, measurements that show the current problem and provide a baseline for evaluating a solution.
+
+Personally verify findings before reporting them. Do not submit speculative findings or generated lists of possible issues.
+
+Opening an issue does not reserve the work or mean that a code change is wanted. 
+An issue with the `help wanted` label is available for implementation, but contributors should
+still discuss their proposed approach on the issue before starting substantial work. 
+
+### Participation and Review
+
+Keep your participation to issues and do not post comments on pull requests. Issue comments should be specific and evidence-based. 
+Comments must not be about implementation strategies unless explicitly invited to do so.
+Maintainers will delete issue comments that are irrelevant to the issue. 
+Proceed with a pull request only when invited by the maintainers, including for issues with the `help wanted` label.
+
+## Opening a Pull Request
+
+We are currently only accepting pull requests for issues with the `help wanted` label.  
+Unsolicited pull requests will be closed without an explanation and reported as spam. 
+Making changes to stellar-core requires deep architectural knowledge, a good understanding of system constraints, and 
+an idea about the project roadmap. External contributors often do not have this context, and their pull requests 
+typically focus on lower-priority issues. Reviewing those changes takes the maintainers' focus away from higher-priority work. 
+
+Key things to keep in mind when creating a pull request:
+
+* Fork the `stellar/stellar-core` repository and submit the pull request from a branch in your fork.
+* Link the approved issue and keep the pull request within the agreed scope.
+* Keep your branch up-to-date by rebasing on `stellar/stellar-core` `master`.
+* Ensure your branch focuses on a single issue at a time.
+* Before merging, squash your commits and ensure you have a descriptive commit message.
 
 ## Stellar Core Contribution Specifics
 
@@ -116,7 +156,7 @@ See https://clang.llvm.org/docs/AddressSanitizer.html for more information.
 
 *Note*: ASan will ignore any memory errors in Rust code unless you build with
 Rust's ASan support. And building with Rust's ASan support requires configuring
-with `--enable-unified-rust-unsafe-for-production`. See below on "unified Rust
+with `--enable-fastdev-unsafe-for-production`. See below on "fastdev Rust
 builds".
 
 *Note*: Rust's ASan support also requires a nightly compiler and the rust-src
@@ -156,7 +196,7 @@ See https://clang.llvm.org/docs/ThreadSanitizer.html for more information.
 *Note*: Since Rust code is run on multiple threads and those threads are
 launched _from C++_ TSan will report races in Rust code unless you build with
 Rust's TSan support. And building with Rust's TSan support requires configuring
-with `--enable-unified-rust-unsafe-for-production`.
+with `--enable-fastdev-unsafe-for-production`.
 
 *Note*: Rust's ASan support also requires a nightly compiler and the rust-src
 component. Install these with:
@@ -294,7 +334,56 @@ files. You should then inspect to see that only the transactions you expected to
 see change did so. If so, commit the changes as a new set of baselines for
 future tests.
 
-## Unified and non-unified Rust builds
+## Running and updating LedgerCloseMeta checks
+
+Alongside the TxMeta hashes above, the unit tests can capture the full
+`LedgerCloseMeta` XDR of every ledger they close, and check it against golden
+data stored in the repository. Where the TxMeta baselines record a hash per
+transaction, this records the complete binary meta, so the files also serve as
+test data for downstream consumers such as Horizon and RPC. The two modes are:
+
+  * `--capture-lcm` which writes golden files, and
+  * `--check-lcm <dirname>` which checks against them, where `<dirname>` is the
+    directory holding the golden trees (the source tree root).
+
+The golden data lives in `test-lcm-current` (for the current protocol) and
+`test-lcm-next` (for the next protocol), one subdirectory per test file, one
+file per leaf section, named by a truncated hash of the test and section names.
+Each subdirectory's `index.json` maps those hashes back to the names (test case
+and sections joined with `|`, as in the TxMeta baselines) and
+records the protocol version and rng seed that produced the data. Continuous
+integration runs `--check-lcm`, which fails fast if those headers do not match
+the running binary — so a protocol version bump requires re-capturing the
+data, even when no transaction semantics changed.
+
+To re-capture after an intentional change, after a protocol bump, or after
+merging in a `master` that changed the golden data, run from the source tree
+root:
+
+    stellar-core test [tx] --rng-seed 12345 --capture-lcm
+
+for a build with only the current protocol enabled, and the same command for a
+build configured with `--enable-next-protocol-version-unsafe-for-production`,
+which writes the `next` tier instead. Note there is no `--all-versions` here:
+the golden data is captured at the default (latest) protocol version only.
+
+Capture is a full-corpus operation: after a clean run it rebuilds each visited
+test file's `index.json` from what it captured and deletes golden files the run
+did not write, so leaves that are no longer produced do not accumulate. This is
+the same behaviour as `--record-test-tx-meta`. A run filtered to a subset of
+tests therefore deletes the goldens of sibling tests in the same file; that is
+fine while iterating locally, but always finish with the full `[tx]` run above
+before committing.
+
+Some tests are automatically skipped because their meta cannot serve as
+golden data: those that inject ledger entries straight
+into the bucket list (the meta never shows the entries being created), those
+that run a multi-node `Simulation`, and those using a config whose ledger
+content depends on thread scheduling or randomized nomination. If you add a
+test that needs a golden vector, close its ledgers through the ordinary
+single-node path.
+
+## Fastdev and non-unified Rust builds
 
 As of protocol 20, some components of stellar-core are written in Rust (notably
 soroban).
@@ -331,23 +420,29 @@ and it _usually_ works. But there are two cases you might not want it.
      the stdlib and producing some sort of link-time dependency on crates that
      are only used as procedural macros).
 
-For both of these cases, we've added the ability to (optionally) switch back to
-the normal way Rust expects you to build a crate that links multiple versions of
-a dependency: with a single "unified" cargo invocation, at the top level. There
-are two different ways to enable this:
+For both of these cases, we've added a fastdev mode that switches back to the
+normal way Rust expects you to build a crate, with a single cargo invocation at
+the top level and only the current and next Soroban hosts compiled in. There are
+two different ways to enable this:
 
-  - By configuring with `--enable-unified-rust-unsafe-for-production`, if one
-    wants to _build_ a stellar-core with unified rust.
+  - By configuring with `--enable-fastdev-unsafe-for-production`, if one wants
+    to _build_ a stellar-core with fastdev rust.
 
-  - By toggling the "unified" feature flag in the IDE (eg. using the "Rust
+  - By toggling the "fastdev" feature flag in the IDE (eg. using the "Rust
     Feature Toggler" editor extension in VS code) if one merely wants to _edit_
-    a stellar-core with unified rust.
+    a stellar-core with fastdev rust.
 
 The configure flag has got such a long and unwieldy name because _it will build
-soroban with slightly different versions of transitive dependencies_, a
-configuration we do _not_ want to ship in production builds.
+soroban with fewer host versions and slightly different versions of transitive
+dependencies_, a configuration we do _not_ want to ship in production builds.
 
 It is fine for debugging though. In practice those different versions of
 transitive dependencies are rarely "all that different". You will _probably_ not
 be able to observe any differences. We just don't want to chance it in
 production.
+
+To reduce the set of possible configurations and flags, fastdev also acts as
+a superset of `--enable-next-protocol-version-unsafe-for-production` (i.e. it
+also turns on the `next` feature and links in whatever the next-protocol soroban
+host is).
+

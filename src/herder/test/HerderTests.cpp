@@ -18,6 +18,7 @@
 #include "test/test.h"
 #include "util/JitterInjection.h"
 
+#include "history/HistoryArchiveManager.h"
 #include "history/test/HistoryTestsUtils.h"
 
 #include "catchup/LedgerApplyManagerImpl.h"
@@ -29,6 +30,7 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/CommandHandler.h"
+#include "main/PersistentState.h"
 #include "overlay/OverlayManager.h"
 #include "overlay/OverlayMetrics.h"
 #include "test/Catch2.h"
@@ -39,6 +41,7 @@
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
 #include "transactions/test/TransactionTestFrame.h"
+#include "util/Decoder.h"
 #include "util/Math.h"
 #include "util/MetricsRegistry.h"
 #include "util/ProtocolVersion.h"
@@ -47,6 +50,7 @@
 #include "crypto/KeyUtils.h"
 #include "ledger/test/LedgerTestUtils.h"
 #include "test/TxTests.h"
+#include "xdr/Stellar-internal.h"
 #include "xdr/Stellar-ledger.h"
 #include "xdrpp/autocheck.h"
 #include "xdrpp/marshal.h"
@@ -173,7 +177,6 @@ TEST_CASE_VERSIONS("standalone", "[herder][acceptance]")
 
                 txCs.emplace_back(a1.tx({payment(*root, paymentAmount)}));
                 txCs.emplace_back(b1.tx({payment(a1, paymentAmount)}));
-                txCs.emplace_back(c1.tx({payment(*root, paymentAmount)}));
 
                 feedTx(txCs[0],
                        TransactionQueue::AddResultCode::ADD_STATUS_PENDING);
@@ -181,7 +184,12 @@ TEST_CASE_VERSIONS("standalone", "[herder][acceptance]")
                        TransactionQueue::AddResultCode::ADD_STATUS_ERROR);
                 if (hasC)
                 {
-                    feedTx(txCs[2],
+                    // Send a transaction with a sequence number that would be
+                    // expected if last txB transaction hasn't been a sequence
+                    // number bump. Since it was a sequence bump, this is
+                    // expected to fail.
+                    feedTx(c1.tx({payment(*root, paymentAmount)},
+                                 txBs.back()->getSeqNum() + 1),
                            TransactionQueue::AddResultCode::ADD_STATUS_ERROR);
                 }
 
@@ -192,7 +200,7 @@ TEST_CASE_VERSIONS("standalone", "[herder][acceptance]")
                 int64 expectedBalance =
                     startingBalance - 3 * paymentAmount - 3 * txfee;
                 REQUIRE(a1.getBalance() == expectedBalance);
-                REQUIRE(a1.loadSequenceNumber() == a1OldSeqNum + 3);
+                REQUIRE(a1.getLastSequenceNumber() == a1OldSeqNum + 3);
                 REQUIRE(!b1.exists());
 
                 if (hasC)
@@ -201,7 +209,7 @@ TEST_CASE_VERSIONS("standalone", "[herder][acceptance]")
                     int64 expectedCBalance =
                         startingBalance - paymentAmount - 2 * txfee;
                     REQUIRE(c1.getBalance() == expectedCBalance);
-                    REQUIRE(c1.loadSequenceNumber() == expectedC1Seq);
+                    REQUIRE(c1.getLastSequenceNumber() == expectedC1Seq);
                 }
             }
         }
@@ -1041,7 +1049,15 @@ TEST_CASE("txset", "[herder][txset]")
 {
     SECTION("generalized tx set protocol")
     {
-        testTxSet(static_cast<uint32>(SOROBAN_PROTOCOL_VERSION));
+        uint32_t generalizedTxSetProtocolVersion =
+            static_cast<uint32>(SOROBAN_PROTOCOL_VERSION);
+#ifdef ENABLE_FASTDEV_UNSAFE_FOR_PRODUCTION
+        // Fastdev only links recent Soroban hosts, and this test just needs a
+        // generalized-txset-capable protocol.
+        generalizedTxSetProtocolVersion =
+            Config::CURRENT_LEDGER_PROTOCOL_VERSION - 1;
+#endif
+        testTxSet(generalizedTxSetProtocolVersion);
     }
     SECTION("protocol current")
     {
@@ -1449,6 +1465,12 @@ TEST_CASE("txset base fee", "[herder][txset]")
                            uint32_t expNotChargedAccounts = 0) {
         cfg.LEDGER_PROTOCOL_VERSION = protocolVersion;
         cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION = protocolVersion;
+        if (!testutil::isTestApplicationProtocolVersionSupported(cfg))
+        {
+            SUCCEED("Skipping historical Soroban protocol test: requested "
+                    "protocol is not linked in this build");
+            return;
+        }
         VirtualClock clock;
         Application::pointer app = createTestApplication(clock, cfg);
 
@@ -1670,7 +1692,7 @@ TEST_CASE("tx set hits overlay byte limit during construction",
 {
     Config cfg(getTestConfig());
     cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION =
-        static_cast<uint32_t>(SOROBAN_PROTOCOL_VERSION);
+        Config::CURRENT_LEDGER_PROTOCOL_VERSION;
     auto max = std::numeric_limits<uint32_t>::max();
     cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = max;
     // Pre-create enough genesis accounts for the test
@@ -1783,9 +1805,9 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
             Application::pointer app = createTestApplication(clock, cfg);
             auto root = app->getRoot();
 
-            auto destAccount = root->create("destAccount", 500000000);
-
-            auto tx = makeMultiPayment(destAccount, *root, 1, 100, 0, 1);
+            // No transaction can be applied in this configuration, so the
+            // root account pays itself instead of setting up a new account.
+            auto tx = makeMultiPayment(*root, *root, 1, 100, 0, 1);
 
             TxFrameList invalidTxs;
             auto txSet =
@@ -1858,13 +1880,13 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
         SorobanNetworkConfig conf =
             app->getLedgerManager().getLastClosedSorobanNetworkConfig();
 
-        uint32_t const baseFee = 10'000'000;
+        uint32_t const highBaseFee = 10'000'000;
         SorobanResources resources;
         resources.instructions = 800'000;
         resources.diskReadBytes = conf.txMaxDiskReadBytes();
         resources.writeBytes = 1000;
         auto sorobanTx = createUploadWasmTx(
-            *app, acc2, baseFee, DEFAULT_TEST_RESOURCE_FEE, resources);
+            *app, acc2, highBaseFee, DEFAULT_TEST_RESOURCE_FEE, resources);
 
         auto generateTxs = [&](std::vector<TestAccount>& accounts,
                                SorobanNetworkConfig conf) {
@@ -1896,8 +1918,9 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
                     res.footprint.readOnly.emplace_back(key);
                 }
 
-                auto tx = createUploadWasmTx(*app, acc, baseFee * 10,
-                                             /* refundableFee */ baseFee, res);
+                auto tx =
+                    createUploadWasmTx(*app, acc, highBaseFee * 10,
+                                       /* refundableFee */ highBaseFee, res);
                 if (rand_flip())
                 {
                     txs.emplace_back(tx);
@@ -1905,7 +1928,8 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
                 else
                 {
                     // Double the inclusion fee
-                    txs.emplace_back(feeBump(*app, acc, tx, baseFee * 10 * 2));
+                    txs.emplace_back(
+                        feeBump(*app, acc, tx, highBaseFee * 10 * 2));
                 }
                 CLOG_INFO(Herder,
                           "Generated tx with {} instructions, {} read "
@@ -1921,12 +1945,11 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
         {
             SECTION("invalid fee")
             {
-                // Fee too small
-                auto invalidSoroban = createUploadWasmTx(
-                    *app, acc2, 100, DEFAULT_TEST_RESOURCE_FEE, resources);
-
                 SECTION("build block")
                 {
+                    // Fee lower than ledger min fee (100)
+                    auto invalidSoroban = createUploadWasmTx(
+                        *app, acc2, 99, DEFAULT_TEST_RESOURCE_FEE, resources);
                     PerPhaseTransactionList invalidPhases;
                     invalidPhases.resize(
                         static_cast<size_t>(TxSetPhase::PHASE_COUNT));
@@ -1948,10 +1971,14 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
                     auto ledgerHash = app->getLedgerManager()
                                           .getLastClosedLedgerHeader()
                                           .hash;
+                    // Fee lower than the base fee in tx set
+                    auto invalidSoroban = createUploadWasmTx(
+                        *app, acc2, highBaseFee - 1, DEFAULT_TEST_RESOURCE_FEE,
+                        resources);
                     auto invalidTxSet =
                         testtxset::makeNonValidatedGeneralizedTxSet(
                             {{std::make_pair(std::nullopt, TxFrameList{tx})},
-                             {std::make_pair(baseFee,
+                             {std::make_pair(highBaseFee,
                                              TxFrameList{invalidSoroban})}},
                             *app, ledgerHash)
                             .second;
@@ -1968,11 +1995,12 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
                 auto insns = static_cast<uint32_t>(
                     conf.ledgerMaxInstructions() * 6 / 10);
                 resources.instructions = insns;
-                auto soroban1 = createUploadWasmTx(
-                    *app, acc2, baseFee, DEFAULT_TEST_RESOURCE_FEE, resources);
+                auto soroban1 =
+                    createUploadWasmTx(*app, acc2, highBaseFee,
+                                       DEFAULT_TEST_RESOURCE_FEE, resources);
                 // Pick soroban2 by fee
                 auto soroban2 =
-                    createUploadWasmTx(*app, acc3, baseFee + 1,
+                    createUploadWasmTx(*app, acc3, highBaseFee + 1,
                                        DEFAULT_TEST_RESOURCE_FEE, resources);
 
                 SECTION("build block")
@@ -1989,9 +2017,13 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
                     // Both txs are valid individually, but only one fits
                     REQUIRE(txSet->sizeTxTotal() == 2);
                     REQUIRE(invalidPhases[0].empty());
-                    REQUIRE(invalidPhases[1].size() == 1);
-                    REQUIRE(invalidPhases[1][0]->getFullHash() ==
-                            soroban1->getFullHash());
+                    REQUIRE(invalidPhases[1].empty());
+
+                    auto const& sorobanPhase =
+                        txSet->getPhase(TxSetPhase::SOROBAN);
+                    REQUIRE(sorobanPhase.sizeTx() == 1);
+                    REQUIRE((*sorobanPhase.begin())->getFullHash() ==
+                            soroban2->getFullHash());
                 }
                 SECTION("validate block")
                 {
@@ -2039,8 +2071,9 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
         SECTION("soroban surge pricing, classic unaffected")
         {
             // Another soroban tx with higher fee, which will be selected
-            auto sorobanTxHighFee = createUploadWasmTx(
-                *app, acc3, baseFee * 2, DEFAULT_TEST_RESOURCE_FEE, resources);
+            auto sorobanTxHighFee =
+                createUploadWasmTx(*app, acc3, highBaseFee * 2,
+                                   DEFAULT_TEST_RESOURCE_FEE, resources);
             PerPhaseTransactionList invalidPhases;
             invalidPhases.resize(static_cast<size_t>(TxSetPhase::PHASE_COUNT));
             auto txSet = makeTxSetFromTransactions(
@@ -2071,8 +2104,9 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
             // Another soroban tx with high fee and a bit less resources
             // Still half capacity available
             resources.diskReadBytes = conf.txMaxDiskReadBytes() / 2;
-            auto sorobanTxHighFee = createUploadWasmTx(
-                *app, acc3, baseFee * 2, DEFAULT_TEST_RESOURCE_FEE, resources);
+            auto sorobanTxHighFee =
+                createUploadWasmTx(*app, acc3, highBaseFee * 2,
+                                   DEFAULT_TEST_RESOURCE_FEE, resources);
 
             // Create another small soroban tx, with small fee. It should be
             // picked up anyway since we can't fit sorobanTx (gaps are allowed)
@@ -2080,8 +2114,9 @@ TEST_CASE("surge pricing", "[herder][txset][soroban]")
             resources.diskReadBytes = 1;
             resources.writeBytes = 1;
 
-            auto smallSorobanLowFee = createUploadWasmTx(
-                *app, acc4, baseFee / 10, DEFAULT_TEST_RESOURCE_FEE, resources);
+            auto smallSorobanLowFee =
+                createUploadWasmTx(*app, acc4, highBaseFee / 10,
+                                   DEFAULT_TEST_RESOURCE_FEE, resources);
 
             PerPhaseTransactionList invalidPhases;
             invalidPhases.resize(static_cast<size_t>(TxSetPhase::PHASE_COUNT));
@@ -2720,7 +2755,6 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
         size_t index = 0;
 
         std::generate(std::begin(txs), std::end(txs), [&]() {
-            accounts[index].loadSequenceNumber();
             return makeMultiPayment(*root, accounts[index++], nbOps, 1000, 0,
                                     feeMulti);
         });
@@ -2953,14 +2987,14 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
 
             SECTION("signed value with empty-tx-set hash")
             {
-                auto p = makeTxPair(herder, txSet0, ct);
-                StellarValue sv;
-                xdr::xdr_from_opaque(p.first, sv);
-                sv.txSetHash = Herder::EMPTY_TX_SET_HASH;
+                // Create signed stellar value with empty tx set hash and
+                // validate.
+                StellarValue sv = herder.makeStellarValue(
+                    Herder::EMPTY_TX_SET_HASH, ct, emptyUpgradeSteps,
+                    root->getSecretKey());
                 checkInvalidMismatch(sv);
             }
 
-#ifdef CAP_0083
             SECTION("empty-tx-set value without empty-tx-set hash")
             {
                 auto p = makeTxPair(herder, txSet0, ct);
@@ -2971,10 +3005,8 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
                 sv.txSetHash = txSet0->getContentsHash();
                 checkInvalidMismatch(sv);
             }
-#endif // CAP_0083
         }
 
-#ifdef CAP_0083
         SECTION("valid empty-tx-set value")
         {
             auto p = makeTxPair(herder, txSet0, ct);
@@ -2996,7 +3028,6 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
                                       /*nomination=*/true) ==
                     SCPDriver::kInvalidValue);
         }
-#endif // CAP_0083
     }
 
     SECTION("validateValue closeTimes")
@@ -3099,14 +3130,10 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSetSize, size_t expectedOps)
 
         // Triggering next ledger will construct and cache the block
         herder.triggerNextLedger(seq, true);
-#ifdef CAP_0083
-        // All hits during the whole SCP round. If CAP-0083 support is compiled
-        // in, we expect 1 more cache hit for the validity check that determines
-        // whether or not to replace the transaction set with an empty one.
+        // All hits during the whole SCP round. One of them is the validity
+        // check that determines whether or not to replace the transaction set
+        // with an empty one (CAP-0083).
         uint64_t const expectedHits = 11;
-#else
-        uint64_t const expectedHits = 10;
-#endif
         REQUIRE(cache.getCounters().mHits == expectedHits);
         // One miss from the initial makeTxSetFromTransactions
         REQUIRE(cache.getCounters().mMisses == 1);
@@ -3340,6 +3367,64 @@ TEST_CASE("SCP Driver", "[herder][acceptance]")
     SECTION("protocol current")
     {
         testSCPDriver(Config::CURRENT_LEDGER_PROTOCOL_VERSION, 1000, 15);
+    }
+}
+
+// Test combineCandidates handling of candidates where
+// previousLedgerHash != LCL.hash
+TEST_CASE("combineCandidates with mismatched previousLedgerHash candidate",
+          "[herder][bug]")
+{
+    Config cfg(getTestConfig());
+
+    VirtualClock clock;
+    auto app = createTestApplication(clock, cfg);
+    auto& herder = dynamic_cast<HerderImpl&>(app->getHerder());
+    auto& pe = herder.getPendingEnvelopes();
+    auto& driver = herder.getHerderSCPDriver();
+
+    auto const& lcl = app->getLedgerManager().getLastClosedLedgerHeader();
+    uint32_t const ver = lcl.header.ledgerVersion;
+    uint64_t const closeTime = lcl.header.scpValue.closeTime + 1;
+    uint64_t const slotIndex = lcl.header.ledgerSeq + 1;
+
+    // Two structurally-valid empty tx sets that differ only in
+    // previousLedgerHash.
+    auto goodTxSet = TxSetXDRFrame::makeEmpty(lcl.hash, ver); // matches LCL
+    auto badTxSet = TxSetXDRFrame::makeEmpty(sha256("not the LCL hash"),
+                                             ver); // mismatched
+
+    ValueWrapperPtrSet candidates;
+    // Register the tx set so combineCandidates' getTxSet() returns it, then add
+    // a candidate value referencing it.
+    auto addCandidate = [&](TxSetXDRFrameConstPtr const& txSet) {
+        pe.addTxSet(txSet->getContentsHash(), slotIndex, txSet);
+        StellarValue sv =
+            herder.makeStellarValue(txSet->getContentsHash(), closeTime,
+                                    emptyUpgradeSteps, cfg.NODE_SEED);
+        candidates.emplace(driver.wrapValue(xdr::xdr_to_opaque(sv)));
+    };
+    auto combinedTxSetHash = [&]() {
+        ValueWrapperPtr result =
+            driver.combineCandidates(slotIndex, candidates);
+        StellarValue sv;
+        xdr::xdr_from_opaque(result->getValue(), sv);
+        return sv.txSetHash;
+    };
+
+    SECTION("prefer applicable candidate over mismatched candidate")
+    {
+        addCandidate(goodTxSet);
+        addCandidate(badTxSet);
+        REQUIRE(combinedTxSetHash() == goodTxSet->getContentsHash());
+    }
+
+    SECTION("all candidates have mismatched previousLedgerHash")
+    {
+        // If the *only* option is a candidate with a mismatched
+        // previousLedgerHash, choose it.
+        addCandidate(badTxSet);
+        REQUIRE(combinedTxSetHash() == badTxSet->getContentsHash());
     }
 }
 
@@ -3827,7 +3912,8 @@ TEST_CASE("tx queue source account limit", "[herder][transactionqueue]")
         auto b1 = TestAccount{*app, getAccount("B")};
 
         auto tx1 = root->tx({createAccount(a1, minBalance2)});
-        auto tx2 = root->tx({createAccount(b1, minBalance2)});
+        auto tx2 =
+            root->tx({createAccount(b1, minBalance2)}, tx1->getSeqNum() + 1);
 
         return std::make_tuple(*root, a1, b1, tx1, tx2);
     };
@@ -4999,7 +5085,9 @@ herderExternalizesValuesWithProtocol(uint32_t version,
             REQUIRE(lcl == currentCLedger());
 
             waitForAB(fewLedgers, false);
-            REQUIRE(currentALedger() == nextLedger);
+            // waitForAB stops once A reaches nextLedger, but A may close one
+            // more ledger before crankUntil's periodic check observes it
+            REQUIRE(currentALedger() >= nextLedger);
             // C is at most a ledger behind
             REQUIRE(currentCLedger() >= nextLedger - 1);
         }
@@ -5042,7 +5130,7 @@ herderExternalizesValuesWithProtocol(uint32_t version,
         // would set isApplying to false
         LedgerManagerImpl& lmCImpl =
             static_cast<LedgerManagerImpl&>(getC()->getLedgerManager());
-        lmCImpl.mAdvanceLedgerStateAndPublishOverride = [&] { return true; };
+        lmCImpl.mCompleteLedgerCloseOverride = [&] { return true; };
 
         // Receive first ledger - this will start applying with delay
         receiveLedger(currentLedger + 1, herderC);
@@ -5096,6 +5184,528 @@ TEST_CASE("herder externalizes values", "[herder]")
                 /* delayCloseMs */ 100);
         }
     }
+}
+
+// Slot purging happens at externalize time, based on the tracking consensus
+// index. This means purging must work correctly while the node's LCL is
+// behind the network: a node that keeps externalizing new slots while older
+// externalized ledgers are still buffered (queued for application) must
+// (a) actually purge old slot state (it can't wait for the LCL to catch up),
+// and (b) not interfere with applying the buffered ledgers afterwards.
+TEST_CASE("slots purged while externalized ledgers are queued to apply",
+          "[herder]")
+{
+    auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
+    auto simulation = std::make_shared<Simulation>(
+        Simulation::OVER_LOOPBACK, networkID, [&](int i) {
+            // Use a persistent DB so parallel ledger close is enabled. Note:
+            // time acceleration stays off, so the checkpoint frequency (64) is
+            // large enough that LedgerApplyManager doesn't trim the ledgers
+            // buffered by this test.
+            auto cfg = getTestConfig(i, Config::TESTDB_BUCKET_DB_PERSISTENT);
+            cfg.RUN_STANDALONE = false;
+            return cfg;
+        });
+
+    auto validatorAKey = SecretKey::fromSeed(sha256("validator-A"));
+    auto validatorBKey = SecretKey::fromSeed(sha256("validator-B"));
+    auto validatorCKey = SecretKey::fromSeed(sha256("validator-C"));
+
+    SCPQuorumSet qset;
+    qset.threshold = 2;
+    qset.validators.push_back(validatorAKey.getPublicKey());
+    qset.validators.push_back(validatorBKey.getPublicKey());
+    qset.validators.push_back(validatorCKey.getPublicKey());
+
+    auto A = simulation->addNode(validatorAKey, qset);
+    auto B = simulation->addNode(validatorBKey, qset);
+    auto C = simulation->addNode(validatorCKey, qset);
+
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorCKey.getPublicKey());
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorBKey.getPublicKey());
+
+    simulation->startAllNodes();
+    simulation->stopOverlayTick();
+
+    HerderImpl& herderC = static_cast<HerderImpl&>(C->getHerder());
+    auto& lmC = C->getLedgerManager();
+    auto const maxSlots = C->getConfig().MAX_SLOTS_TO_REMEMBER;
+
+    auto knownSlots = [&]() {
+        std::vector<uint64> slots;
+        herderC.getSCP().processSlotsAscendingFrom(0, [&](uint64 seq) {
+            slots.push_back(seq);
+            return true;
+        });
+        return slots;
+    };
+
+    // Close a few ledgers with everyone connected
+    simulation->crankUntil(
+        [&]() {
+            return simulation->haveAllExternalized(
+                LedgerManager::GENESIS_LEDGER_SEQ + 4, 1);
+        },
+        10 * simulation->getExpectedLedgerCloseTime(), false);
+
+    // Disconnect C; the network moves on without it
+    simulation->dropConnection(validatorAKey.getPublicKey(),
+                               validatorCKey.getPublicKey());
+    uint32_t const N = lmC.getLastClosedLedgerNum();
+
+    // Advance A and B by maxSlots - 1 ledgers, then freeze the network by
+    // disconnecting them, so their state can be compared against C later. C
+    // will externalize N+1..N+maxSlots-1, applying maxSlots - 1 ledgers in
+    // total: combined with the gap ledger that's within
+    // MAX_EXTERNALIZE_LEDGER_APPLY_DRIFT, so all of them can be queued to the
+    // apply thread at once.
+    uint32_t const last = N + maxSlots - 1;
+    simulation->crankUntil(
+        [&]() {
+            return A->getLedgerManager().getLastClosedLedgerNum() >= last &&
+                   B->getLedgerManager().getLastClosedLedgerNum() >= last;
+        },
+        2 * maxSlots * simulation->getExpectedLedgerCloseTime(), false);
+    simulation->dropConnection(validatorAKey.getPublicKey(),
+                               validatorBKey.getPublicKey());
+    REQUIRE(A->getLedgerManager().getLastClosedLedgerNum() == last);
+    REQUIRE(B->getLedgerManager().getLastClosedLedgerNum() == last);
+
+    auto validatorSCPMessagesA =
+        getValidatorExternalizeMessages(*A, N + 1, last);
+    auto validatorSCPMessagesB =
+        getValidatorExternalizeMessages(*B, N + 1, last);
+    REQUIRE(validatorSCPMessagesA.size() == maxSlots - 1);
+    REQUIRE(validatorSCPMessagesB.size() == maxSlots - 1);
+
+    auto feedLedger = [&](uint32_t ledger) {
+        auto newMsgA = validatorSCPMessagesA.at(ledger);
+        auto newMsgB = validatorSCPMessagesB.at(ledger);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgA.first, qset, newMsgA.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgB.first, qset, newMsgB.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+    };
+
+    // Feed C the ledger after the missing one: C is still tracking ledger N,
+    // so the future slot is processed only once Herder goes out of sync.
+    feedLedger(N + 2);
+    simulation->crankUntil([&]() { return !lmC.isSynced(); },
+                           2 * Herder::CONSENSUS_STUCK_TIMEOUT_SECONDS, false);
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                N + 2);
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+
+    // Feed the rest in order. Each one externalizes at receive time (LM is
+    // buffering, so nothing is applying and the SCP queue is processed
+    // immediately), while the LCL remains stuck at N.
+    for (uint32_t seq = N + 3; seq <= last; ++seq)
+    {
+        feedLedger(seq);
+        simulation->crankForAtLeast(std::chrono::seconds(1), false);
+        checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                    seq);
+        REQUIRE(lmC.getLastClosedLedgerNum() == N);
+    }
+
+    // Slot purging actually happened while the LCL was stuck: only slots
+    // within the validity bracket of the _tracking_ index remain (everything
+    // below `last - maxSlots + 1 = N` is gone), even though no ledger has been
+    // applied since N.
+    auto slots = knownSlots();
+    REQUIRE(slots.size() <= maxSlots);
+    REQUIRE(slots.front() == N);
+    REQUIRE(slots.back() == last);
+
+    // The buffered ledgers themselves are unaffected by the purge: all of
+    // N+2..last are queued in LedgerApplyManager, waiting for N+1.
+    auto& lamC = C->getLedgerApplyManager();
+    REQUIRE(!lamC.maybeGetNextBufferedLedgerToApply());
+    REQUIRE(lamC.maybeGetLargestBufferedLedger()->getLedgerSeq() == last);
+
+    // Now feed the missing ledger N+1. Its slot index is exactly at the lower
+    // edge of C's validity bracket, so the envelopes are still accepted; the
+    // old slot externalizes and LedgerApplyManager queues all buffered
+    // ledgers to the apply thread at once.
+    feedLedger(N + 1);
+    REQUIRE(lmC.isApplying());
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+
+    // While ledgers N+1..last are queued/applying, previously purged slot
+    // state stays purged (slots below N are gone), and the slots of the
+    // ledgers being applied are intact.
+    slots = knownSlots();
+    REQUIRE(slots.front() == N);
+    REQUIRE(slots.back() == last);
+
+    // Application completes correctly: C ends up on the same ledger and hash
+    // as A and B, which closed these ledgers via real consensus.
+    simulation->crankUntil(
+        [&]() { return lmC.isSynced() && !lmC.isApplying(); },
+        4 * maxSlots * simulation->getExpectedLedgerCloseTime(), false);
+    checkSynced(*C);
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                last);
+    REQUIRE(lmC.getLastClosedLedgerNum() == last);
+    REQUIRE(lmC.getLastClosedLedgerHeader().hash ==
+            A->getLedgerManager().getLastClosedLedgerHeader().hash);
+
+    // C is ready to move on to the next ledger
+    REQUIRE(herderC.getTriggerTimer().seq() > 0);
+    REQUIRE(herderC.mTriggerNextLedgerSeq == last + 1);
+
+    // Reconnect everyone: the network (including C) proceeds to close new
+    // ledgers
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorCKey.getPublicKey());
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorBKey.getPublicKey());
+    simulation->crankUntil(
+        [&]() { return simulation->haveAllExternalized(last + 3, 1); },
+        10 * simulation->getExpectedLedgerCloseTime(), false);
+}
+
+TEST_CASE("apply buffered ledgers after repeated out-of-sync", "[herder]")
+{
+    auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
+    auto simulation = std::make_shared<Simulation>(
+        Simulation::OVER_LOOPBACK, networkID, [&](int i) {
+            auto cfg = getTestConfig(i, Config::TESTDB_BUCKET_DB_PERSISTENT);
+            cfg.RUN_STANDALONE = false;
+            return cfg;
+        });
+
+    auto validatorAKey = SecretKey::fromSeed(sha256("validator-A"));
+    auto validatorBKey = SecretKey::fromSeed(sha256("validator-B"));
+    auto validatorCKey = SecretKey::fromSeed(sha256("validator-C"));
+
+    SCPQuorumSet qset;
+    qset.threshold = 2;
+    qset.validators.push_back(validatorAKey.getPublicKey());
+    qset.validators.push_back(validatorBKey.getPublicKey());
+    qset.validators.push_back(validatorCKey.getPublicKey());
+
+    auto A = simulation->addNode(validatorAKey, qset);
+    auto B = simulation->addNode(validatorBKey, qset);
+    auto C = simulation->addNode(validatorCKey, qset);
+
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorCKey.getPublicKey());
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorBKey.getPublicKey());
+
+    simulation->startAllNodes();
+    simulation->stopOverlayTick();
+
+    HerderImpl& herderC = static_cast<HerderImpl&>(C->getHerder());
+    auto& lmC = C->getLedgerManager();
+
+    // Close a few ledgers with everyone connected
+    simulation->crankUntil(
+        [&]() {
+            return simulation->haveAllExternalized(
+                LedgerManager::GENESIS_LEDGER_SEQ + 4, 1);
+        },
+        10 * simulation->getExpectedLedgerCloseTime(), false);
+
+    // Disconnect C; the network moves on without it
+    simulation->dropConnection(validatorAKey.getPublicKey(),
+                               validatorCKey.getPublicKey());
+    uint32_t const N = lmC.getLastClosedLedgerNum();
+
+    // Advance A and B to N+5, then freeze the network by disconnecting them, so
+    // their state can be compared against C later. C will externalize N+1..N+5;
+    // the 5-ledger drift is below MAX_EXTERNALIZE_LEDGER_APPLY_DRIFT (12), so
+    // once the gap is filled the whole run can be queued to apply at once. The
+    // tracking index stays within MAX_SLOTS_TO_REMEMBER (12) of the gap ledger,
+    // so the gap envelope is never discarded.
+    uint32_t const last = N + 5;
+    simulation->crankUntil(
+        [&]() {
+            return A->getLedgerManager().getLastClosedLedgerNum() >= last &&
+                   B->getLedgerManager().getLastClosedLedgerNum() >= last;
+        },
+        2 * last * simulation->getExpectedLedgerCloseTime(), false);
+    simulation->dropConnection(validatorAKey.getPublicKey(),
+                               validatorBKey.getPublicKey());
+
+    auto validatorSCPMessagesA =
+        getValidatorExternalizeMessages(*A, N + 1, last);
+    auto validatorSCPMessagesB =
+        getValidatorExternalizeMessages(*B, N + 1, last);
+    REQUIRE(validatorSCPMessagesA.size() == 5);
+    REQUIRE(validatorSCPMessagesB.size() == 5);
+
+    auto feedLedger = [&](uint32_t ledger) {
+        auto newMsgA = validatorSCPMessagesA.at(ledger);
+        auto newMsgB = validatorSCPMessagesB.at(ledger);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgA.first, qset, newMsgA.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgB.first, qset, newMsgB.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+    };
+
+    // Step 1: go out of sync at N. Feed C the ledger after the missing one
+    // (N+2), leaving a gap at N+1. C is tracking N, so the future slot is only
+    // processed once the consensus-stuck timer fires and Herder goes out of
+    // sync; afterwards Herder is tracking N+2 but LM's LCL is stuck at N.
+    feedLedger(N + 2);
+    simulation->crankUntil([&]() { return !lmC.isSynced(); },
+                           2 * Herder::CONSENSUS_STUCK_TIMEOUT_SECONDS, false);
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                N + 2);
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+
+    // Step 2: buffer up to N+5. Each future slot externalizes at receive time
+    // (LM is buffering, so nothing is applying), advancing the tracking index
+    // while the LCL stays stuck at N and the gap at N+1 remains.
+    for (uint32_t seq = N + 3; seq <= last; ++seq)
+    {
+        feedLedger(seq);
+        simulation->crankForAtLeast(std::chrono::seconds(1), false);
+        checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                    seq);
+        REQUIRE(lmC.getLastClosedLedgerNum() == N);
+    }
+
+    // N+2..N+5 are buffered, waiting for N+1; nothing is applying.
+    auto& lamC = C->getLedgerApplyManager();
+    REQUIRE(!lmC.isApplying());
+    REQUIRE(!lamC.maybeGetNextBufferedLedgerToApply());
+    REQUIRE(lamC.maybeGetLargestBufferedLedger()->getLedgerSeq() == last);
+
+    // Step 3: go out of sync again. With no LCL progress and no new latest
+    // externalize to re-arm the heartbeat, the consensus-stuck timer fires
+    // again. Since nothing is applying, this drives Herder all the way to the
+    // out-of-sync (SYNCING) state, where it stays -- there are no unprocessed
+    // slots to bring it back to tracking.
+    simulation->crankForAtLeast(Herder::CONSENSUS_STUCK_TIMEOUT_SECONDS +
+                                    std::chrono::seconds(5),
+                                false);
+    checkHerder(*C, herderC, Herder::State::HERDER_SYNCING_STATE, last);
+    REQUIRE(!lmC.isApplying());
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+
+    // Step 4: fill the gap with N+1. The run N+1..N+5 becomes contiguous, so
+    // LedgerApplyManager queues all of them to the apply thread at once.
+    feedLedger(N + 1);
+    REQUIRE(lmC.isApplying());
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+
+    // The buffered ledgers all apply and C ends up synced on the same ledger
+    // and hash as A and B, which closed these ledgers via real consensus.
+    simulation->crankUntil(
+        [&]() { return lmC.getLastClosedLedgerNum() == last; },
+        4 * last * simulation->getExpectedLedgerCloseTime(), false);
+    checkHerder(*C, herderC, Herder::State::HERDER_SYNCING_STATE, last);
+    REQUIRE(lmC.getLastClosedLedgerNum() == last);
+    REQUIRE(lmC.getLastClosedLedgerHeader().hash ==
+            A->getLedgerManager().getLastClosedLedgerHeader().hash);
+
+    // Reconnect everyone: the network (including C) proceeds to close ledgers.
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorCKey.getPublicKey());
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorBKey.getPublicKey());
+    simulation->crankUntil(
+        [&]() { return simulation->haveAllExternalized(last + 3, 1); },
+        10 * simulation->getExpectedLedgerCloseTime(), false);
+
+    // C is back in sync and ready to move on to the next ledger.
+    checkSynced(*C);
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                last + 3);
+
+    REQUIRE(herderC.getTriggerTimer().seq() > 0);
+    REQUIRE(herderC.mTriggerNextLedgerSeq == last + 4);
+}
+
+// The stronger variant of the test above: the node externalizes _more_ slots
+// than MAX_SLOTS_TO_REMEMBER while its LCL is stuck, so purging evicts the
+// slots of ledgers that are themselves still queued for application. Such a
+// gap is only recoverable via history catchup (the missing ledger's envelope
+// is outside the validity bracket and gets discarded), so this test publishes
+// real checkpoints to a tmpdir archive. The node must catch up, apply the
+// ledgers whose slot data was purged, end on the network's hash, and keep
+// closing new ledgers.
+TEST_CASE("purge slots of ledgers pending application", "[herder][catchup]")
+{
+    auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
+    auto histCfg = std::make_shared<TmpDirHistoryConfigurator>();
+    auto simulation =
+        std::make_shared<Simulation>(Simulation::OVER_LOOPBACK, networkID);
+
+    auto validatorAKey = SecretKey::fromSeed(sha256("validator-A"));
+    auto validatorBKey = SecretKey::fromSeed(sha256("validator-B"));
+    auto validatorCKey = SecretKey::fromSeed(sha256("validator-C"));
+
+    SCPQuorumSet qset;
+    qset.threshold = 2;
+    qset.validators.push_back(validatorAKey.getPublicKey());
+    qset.validators.push_back(validatorBKey.getPublicKey());
+    qset.validators.push_back(validatorCKey.getPublicKey());
+
+    auto makeConfig = [&](int i, bool writableArchive) {
+        auto cfg = getTestConfig(i, Config::TESTDB_BUCKET_DB_PERSISTENT);
+        cfg.RUN_STANDALONE = false;
+        // Accelerated time so checkpoints (frequency 8) are published quickly
+        cfg.ARTIFICIALLY_ACCELERATE_TIME_FOR_TESTING = true;
+        cfg.MODE_DOES_CATCHUP = true;
+        // A publishes to the archive; everyone can read it
+        histCfg->configure(cfg, writableArchive);
+        return cfg;
+    };
+    Config cfgA = makeConfig(1, true);
+    Config cfgB = makeConfig(2, false);
+    Config cfgC = makeConfig(3, false);
+
+    auto A = simulation->addNode(validatorAKey, qset, &cfgA);
+    auto B = simulation->addNode(validatorBKey, qset, &cfgB);
+    auto C = simulation->addNode(validatorCKey, qset, &cfgC);
+
+    // Initialize the archive before the nodes start, so that the internal
+    // cranking of executeWork doesn't disturb consensus timers
+    REQUIRE(A->getHistoryArchiveManager().initializeHistoryArchive(
+        histCfg->getArchiveDirName()));
+
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorCKey.getPublicKey());
+    simulation->addPendingConnection(validatorAKey.getPublicKey(),
+                                     validatorBKey.getPublicKey());
+
+    simulation->startAllNodes();
+    simulation->stopOverlayTick();
+
+    HerderImpl& herderC = static_cast<HerderImpl&>(C->getHerder());
+    auto& lmC = C->getLedgerManager();
+    auto const maxSlots = C->getConfig().MAX_SLOTS_TO_REMEMBER;
+
+    auto scpKnowsSlot = [&](uint64 slot) {
+        bool found = false;
+        herderC.getSCP().processSlotsAscendingFrom(slot, [&](uint64 seq) {
+            found = seq == slot;
+            return false;
+        });
+        return found;
+    };
+
+    // Close a few ledgers with everyone connected, then cut C off
+    simulation->crankUntil(
+        [&]() {
+            return simulation->haveAllExternalized(
+                LedgerManager::GENESIS_LEDGER_SEQ + 4, 1);
+        },
+        10 * simulation->getExpectedLedgerCloseTime(), false);
+    simulation->dropConnection(validatorAKey.getPublicKey(),
+                               validatorCKey.getPublicKey());
+    uint32_t const N = lmC.getLastClosedLedgerNum();
+
+    // C will be fed ledgers N+2..N+2+maxSlots+4, i.e. its tracking slot will
+    // end up `maxSlots + 6` ahead of its LCL. Collect A's and B's externalize
+    // messages incrementally while they advance, since they each only retain
+    // MAX_SLOTS_TO_REMEMBER slots themselves.
+    uint32_t const last = N + 2 + maxSlots + 4;
+    std::map<uint32_t, std::pair<SCPEnvelope, StellarMessage>> messagesA;
+    std::map<uint32_t, std::pair<SCPEnvelope, StellarMessage>> messagesB;
+    for (uint32_t seq = N + 1; seq <= last; ++seq)
+    {
+        simulation->crankUntil(
+            [&]() {
+                return A->getLedgerManager().getLastClosedLedgerNum() >= seq &&
+                       B->getLedgerManager().getLastClosedLedgerNum() >= seq;
+            },
+            2 * Herder::CONSENSUS_STUCK_TIMEOUT_SECONDS +
+                10 * simulation->getExpectedLedgerCloseTime(),
+            false);
+        auto msgsA = getValidatorExternalizeMessages(*A, seq, seq);
+        auto msgsB = getValidatorExternalizeMessages(*B, seq, seq);
+        REQUIRE(msgsA.count(seq) == 1);
+        REQUIRE(msgsB.count(seq) == 1);
+        messagesA.insert(msgsA.begin(), msgsA.end());
+        messagesB.insert(msgsB.begin(), msgsB.end());
+    }
+
+    // Let A finish publishing all complete checkpoints, so C can later catch
+    // up across the gap from the archive
+    auto& hmA = A->getHistoryManager();
+    simulation->crankUntil(
+        [&]() {
+            return HistoryManager::publishQueueLength(A->getConfig()) == 0 &&
+                   hmA.getPublishSuccessCount() > 0;
+        },
+        20 * simulation->getExpectedLedgerCloseTime(), false);
+
+    auto feedLedger = [&](uint32_t ledger) {
+        auto newMsgA = messagesA.at(ledger);
+        auto newMsgB = messagesB.at(ledger);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgA.first, qset, newMsgA.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+        REQUIRE(herderC.recvSCPEnvelope(newMsgB.first, qset, newMsgB.second) ==
+                Herder::ENVELOPE_STATUS_READY);
+    };
+
+    // Feed C the ledger after the missing one and wait for Herder to go out
+    // of sync and process the future slot
+    feedLedger(N + 2);
+    simulation->crankUntil([&]() { return !lmC.isSynced(); },
+                           2 * Herder::CONSENSUS_STUCK_TIMEOUT_SECONDS, false);
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                N + 2);
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+    // The slot of the first queued-for-apply ledger exists right now
+    REQUIRE(scpKnowsSlot(N + 2));
+
+    // Feed the rest back-to-back without cranking: every slot externalizes
+    // synchronously at receive time, no application can start (N+1 is
+    // missing), and tracking races maxSlots+4 ahead of the LCL
+    for (uint32_t seq = N + 3; seq <= last; ++seq)
+    {
+        feedLedger(seq);
+    }
+    checkHerder(*C, herderC, Herder::State::HERDER_TRACKING_NETWORK_STATE,
+                last);
+    REQUIRE(lmC.getLastClosedLedgerNum() == N);
+    REQUIRE(!lmC.isApplying());
+
+    // The key check: the slot for ledger N+2 was purged even though ledger
+    // N+2 has not been applied yet — slot purging is driven by the tracking
+    // index alone. Only slots within the validity bracket remain.
+    REQUIRE(!scpKnowsSlot(N + 2));
+    REQUIRE(scpKnowsSlot(last));
+    REQUIRE(herderC.getSCP().getKnownSlotsCount() <= maxSlots + 1);
+
+    // Because tracking is more than MAX_SLOTS_TO_REMEMBER ahead, the missing
+    // ledger's envelope is now outside the validity bracket and gets
+    // discarded — this gap is only recoverable via catchup
+    auto gapMsg = messagesA.at(N + 1);
+    REQUIRE(herderC.recvSCPEnvelope(gapMsg.first, qset, gapMsg.second) ==
+            Herder::ENVELOPE_STATUS_DISCARDED);
+
+    // Reconnect C and let it catch up from A's archive. It must apply all the
+    // ledgers it externalized (including those whose slot data was purged)
+    // and land on the same hash as the network.
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorCKey.getPublicKey());
+    simulation->addConnection(validatorAKey.getPublicKey(),
+                              validatorBKey.getPublicKey());
+    simulation->crankUntil(
+        [&]() {
+            return lmC.isSynced() &&
+                   lmC.getLastClosedLedgerNum() ==
+                       A->getLedgerManager().getLastClosedLedgerNum();
+        },
+        50 * simulation->getExpectedLedgerCloseTime(), false);
+    REQUIRE(lmC.getLastClosedLedgerNum() >= last);
+    REQUIRE(lmC.getLastClosedLedgerHeader().hash ==
+            A->getLedgerManager().getLastClosedLedgerHeader().hash);
+
+    // And the network, including C, proceeds to close new ledgers
+    auto target = A->getLedgerManager().getLastClosedLedgerNum() + 3;
+    simulation->crankUntil(
+        [&]() { return simulation->haveAllExternalized(target, 1); },
+        20 * simulation->getExpectedLedgerCloseTime(), false);
 }
 
 TEST_CASE("quick restart", "[herder][quickRestart]")
@@ -5309,7 +5919,7 @@ TEST_CASE("ledger state update flow with parallel apply", "[herder][parallel]")
                 REQUIRE(lm.getLastClosedLedgerNum() <= lcl);
 
                 // No-op, so we don't update read-only state after apply
-                lm.mAdvanceLedgerStateAndPublishOverride = [&] { return true; };
+                lm.mCompleteLedgerCloseOverride = [&] { return true; };
             }
 
             // Crank until one more ledger is externalized
@@ -5564,9 +6174,9 @@ TEST_CASE("processing of next slot happens after apply", "[herder]")
     REQUIRE_FALSE(scpHasEnvelopeFromAForinvalidSlot());
     REQUIRE(C->getLedgerManager().getLastClosedLedgerNum() == target - 1);
 
-    // Wait for apply to finish. When it does, ledgerCloseComplete runs on
-    // the main thread, LCL advances to `target`, and
-    // Herder::lastClosedLedgerIncreased -> purgeOldSlotsAndProcessSCPQueue
+    // Wait for apply to finish. completeLedgerClose then runs on the main
+    // thread, advances LCL to `target`, and calls
+    // Herder::lastClosedLedgerIncreased via notifyLedgerCloseComplete. This
     // finally drains the SCP queue for slot target+1. At that point the
     // LCL is fresh, so validateValue fully validates the tx-set against
     // the real previousLedgerHash and returns kInvalidValue (the bogus
@@ -6726,167 +7336,6 @@ TEST_CASE("exclude transactions by operation type", "[herder]")
         auto tx = root->tx({createAccount(acc.getPublicKey(), 1)});
 
         REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_PENDING);
-    }
-}
-
-TEST_CASE("filter transactions by G address", "[herder]")
-{
-    SECTION("no filter - transaction accepted")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        cfg.FILTERED_G_ADDRESSES = {};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto acc = getAccount("acc");
-        auto tx = root->tx({createAccount(acc.getPublicKey(), 1)});
-
-        REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_PENDING);
-    }
-
-    SECTION("default filter does not reject unrelated source")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        // keep defaults
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto acc = getAccount("acc");
-        auto tx = root->tx({createAccount(acc.getPublicKey(), 1)});
-
-        REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_PENDING);
-    }
-
-    SECTION("filtered source account is rejected")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        // Use a custom key for a funded account, then add it to the filter
-        auto srcKey = SecretKey::pseudoRandomForTesting();
-        cfg.FILTERED_G_ADDRESSES = {KeyUtils::toStrKey(srcKey.getPublicKey())};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto src = root->create(srcKey, 1000000000);
-        auto acc = getAccount("acc");
-        auto tx = src.tx({createAccount(acc.getPublicKey(), 1)});
-
-        REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_FILTERED);
-    }
-
-    SECTION("filtered operation source account is rejected")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        auto filteredKey = SecretKey::pseudoRandomForTesting();
-        cfg.FILTERED_G_ADDRESSES = {
-            KeyUtils::toStrKey(filteredKey.getPublicKey())};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto fa = root->create(filteredKey, 1000000000);
-        // Build a tx from root but with an op sourced from filtered account
-        auto op = payment(root->getPublicKey(), 1);
-        op.sourceAccount.activate() =
-            toMuxedAccount(filteredKey.getPublicKey());
-        auto tx = root->tx({op});
-
-        REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_FILTERED);
-    }
-
-    SECTION("soroban tx with filtered account in write footprint is rejected")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        auto filteredKey = SecretKey::pseudoRandomForTesting();
-        cfg.FILTERED_G_ADDRESSES = {
-            KeyUtils::toStrKey(filteredKey.getPublicKey())};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-
-        // Build a Soroban tx whose write footprint contains the filtered
-        // account key
-        SorobanResources resources;
-        resources.footprint.readWrite = {
-            accountKey(filteredKey.getPublicKey())};
-        resources.instructions = 1'000'000;
-        resources.diskReadBytes = 1000;
-        resources.writeBytes = 1000;
-
-        auto op = createUploadWasmOperation(1000);
-        auto tx = sorobanTransactionFrameFromOps(
-            app->getNetworkID(), *root, {op}, {}, resources,
-            /* inclusionFee */ 1000, /* resourceFee */ 10000);
-
-        REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_FILTERED);
-    }
-
-    SECTION("fee-bump with filtered fee source is rejected")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        auto filteredKey = SecretKey::pseudoRandomForTesting();
-        cfg.FILTERED_G_ADDRESSES = {
-            KeyUtils::toStrKey(filteredKey.getPublicKey())};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto fa = root->create(filteredKey, 1000000000);
-        auto feeSource = TestAccount{*app, filteredKey};
-
-        auto innerTx = root->tx({payment(root->getPublicKey(), 1)});
-        auto fb = feeBump(*app, feeSource, innerTx, 200);
-
-        REQUIRE(app->getHerder().recvTransaction(fb, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_FILTERED);
-    }
-
-    SECTION("fee-bump with filtered inner source is rejected")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        auto filteredKey = SecretKey::pseudoRandomForTesting();
-        cfg.FILTERED_G_ADDRESSES = {
-            KeyUtils::toStrKey(filteredKey.getPublicKey())};
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto filteredAcct = root->create(filteredKey, 1000000000);
-        auto otherKey = getAccount("other");
-        auto other = root->create(otherKey, 1000000000);
-
-        // Inner tx source is filtered; fee source (other) is not
-        auto innerTx = filteredAcct.tx({payment(other.getPublicKey(), 1)});
-        auto fb = feeBump(*app, other, innerTx, 200);
-
-        REQUIRE(app->getHerder().recvTransaction(fb, false).code ==
-                TransactionQueue::AddResultCode::ADD_STATUS_FILTERED);
-    }
-
-    SECTION("fee-bump with non-filtered accounts is accepted")
-    {
-        VirtualClock clock;
-        auto cfg = getTestConfig();
-        // keep defaults - none of the test accounts match
-        Application::pointer app = createTestApplication(clock, cfg);
-
-        auto root = app->getRoot();
-        auto otherKey = getAccount("other");
-        auto other = root->create(otherKey, 1000000000);
-
-        auto innerTx = root->tx({payment(other.getPublicKey(), 1)});
-        auto fb = feeBump(*app, other, innerTx, 200);
-
-        REQUIRE(app->getHerder().recvTransaction(fb, false).code ==
                 TransactionQueue::AddResultCode::ADD_STATUS_PENDING);
     }
 }
@@ -8510,10 +8959,9 @@ TEST_CASE_VERSIONS("Herder properly validates when tx set is missing",
         });
 }
 
-#ifdef CAP_0083
 // This tests that the network externalizes an empty-tx-set value when a
 // voted-for value is not available on the network.
-TEST_CASE("network externalizes empty-tx-set on missing value", "[herder]")
+TEST_CASE("network externalizes empty-tx-set on missing value", "[herder][tx]")
 {
     auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
     auto simulation = Topologies::core(
@@ -8541,7 +8989,514 @@ TEST_CASE("network externalizes empty-tx-set on missing value", "[herder]")
 
     REQUIRE(counter.count() > stopPoint);
 
-    // Capture meta for use with --capture-lcm
+    // Capture meta for use with --capture-lcm. Note that the LCM capture
+    // eligibility rules currently exclude this test (multi-node simulation
+    // plus randomized nomination), so no golden data is produced today; if
+    // the simulation is ever made deterministic the vector comes back for
+    // free.
     txtest::captureLastClosedLedgerLcm(*app);
 }
-#endif // CAP_0083
+
+// Test that the node properly handles a restart when voting on a value whose tx
+// set it has not successfully downloaded
+TEST_CASE("SCP state restore with missing tx set", "[herder]")
+{
+    auto cfg = getTestConfig(0, Config::TESTDB_BUCKET_DB_PERSISTENT);
+    cfg.MANUAL_CLOSE = false;
+    // Test with parallel tx set downloading both enabled and disabled. The
+    // disabled case tests a node operator shutting down a node with parallel tx
+    // set downloading enabled, then flipping the flag off and restarting the
+    // node.
+    bool const parallelTxSetDownload = GENERATE(true, false);
+    CAPTURE(parallelTxSetDownload);
+    cfg.EXPERIMENTAL_PARALLEL_TX_SET_DOWNLOAD = parallelTxSetDownload;
+
+    auto const peerKey = SecretKey::fromSeed(sha256("scp state restore peer"));
+    auto const& peerPk = peerKey.getPublicKey();
+    auto const selfPk = cfg.NODE_SEED.getPublicKey();
+
+    // {self, peer} with threshold 2, so that {peer} alone is v-blocking
+    cfg.QUORUM_SET.validators.emplace_back(peerPk);
+    cfg.QUORUM_SET.threshold = 2;
+
+    // Tx set hash deliberately fake: never downloaded, so never persisted
+    Hash fakeTxSetHash;
+    fakeTxSetHash.fill(0xAB);
+
+    uint64 slot = 0;
+    Value value;
+
+    // Create the node's database and persist SCP state for slot LCL+1 that
+    // ballots on `fakeTxSetHash` without persisting any tx set. This simulates
+    // a node emitting a PREPARE for a value whose tx set is still downloading.
+    {
+        VirtualClock clock;
+        auto app = createTestApplication(clock, cfg, /*newDB*/ true,
+                                         /*startApp*/ false);
+        auto& herder = static_cast<HerderImpl&>(app->getHerder());
+        auto const& lcl = app->getLedgerManager().getLastClosedLedgerHeader();
+        slot = lcl.header.ledgerSeq + 1;
+
+        auto sv = herder.makeStellarValue(fakeTxSetHash, app->timeNow() + 1,
+                                          emptyUpgradeSteps, cfg.NODE_SEED);
+        value = xdr::xdr_to_opaque(sv);
+
+        SCPEnvelope env;
+        env.statement.slotIndex = slot;
+        env.statement.nodeID = selfPk;
+        env.statement.pledges.type(SCP_ST_PREPARE);
+        auto& prep = env.statement.pledges.prepare();
+        prep.ballot.counter = 1;
+        prep.ballot.value = value;
+        prep.quorumSetHash = herder.getSCP().getLocalNode()->getQuorumSetHash();
+        herder.signEnvelope(cfg.NODE_SEED, env);
+
+        PersistedSCPState scpState;
+        scpState.v(1);
+        scpState.v1().scpEnvelopes.emplace_back(env);
+        scpState.v1().quorumSets.emplace_back(
+            herder.getSCP().getLocalQuorumSet());
+        app->getPersistentState().setSCPStateV1ForSlot(
+            slot, decoder::encode_b64(xdr::xdr_to_opaque(scpState)),
+            /*txSets*/ {});
+    }
+
+    // Restart on the same database, restoring the persisted SCP state.
+    VirtualClock clock;
+    auto app = createTestApplication(clock, cfg, /*newDB*/ false);
+    auto& herder = static_cast<HerderImpl&>(app->getHerder());
+    auto& driver = herder.getHerderSCPDriver();
+
+    // The ballot state was restored
+    REQUIRE(!herder.getSCP().getLatestMessagesSend(slot).empty());
+
+    // The restored value's tx set is missing and nothing is fetching it, but
+    // the value is still structurally valid
+    REQUIRE(driver.validateValue(slot, value, /*nomination*/ false) ==
+            SCPDriver::kStructurallyValidValue);
+
+    // The peer's view of the slot: it timed out waiting for the missing tx
+    // set and moved on to the corresponding empty-tx-set value.
+    Value const emptyValue = driver.makeEmptyTxSetValueFromValue(value);
+
+    auto makePrepareFromPeer = [&](bool includePrepared) {
+        SCPEnvelope env;
+        env.statement.slotIndex = slot;
+        env.statement.nodeID = peerPk;
+        env.statement.pledges.type(SCP_ST_PREPARE);
+        auto& prep = env.statement.pledges.prepare();
+        prep.ballot.counter = 2;
+        prep.ballot.value = emptyValue;
+        if (includePrepared)
+        {
+            prep.prepared.activate() = SCPBallot(1, emptyValue);
+        }
+        prep.quorumSetHash = herder.getSCP().getLocalNode()->getQuorumSetHash();
+        herder.signEnvelope(peerKey, env);
+        return env;
+    };
+
+    auto latestSelfMessage = [&]() -> SCPEnvelope const* {
+        auto const* e = herder.getSCP().getLatestMessage(selfPk);
+        REQUIRE(e != nullptr);
+        REQUIRE(e->statement.pledges.type() == SCP_ST_PREPARE);
+        return e;
+    };
+
+    SECTION("peer accepted the empty-tx-set value as prepared")
+    {
+        // The v-blocking peer accepted (1, emptyValue) as prepared, which
+        // makes the node accept it as prepared too and re-emit its own
+        // statement. The node then abandons its ballot on the restored value
+        // in favor of the empty-tx-set value the peer is ahead on.
+        REQUIRE(herder.recvSCPEnvelope(makePrepareFromPeer(true)) ==
+                Herder::ENVELOPE_STATUS_READY);
+
+        auto const& prep = latestSelfMessage()->statement.pledges.prepare();
+        REQUIRE(prep.ballot.counter == 2);
+        REQUIRE(prep.ballot.value == emptyValue);
+        REQUIRE(prep.prepared);
+        REQUIRE(prep.prepared->value == emptyValue);
+    }
+
+    SECTION("peer is v-blocking ahead")
+    {
+        // The v-blocking peer is on a higher ballot counter, so the node
+        // abandons its ballot. Since nothing is downloading the missing tx
+        // set, the node replaces the restored value with the empty-tx-set
+        // value when bumping.
+        REQUIRE(herder.recvSCPEnvelope(makePrepareFromPeer(false)) ==
+                Herder::ENVELOPE_STATUS_READY);
+
+        auto const& prep = latestSelfMessage()->statement.pledges.prepare();
+        REQUIRE(prep.ballot.counter == 2);
+        REQUIRE(prep.ballot.value == emptyValue);
+    }
+}
+
+static bool
+triggerTimerProtocolSupported()
+{
+    return protocolVersionStartsFrom(
+        Config::CURRENT_LEDGER_PROTOCOL_VERSION,
+        CONSENSUS_CLOSE_TIME_TRIGGER_PROTOCOL_VERSION);
+}
+
+// Four top-tier validators over TCP on the real clock, with a 1s artificial
+// apply delay and a configurable nomination-emit delay so we can actually see
+// the impact of the two different timers.
+static Simulation::pointer
+makeTriggerTimerSimulation(
+    bool forcePrepareStartTimer, std::chrono::milliseconds nominationEmitDelay,
+    std::chrono::milliseconds driftClockOffset =
+        std::chrono::milliseconds::zero(),
+    std::optional<uint32_t> startingProtocol = std::nullopt)
+{
+    auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
+
+    auto simulation = Topologies::separateAllHighQuality(
+        4, Simulation::OVER_TCP, networkID, [&](int i) {
+            auto cfg = getTestConfig(i, Config::TESTDB_DEFAULT);
+            cfg.ARTIFICIALLY_ACCELERATE_TIME_FOR_TESTING = false;
+            cfg.FORCE_OLD_STYLE_PREPARE_START_TRIGGER_TIMER =
+                forcePrepareStartTimer;
+            cfg.ARTIFICIALLY_DELAY_LEDGER_CLOSE_FOR_TESTING =
+                std::chrono::milliseconds(1000);
+            cfg.ARTIFICIALLY_DELAY_NOMINATION_EMIT_FOR_TESTING =
+                nominationEmitDelay;
+            // Remember enough SCP slots that the tests can attribute every
+            // externalized value in their measurement windows to its
+            // proposer.
+            cfg.MAX_SLOTS_TO_REMEMBER = 24;
+            if (startingProtocol)
+            {
+                cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION = *startingProtocol;
+            }
+
+            // Drift one validator. Note: i == 0 is the Simulation's
+            // idle app (its config is generated first by the constructor),
+            // so the first real validator is i == 1.
+            if (i == 1)
+            {
+                cfg.ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING =
+                    driftClockOffset;
+            }
+            return cfg;
+        });
+
+    simulation->fullyConnectAllPending();
+    simulation->startAllNodes();
+    REQUIRE(simulation->getExpectedLedgerCloseTime() ==
+            std::chrono::seconds(5));
+    return simulation;
+}
+
+static uint32_t
+minLedger(std::vector<Application::pointer> const& nodes)
+{
+    return std::min_element(
+               nodes.begin(), nodes.end(),
+               [](Application::pointer const& lhs,
+                  Application::pointer const& rhs) {
+                   return lhs->getLedgerManager().getLastClosedLedgerNum() <
+                          rhs->getLedgerManager().getLastClosedLedgerNum();
+               })
+        ->get()
+        ->getLedgerManager()
+        .getLastClosedLedgerNum();
+}
+
+// Crank until every node has externalized `count` more ledgers; returns the
+// elapsed real time.
+static std::chrono::milliseconds
+closeLedgers(Simulation::pointer const& simulation, uint32_t count,
+             bool finalCrank = false)
+{
+    auto nodes = simulation->getNodes();
+    auto const expectedClose = simulation->getExpectedLedgerCloseTime();
+    auto const target = minLedger(nodes) + count;
+    auto const start = nodes.front()->getClock().now();
+    simulation->crankUntil(
+        [&]() { return simulation->haveAllExternalized(target, 1); },
+        10 * (count + 1) * expectedClose, finalCrank);
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        nodes.front()->getClock().now() - start);
+}
+
+TEST_CASE("consensus close time trigger timer", "[herder][!hide]")
+{
+    if (!triggerTimerProtocolSupported())
+    {
+        return;
+    }
+
+    constexpr uint32_t LEDGERS_TO_RUN = 10;
+    auto const driftOffset = std::chrono::seconds(4);
+
+    struct RunResult
+    {
+        std::chrono::milliseconds elapsed;
+        int64_t totalFallbacks{0};
+        int64_t driftedNodeFallbacks{0};
+        int64_t maxOtherNodeFallbacks{0};
+        int64_t driftedLedSlots{0};
+        bool sawNominationTimeout{false};
+    };
+
+    auto fallbackCount = [](Application::pointer const& app) {
+        auto const metrics = app->getMetrics().GetAllMetrics();
+        auto const it =
+            metrics.find({"scp", "trigger", "prepare-start-fallback"});
+        if (it == metrics.end())
+        {
+            return int64_t{0};
+        }
+        auto meter = dynamic_cast<medida::Meter const*>(it->second.get());
+        releaseAssert(meter);
+        return static_cast<int64_t>(meter->count());
+    };
+
+    auto runSimulation =
+        [&](bool forcePrepareStartTimer,
+            std::chrono::milliseconds nominationEmitDelay,
+            std::chrono::milliseconds triggerClockOffset =
+                std::chrono::milliseconds::zero()) -> RunResult {
+        auto simulation = makeTriggerTimerSimulation(
+            forcePrepareStartTimer, nominationEmitDelay, triggerClockOffset);
+        auto nodes = simulation->getNodes();
+
+        std::vector<int64_t> fallbackCounts;
+        std::transform(nodes.begin(), nodes.end(),
+                       std::back_inserter(fallbackCounts), fallbackCount);
+
+        auto const startLedger = minLedger(nodes);
+        auto const targetLedger = startLedger + LEDGERS_TO_RUN;
+
+        RunResult result;
+        result.elapsed =
+            closeLedgers(simulation, LEDGERS_TO_RUN, /*finalCrank=*/true);
+
+        for (size_t i = 0; i < nodes.size(); ++i)
+        {
+            auto const delta = fallbackCount(nodes[i]) - fallbackCounts.at(i);
+            result.totalFallbacks += delta;
+
+            auto const isDriftedNode =
+                triggerClockOffset != std::chrono::milliseconds::zero() &&
+                nodes[i]->getConfig()
+                        .ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING ==
+                    triggerClockOffset;
+            if (isDriftedNode)
+            {
+                result.driftedNodeFallbacks = delta;
+            }
+            else
+            {
+                result.maxOtherNodeFallbacks =
+                    std::max(result.maxOtherNodeFallbacks, delta);
+            }
+
+            auto const& driver =
+                dynamic_cast<HerderImpl&>(nodes[i]->getHerder())
+                    .getHerderSCPDriver();
+            for (uint32_t ledger = startLedger + 1; ledger <= targetLedger;
+                 ++ledger)
+            {
+                auto timeouts = driver.getNominationTimeouts(ledger);
+                result.sawNominationTimeout =
+                    result.sawNominationTimeout ||
+                    (timeouts.has_value() && timeouts.value() > 0);
+            }
+        }
+
+        // Count the externalized values the drifted
+        // validator proposed. This indicates that the non-drifting nodes
+        // hit the fallback timer, as they were drifting relative to network
+        // time for the given slot.
+        std::optional<PublicKey> driftedKey;
+        for (auto const& node : nodes)
+        {
+            if (triggerClockOffset != std::chrono::milliseconds::zero() &&
+                node->getConfig()
+                        .ARTIFICIALLY_SET_SYSTEM_CLOCK_OFFSET_FOR_TESTING ==
+                    triggerClockOffset)
+            {
+                driftedKey = node->getConfig().NODE_SEED.getPublicKey();
+            }
+        }
+        if (driftedKey)
+        {
+            auto& scp =
+                dynamic_cast<HerderImpl&>(nodes.front()->getHerder()).getSCP();
+            for (uint32_t ledger = startLedger + 1; ledger <= targetLedger;
+                 ++ledger)
+            {
+                auto const envs = scp.getExternalizingState(ledger);
+                auto const ext = std::find_if(
+                    envs.begin(), envs.end(), [](SCPEnvelope const& e) {
+                        return e.statement.pledges.type() == SCP_ST_EXTERNALIZE;
+                    });
+                releaseAssert(ext != envs.end());
+                StellarValue sv;
+                xdr::xdr_from_opaque(
+                    ext->statement.pledges.externalize().commit.value, sv);
+                if (sv.ext.v() == STELLAR_VALUE_SIGNED &&
+                    sv.ext.lcValueSignature().nodeID == *driftedKey)
+                {
+                    ++result.driftedLedSlots;
+                }
+            }
+        }
+
+        return result;
+    };
+
+    // New timer is faster without drift.
+    {
+        auto const nominationDelay = std::chrono::milliseconds(1000);
+        auto const oldTimer = runSimulation(true, nominationDelay);
+        auto const newTimer = runSimulation(false, nominationDelay);
+
+        REQUIRE(newTimer.elapsed < oldTimer.elapsed);
+        REQUIRE(newTimer.totalFallbacks == 0);
+    }
+
+    constexpr int64_t FALLBACK_SLACK = 1;
+
+    // One node drifting ahead falls back.
+    {
+        auto const nodeAhead = runSimulation(
+            false, std::chrono::milliseconds::zero(), driftOffset);
+        REQUIRE(nodeAhead.driftedNodeFallbacks >=
+                LEDGERS_TO_RUN - nodeAhead.driftedLedSlots - FALLBACK_SLACK);
+
+        // Note: When the drifting node leads the round, non-drifting nodes
+        // may fall back.
+        REQUIRE(nodeAhead.maxOtherNodeFallbacks <=
+                nodeAhead.driftedLedSlots + FALLBACK_SLACK);
+    }
+
+    // One node drifting behind falls back.
+    {
+        auto const nodeBehind = runSimulation(
+            false, std::chrono::milliseconds::zero(), -driftOffset);
+        REQUIRE(nodeBehind.driftedNodeFallbacks >=
+                LEDGERS_TO_RUN - nodeBehind.driftedLedSlots - FALLBACK_SLACK);
+
+        // Note: When the drifting node leads the round, non-drifting nodes
+        // may fall back.
+        REQUIRE(nodeBehind.maxOtherNodeFallbacks <=
+                nodeBehind.driftedLedSlots + FALLBACK_SLACK);
+    }
+
+    // Long nomination does not cause timer fallback
+    {
+        auto const nominationDelay = std::chrono::milliseconds(5000);
+        auto const slowNomination = runSimulation(false, nominationDelay);
+        REQUIRE(slowNomination.sawNominationTimeout);
+        REQUIRE(slowNomination.totalFallbacks == 0);
+    }
+}
+
+TEST_CASE("trigger timer switches anchor at protocol 28 upgrade",
+          "[herder][upgrades][!hide]")
+{
+    if (!triggerTimerProtocolSupported())
+    {
+        return;
+    }
+
+    auto const upgradeVersion =
+        static_cast<uint32_t>(CONSENSUS_CLOSE_TIME_TRIGGER_PROTOCOL_VERSION);
+
+    // With a delayed nomination emit, the prepare-start timer paces ledgers
+    // at roughly expectedClose + nominationEmitDelay (nomination happens
+    // before the anchor point), while the consensus-close-time timer absorbs
+    // the nomination delay and paces at expectedClose. This delta helps us
+    // measure the timer change after the upgrade.
+    constexpr uint32_t LEDGERS_TO_MEASURE = 8;
+    auto const nominationEmitDelay = std::chrono::milliseconds(1000);
+
+    struct RunResult
+    {
+        std::chrono::milliseconds preUpgrade;
+        std::chrono::milliseconds postUpgrade;
+    };
+
+    auto runSimulation = [&](bool forcePrepareStartTimer) -> RunResult {
+        // Start the network one protocol before the trigger-timer switch.
+        auto simulation = makeTriggerTimerSimulation(
+            forcePrepareStartTimer, nominationEmitDelay,
+            std::chrono::milliseconds::zero(), upgradeVersion - 1);
+        auto nodes = simulation->getNodes();
+        auto const expectedClose = simulation->getExpectedLedgerCloseTime();
+
+        auto lclVersion = [](Application::pointer const& node) {
+            return node->getLedgerManager()
+                .getLastClosedLedgerHeader()
+                .header.ledgerVersion;
+        };
+
+        // Measure the cadence on the pre-28 protocol.
+        simulation->crankUntil(
+            [&]() { return simulation->haveAllExternalized(3, 1); },
+            10 * expectedClose, false);
+        auto const preUpgrade = closeLedgers(simulation, LEDGERS_TO_MEASURE);
+        for (auto const& node : nodes)
+        {
+            REQUIRE(lclVersion(node) == upgradeVersion - 1);
+        }
+
+        // Upgrade to protocol 28
+        Upgrades::UpgradeParameters scheduledUpgrades;
+        scheduledUpgrades.mUpgradeTime =
+            VirtualClock::from_time_t(nodes[0]
+                                          ->getLedgerManager()
+                                          .getLastClosedLedgerHeader()
+                                          .header.scpValue.closeTime);
+        scheduledUpgrades.mProtocolVersion = upgradeVersion;
+        for (auto const& node : nodes)
+        {
+            node->getHerder().setUpgrades(scheduledUpgrades);
+        }
+
+        // Crank until every node has closed the upgrade ledger, then one
+        // more ledger so the measured window is fully post-upgrade.
+        simulation->crankUntil(
+            [&]() {
+                return std::all_of(nodes.begin(), nodes.end(),
+                                   [&](Application::pointer const& node) {
+                                       return lclVersion(node) ==
+                                              upgradeVersion;
+                                   });
+            },
+            10 * expectedClose, false);
+        closeLedgers(simulation, 1);
+
+        auto const postUpgrade = closeLedgers(simulation, LEDGERS_TO_MEASURE);
+        for (auto const& node : nodes)
+        {
+            REQUIRE(lclVersion(node) == upgradeVersion);
+        }
+
+        return {preUpgrade, postUpgrade};
+    };
+
+    // Expected cadence saving is nominationEmitDelay per ledger; splitting
+    // pass/fail at half of it tolerates scheduling noise in both directions.
+    auto const cadenceMargin = LEDGERS_TO_MEASURE * nominationEmitDelay / 2;
+
+    // Crossing the boundary switches to the consensus-close-time anchor:
+    // post-upgrade ledgers close significantly faster.
+    {
+        auto const result = runSimulation(false);
+        REQUIRE(result.postUpgrade + cadenceMargin < result.preUpgrade);
+    }
+
+    // The override flag keeps the prepare-start anchor after the upgrade, so
+    // the cadence does not improve.
+    {
+        auto const result = runSimulation(true);
+        REQUIRE(result.postUpgrade + cadenceMargin > result.preUpgrade);
+    }
+}

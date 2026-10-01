@@ -1,0 +1,13 @@
+{
+   "!cfg protocol version" : 29,
+   "!rng seed" : 12345,
+   "!test all versions" : false,
+   "!versions to test" : [ 29 ],
+   "28c2749d65248cad" : "sponsor future reserves|protocol version 29|sponsored account is sponsoring",
+   "6c8d287cb053c8f5" : "sponsor future reserves|protocol version 29|bad sponsorship",
+   "82c5d76a41699a20" : "sponsor future reserves|protocol version 29|already sponsored",
+   "c19775d267de5e49" : "sponsor future reserves|protocol version 29|sponsoring account is sponsored",
+   "c59c57a121ca0f8c" : "sponsor future reserves|protocol version 29|add sponsored entry before adding first sponsored signer",
+   "c84b15007fadc34a" : "sponsor future reserves|protocol version 29|success",
+   "fe5fdf037a523f63" : "sponsor future reserves|protocol version 29|sponsorships with precondition that uses v3 extension"
+}

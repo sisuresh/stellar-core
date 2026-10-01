@@ -54,44 +54,53 @@ BucketListSnapshotData<BucketT>::BucketListSnapshotData(
 }
 
 //
+// BucketSnapshotMetrics
+//
+
+template <class BucketT>
+BucketSnapshotMetrics<BucketT>::BucketSnapshotMetrics(MetricsRegistry& metrics)
+    : mPointTimers([&metrics]() {
+        UnorderedMap<LedgerEntryType, std::reference_wrapper<SimpleTimer>>
+            timers;
+        for (auto t : xdr::xdr_traits<LedgerEntryType>::enum_values())
+        {
+            auto const& label = xdr::xdr_traits<LedgerEntryType>::enum_name(
+                static_cast<LedgerEntryType>(t));
+            auto& metric = metrics.NewSimpleTimer(
+                {BucketT::METRIC_STRING, label}, std::chrono::microseconds{1});
+            timers.emplace(static_cast<LedgerEntryType>(t), metric);
+        }
+        return timers;
+    }())
+    , mBulkLoadMeter(
+          metrics.NewMeter({BucketT::METRIC_STRING, "query", "loads"}, "query"))
+{
+}
+
+//
 // SearchableBucketListSnapshot
 //
 
 template <class BucketT>
 SearchableBucketListSnapshot<BucketT>::SearchableBucketListSnapshot(
     MetricsRegistry& metrics,
-    std::shared_ptr<BucketListSnapshotData<BucketT> const> data,
-    std::map<uint32_t, std::shared_ptr<BucketListSnapshotData<BucketT> const>>
-        historicalSnapshots,
-    uint32_t ledgerSeq)
+    std::shared_ptr<BucketSnapshotMetrics<BucketT> const> snapshotMetrics,
+    std::shared_ptr<BucketListSnapshotData<BucketT> const> data)
     : mData(std::move(data))
-    , mHistoricalSnapshots(std::move(historicalSnapshots))
-    , mLedgerSeq(ledgerSeq)
     , mMetrics(metrics)
-    , mBulkLoadMeter(
-          metrics.NewMeter({BucketT::METRIC_STRING, "query", "loads"}, "query"))
+    , mSnapshotMetrics(std::move(snapshotMetrics))
 {
-    for (auto t : xdr::xdr_traits<LedgerEntryType>::enum_values())
-    {
-        auto const& label = xdr::xdr_traits<LedgerEntryType>::enum_name(
-            static_cast<LedgerEntryType>(t));
-        auto& metric = metrics.NewSimpleTimer({BucketT::METRIC_STRING, label},
-                                              std::chrono::microseconds{1});
-        mPointTimers.emplace(static_cast<LedgerEntryType>(t), metric);
-    }
+    releaseAssert(mSnapshotMetrics);
 }
 
 template <class BucketT>
 SearchableBucketListSnapshot<BucketT>::SearchableBucketListSnapshot(
     SearchableBucketListSnapshot const& other)
     : mData(other.mData)
-    , mHistoricalSnapshots(other.mHistoricalSnapshots)
-    , mLedgerSeq(other.mLedgerSeq)
     // mStreams intentionally left empty — each copy gets its own stream cache
     , mMetrics(other.mMetrics)
-    , mPointTimers(other.mPointTimers)
+    , mSnapshotMetrics(other.mSnapshotMetrics)
     , mBulkTimers(other.mBulkTimers)
-    , mBulkLoadMeter(other.mBulkLoadMeter)
 {
 }
 
@@ -103,15 +112,37 @@ SearchableBucketListSnapshot<BucketT>::operator=(
     if (this != &other)
     {
         mData = other.mData;
-        mHistoricalSnapshots = other.mHistoricalSnapshots;
-        mLedgerSeq = other.mLedgerSeq;
         mStreams.clear();
         mMetrics = other.mMetrics;
-        mPointTimers = other.mPointTimers;
+        mSnapshotMetrics = other.mSnapshotMetrics;
         mBulkTimers = other.mBulkTimers;
-        mBulkLoadMeter = other.mBulkLoadMeter;
+#ifdef BUILD_TESTS
+        // Reset thread ownership so the copy can be claimed by another thread.
+        mThreadId.store(std::thread::id{});
+#endif
     }
     return *this;
+}
+
+// Bucket loads are not thread safe and a single snapshot instance should only
+// be queried by one thread. We cache the initial caller's thread id and assert
+// following queries are from the same thread. Note: this only guards the
+// bucket-loading query entry points; access to the immutable underlying
+// snapshot data is thread safe.
+template <class BucketT>
+void
+SearchableBucketListSnapshot<BucketT>::threadInvariant() const
+{
+#ifdef BUILD_TESTS
+    auto const current = std::this_thread::get_id();
+    std::thread::id unclaimed{};
+    // Atomically claim ownership on first use, so any concurrent claimant sees
+    // the CAS fail with `unclaimed` set to the owner's id and asserts.
+    if (!mThreadId.compare_exchange_strong(unclaimed, current))
+    {
+        releaseAssert(unclaimed == current);
+    }
+#endif
 }
 
 // File streams are fairly expensive to create, so they are lazily created and
@@ -121,6 +152,7 @@ XDRInputFileStream&
 SearchableBucketListSnapshot<BucketT>::getStream(
     std::shared_ptr<BucketT const> const& bucket) const
 {
+    threadInvariant();
     BucketT const* key = bucket.get();
     auto it = mStreams.find(key);
     if (it == mStreams.end())
@@ -316,9 +348,10 @@ SearchableBucketListSnapshot<BucketT>::load(LedgerKey const& k) const
 {
     ZoneScoped;
     releaseAssert(mData);
+    threadInvariant();
 
-    auto timerIter = mPointTimers.find(k.type());
-    releaseAssert(timerIter != mPointTimers.end());
+    auto timerIter = mSnapshotMetrics->mPointTimers.find(k.type());
+    releaseAssert(timerIter != mSnapshotMetrics->mPointTimers.end());
     auto timer = timerIter->second.get().TimeScope();
 
     std::shared_ptr<typename BucketT::LoadT const> result{};
@@ -346,58 +379,17 @@ SearchableBucketListSnapshot<BucketT>::load(LedgerKey const& k) const
 }
 
 template <class BucketT>
-std::optional<std::vector<typename BucketT::LoadT>>
-SearchableBucketListSnapshot<BucketT>::loadKeysInternal(
-    std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-    std::optional<uint32_t> ledgerSeq) const
-{
-    ZoneScoped;
-    releaseAssert(mData);
-
-    // Make a copy of the key set, this loop is destructive
-    auto keys = inKeys;
-    std::vector<typename BucketT::LoadT> entries;
-
-    auto loadKeysLoop = [&](std::shared_ptr<BucketT const> const& bucket) {
-        loadKeysFromBucket(bucket, keys, entries);
-        return keys.empty() ? Loop::COMPLETE : Loop::INCOMPLETE;
-    };
-
-    if (!ledgerSeq || *ledgerSeq == mLedgerSeq)
-    {
-        loopAllBuckets(loadKeysLoop, *mData);
-    }
-    else
-    {
-        auto iter = mHistoricalSnapshots.find(*ledgerSeq);
-        if (iter == mHistoricalSnapshots.end())
-        {
-            return std::nullopt;
-        }
-        releaseAssert(iter->second);
-        loopAllBuckets(loadKeysLoop, *iter->second);
-    }
-
-    return entries;
-}
-
-template <class BucketT>
-std::optional<std::vector<typename BucketT::LoadT>>
-SearchableBucketListSnapshot<BucketT>::loadKeysFromLedger(
-    std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
-    uint32_t ledgerSeq) const
-{
-    return loadKeysInternal(inKeys, ledgerSeq);
-}
-
-template <class BucketT>
 medida::Timer&
 SearchableBucketListSnapshot<BucketT>::getBulkLoadTimer(
     std::string const& label, size_t numEntries) const
 {
+    // mBulkTimers is per-snapshot mutable state lazily populated here, so this
+    // must be single-threaded. Enforced here as well as at the public query
+    // entry points.
+    threadInvariant();
     if (numEntries != 0)
     {
-        mBulkLoadMeter.get().Mark(numEntries);
+        mSnapshotMetrics->mBulkLoadMeter.get().Mark(numEntries);
     }
 
     auto iter = mBulkTimers.find(label);
@@ -418,39 +410,38 @@ SearchableBucketListSnapshot<BucketT>::getSnapshotData() const
     return mData;
 }
 
-template <class BucketT>
-std::map<uint32_t,
-         std::shared_ptr<BucketListSnapshotData<BucketT> const>> const&
-SearchableBucketListSnapshot<BucketT>::getHistoricalSnapshots() const
-{
-    return mHistoricalSnapshots;
-}
-
 //
 // SearchableLiveBucketListSnapshot
 //
 
 SearchableLiveBucketListSnapshot::SearchableLiveBucketListSnapshot(
     MetricsRegistry& metrics,
-    std::shared_ptr<BucketListSnapshotData<LiveBucket> const> data,
-    std::map<uint32_t,
-             std::shared_ptr<BucketListSnapshotData<LiveBucket> const>>
-        historicalSnapshots,
-    uint32_t ledgerSeq)
+    std::shared_ptr<BucketSnapshotMetrics<LiveBucket> const> snapshotMetrics,
+    std::shared_ptr<BucketListSnapshotData<LiveBucket> const> data)
     : SearchableBucketListSnapshot<LiveBucket>(
-          metrics, std::move(data), std::move(historicalSnapshots), ledgerSeq)
+          metrics, std::move(snapshotMetrics), std::move(data))
 {
 }
 
-std::vector<LedgerEntry>
-SearchableLiveBucketListSnapshot::loadKeys(
+template <class BucketT>
+std::vector<typename BucketT::LoadT>
+SearchableBucketListSnapshot<BucketT>::loadKeys(
     std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys,
     std::string const& label) const
 {
+    ZoneScoped;
+    releaseAssert(mData);
+    threadInvariant();
     auto timer = getBulkLoadTimer(label, inKeys.size()).TimeScope();
-    auto op = loadKeysInternal(inKeys, std::nullopt);
-    releaseAssertOrThrow(op);
-    return std::move(*op);
+
+    auto keys = inKeys;
+    std::vector<typename BucketT::LoadT> entries;
+    auto loadKeysLoop = [&](std::shared_ptr<BucketT const> const& bucket) {
+        loadKeysFromBucket(bucket, keys, entries);
+        return keys.empty() ? Loop::COMPLETE : Loop::INCOMPLETE;
+    };
+    loopAllBuckets(loadKeysLoop, *mData);
+    return entries;
 }
 
 // This query has two steps:
@@ -464,6 +455,7 @@ SearchableLiveBucketListSnapshot::loadPoolShareTrustLinesByAccountAndAsset(
 {
     ZoneScoped;
     releaseAssert(mData);
+    threadInvariant();
 
     LedgerKeySet trustlinesToLoad;
 
@@ -506,6 +498,7 @@ SearchableLiveBucketListSnapshot::loadInflationWinners(size_t maxWinners,
 {
     ZoneScoped;
     releaseAssert(mData);
+    threadInvariant();
 
     auto timer = getBulkLoadTimer("inflationWinners", 0).TimeScope();
 
@@ -606,6 +599,7 @@ SearchableLiveBucketListSnapshot::scanForEviction(
     ZoneScoped;
     releaseAssert(mData);
     releaseAssert(stats);
+    threadInvariant();
 
     auto getBucketFromIter =
         [&levels = mData->levels](
@@ -657,6 +651,7 @@ SearchableLiveBucketListSnapshot::scanForEntriesOfType(
 {
     ZoneScoped;
     releaseAssert(mData);
+    threadInvariant();
 
     auto scanBucket = [&](std::shared_ptr<LiveBucket const> const& bucket) {
         if (bucket->isEmpty())
@@ -706,6 +701,209 @@ SearchableLiveBucketListSnapshot::scanForEntriesOfType(
     };
 
     loopAllBuckets(scanBucket);
+}
+
+namespace
+{
+// Iterator for `BucketEntry`s of a given type in a bucket. Expects the stream
+// to be positioned at the start of the type range. This is basically the same
+// as SearchableLiveBucketListSnapshot::scanForEntriesOfType's scanBucket except
+// with more control over when iteration happens.
+class BucketEntryIterator
+{
+    BucketEntry mEntry;
+    LedgerKey mKey;
+    XDRInputFileStream mStream;
+    LedgerEntryType const mType;
+
+  public:
+    BucketEntryIterator(XDRInputFileStream&& stream, LedgerEntryType type)
+        : mStream(std::move(stream)), mType(type)
+    {
+    }
+
+    BucketEntry const&
+    getEntry() const
+    {
+        return mEntry;
+    }
+    LedgerKey const&
+    getKey() const
+    {
+        return mKey;
+    }
+
+    bool
+    advance()
+    {
+        while (mStream.readOne(mEntry))
+        {
+            if (isBucketMetaEntry<LiveBucket>(mEntry))
+            {
+                continue;
+            }
+            mKey = getBucketLedgerKey(mEntry);
+            if (mKey.type() > mType)
+            {
+                break;
+            }
+
+            if (mKey.type() == mType)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+} // namespace
+
+void
+SearchableLiveBucketListSnapshot::scanForLiveEntriesOfType(
+    LedgerEntryType type,
+    std::function<void(LedgerEntry const&, LedgerKey const&)> callback) const
+{
+    ZoneScoped;
+    // We implement this as a k-way merge over all buckets. We use a loser tree
+    // for this. The benefit over a heap is ~2x fewer comparisons. A loser tree
+    // is like a single-elimination tournament. The leaves of the tree are the
+    // iterators, and the internal nodes represent the loser of the comparison
+    // between the two children. This implementation represents the binary tree
+    // in an array, where the tournament tree is from indices [1, 2n) (leaves
+    // are [n, 2n)). Index 0 is used for keeping track of the overall winner. To
+    // update, we just need to advance the iterator for the winning node and
+    // then do the log(k) comparisons upward along the path to the root to
+    // update the losers. While loser trees often store the whole node value at
+    // intermediate nodes, we just store an index, since copying the XDR types
+    // is probably more expensive than the extra indirection.
+
+    std::vector<BucketEntryIterator> iterators;
+    loopAllBuckets(
+        [&iterators, type](std::shared_ptr<LiveBucket const> const& bucket) {
+            if (bucket->isEmpty())
+            {
+                return Loop::INCOMPLETE;
+            }
+
+            auto range = bucket->getRangeForType(type);
+            if (!range)
+            {
+                return Loop::INCOMPLETE;
+            }
+
+            // We don't use getStream here so that each iterator has its own
+            // stream. This way, if the same bucket is used in multiple levels,
+            // the iterators won't interfere with each other.
+            XDRInputFileStream stream;
+            stream.open(bucket->getFilename());
+            stream.seek(range->first);
+
+            iterators.emplace_back(std::move(stream), type);
+            return Loop::INCOMPLETE;
+        });
+
+    if (iterators.empty())
+    {
+        return;
+    }
+
+    size_t const numIterators = iterators.size();
+
+    constexpr int exhausted = -1;
+    std::vector<int> tree;
+    tree.resize(numIterators * 2);
+    for (size_t i = 0; i < numIterators; ++i)
+    {
+        if (iterators[i].advance())
+        {
+            tree[numIterators + i] = i;
+        }
+        else
+        {
+            tree[numIterators + i] = exhausted;
+        }
+    }
+
+    // The leftIndex wins if it should come before the rightIndex. This happens
+    // when the left key is less than the right key, or if they are equal and
+    // the left index is less than the right index (newer buckets shadow older
+    // buckets).
+    auto leftWins = [&iterators](int leftIndex, int rightIndex) -> bool {
+        if (leftIndex == exhausted)
+        {
+            return false;
+        }
+        if (rightIndex == exhausted)
+        {
+            return true;
+        }
+        if (std::strong_ordering cmp = LedgerEntryIdCmp::compare(
+                iterators[leftIndex].getKey(), iterators[rightIndex].getKey());
+            cmp != std::strong_ordering::equal)
+        {
+            return cmp == std::strong_ordering::less;
+        }
+        return leftIndex < rightIndex;
+    };
+
+    // Play the match at index i; store the loser, return the winner
+    auto play = [&tree, &leftWins](auto& play, size_t index) -> int {
+        if (2 * index >= tree.size())
+        {
+            return tree[index];
+        }
+        int left = play(play, 2 * index);
+        int right = play(play, 2 * index + 1);
+        if (leftWins(left, right))
+        {
+            tree[index] = right;
+            return left;
+        }
+        else
+        {
+            tree[index] = left;
+            return right;
+        }
+    };
+    tree[0] = play(play, 1);
+
+    bool first = true;
+    LedgerKey last;
+    while (tree[0] != exhausted)
+    {
+        int index = tree[0];
+        auto& iter = iterators[index];
+        // Only call the callback if this is the first time we've seen the key
+        if (auto& key = iter.getKey(); first || key != last)
+        {
+            last = key;
+            auto& entry = iter.getEntry();
+            if (entry.type() == LIVEENTRY || entry.type() == INITENTRY)
+            {
+                callback(entry.liveEntry(), key);
+            }
+        }
+        first = false;
+
+        if (!iter.advance())
+        {
+            tree[index + numIterators] = exhausted;
+        }
+
+        // Update tournament up the tree to the root. As before, we store the
+        // loser at each node and keep track of the winner in `winner` and at
+        // tree[0].
+        int winner = tree[index + numIterators];
+        for (int i = (index + numIterators) / 2; i > 0; i /= 2)
+        {
+            if (leftWins(tree[i], winner))
+            {
+                std::swap(tree[i], winner);
+            }
+        }
+
+        tree[0] = winner;
+    }
 }
 
 // Helper function to handle scan logic in a single bucket.
@@ -864,23 +1062,12 @@ SearchableLiveBucketListSnapshot::scanForEvictionInBucket(
 
 SearchableHotArchiveBucketListSnapshot::SearchableHotArchiveBucketListSnapshot(
     MetricsRegistry& metrics,
-    std::shared_ptr<BucketListSnapshotData<HotArchiveBucket> const> data,
-    std::map<uint32_t,
-             std::shared_ptr<BucketListSnapshotData<HotArchiveBucket> const>>
-        historicalSnapshots,
-    uint32_t ledgerSeq)
+    std::shared_ptr<BucketSnapshotMetrics<HotArchiveBucket> const>
+        snapshotMetrics,
+    std::shared_ptr<BucketListSnapshotData<HotArchiveBucket> const> data)
     : SearchableBucketListSnapshot<HotArchiveBucket>(
-          metrics, std::move(data), std::move(historicalSnapshots), ledgerSeq)
+          metrics, std::move(snapshotMetrics), std::move(data))
 {
-}
-
-std::vector<HotArchiveBucketEntry>
-SearchableHotArchiveBucketListSnapshot::loadKeys(
-    std::set<LedgerKey, LedgerEntryIdCmp> const& inKeys) const
-{
-    auto op = loadKeysInternal(inKeys, std::nullopt);
-    releaseAssertOrThrow(op);
-    return std::move(*op);
 }
 
 void
@@ -889,6 +1076,7 @@ SearchableHotArchiveBucketListSnapshot::scanAllEntries(
 {
     ZoneScoped;
     releaseAssert(mData);
+    threadInvariant();
 
     auto scanBucket =
         [&](std::shared_ptr<HotArchiveBucket const> const& bucket) {
@@ -913,6 +1101,8 @@ SearchableHotArchiveBucketListSnapshot::scanAllEntries(
 // Explicit template instantiations
 template struct BucketListSnapshotData<LiveBucket>;
 template struct BucketListSnapshotData<HotArchiveBucket>;
+template struct BucketSnapshotMetrics<LiveBucket>;
+template struct BucketSnapshotMetrics<HotArchiveBucket>;
 template class SearchableBucketListSnapshot<LiveBucket>;
 template class SearchableBucketListSnapshot<HotArchiveBucket>;
 

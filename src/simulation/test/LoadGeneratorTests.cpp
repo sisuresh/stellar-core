@@ -1050,12 +1050,20 @@ TEST_CASE("apply load", "[loadgen][applyload][acceptance]")
         sampleKeys.insert(ApplyLoad::getKeyForArchivedEntry(idx));
     }
 
-    auto sampleEntries = ledgerView.loadArchiveKeys(sampleKeys);
+    auto sampleEntries = ledgerView.loadArchiveKeys(sampleKeys, "test");
     REQUIRE(sampleEntries.size() == sampleKeys.size());
 
+    auto const lclBeforeExecute =
+        app->getLedgerManager().getLastClosedLedgerNum();
     al.execute();
 
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() >=
+            lclBeforeExecute + cfg.APPLY_LOAD_NUM_LEDGERS);
     REQUIRE(1.0 - al.successRate() < std::numeric_limits<double>::epsilon());
+    // Each benchmark ledger runs at least one cold tx set validation.
+    REQUIRE(
+        app->getMetrics().NewTimer({"herder", "txset", "validate"}).count() >=
+        cfg.APPLY_LOAD_NUM_LEDGERS);
 }
 
 TEST_CASE("apply load find max SAC TPS",
@@ -1063,6 +1071,7 @@ TEST_CASE("apply load find max SAC TPS",
 {
     auto cfg = getTestConfig();
     cfg.APPLY_LOAD_MODE = ApplyLoadMode::MAX_SAC_TPS;
+    cfg.APPLY_LOAD_TIME_WRITES = GENERATE(true, false);
     cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 1000;
     cfg.USE_CONFIG_FOR_GENESIS = true;
     cfg.LEDGER_PROTOCOL_VERSION = Config::CURRENT_LEDGER_PROTOCOL_VERSION;
@@ -1078,6 +1087,16 @@ TEST_CASE("apply load find max SAC TPS",
     cfg.APPLY_LOAD_NUM_LEDGERS = 30;
     cfg.APPLY_LOAD_BATCH_SAC_COUNT = 2;
     cfg.APPLY_LOAD_CLASSIC_TXS_PER_LEDGER = 100;
+
+    SECTION("search a range")
+    {
+    }
+    SECTION("single-point search")
+    {
+        cfg.APPLY_LOAD_TARGET_CLOSE_TIME_MS = 1000;
+        cfg.APPLY_LOAD_MAX_SAC_TPS_MIN_TPS = 640;
+        cfg.APPLY_LOAD_MAX_SAC_TPS_MAX_TPS = 640;
+    }
 
     VirtualClock clock(VirtualClock::REAL_TIME);
     auto app = createTestApplication(clock, cfg);
@@ -1096,6 +1115,10 @@ TEST_CASE("apply load find max SAC TPS",
     REQUIRE(maxClustersMetric.count() ==
             cfg.APPLY_LOAD_LEDGER_MAX_DEPENDENT_TX_CLUSTERS);
     REQUIRE(successCountMetric.count() > 200);
+    // Search samples must exercise validation as well as application.
+    REQUIRE(
+        app->getMetrics().NewTimer({"herder", "txset", "validate"}).count() >
+        0);
 }
 
 TEST_CASE("apply load benchmark model tx",
@@ -1122,13 +1145,21 @@ TEST_CASE("apply load benchmark model tx",
 
     ApplyLoad al(*app);
 
+    auto const lclBeforeExecute =
+        app->getLedgerManager().getLastClosedLedgerNum();
     al.execute();
 
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() >=
+            lclBeforeExecute + cfg.APPLY_LOAD_NUM_LEDGERS);
     REQUIRE(1.0 - al.successRate() < std::numeric_limits<double>::epsilon());
 
     auto& successCountMetric =
         app->getMetrics().NewCounter({"ledger", "apply-soroban", "success"});
     REQUIRE(successCountMetric.count() > 0);
+    // Each benchmark ledger runs at least one cold tx set validation.
+    REQUIRE(
+        app->getMetrics().NewTimer({"herder", "txset", "validate"}).count() >=
+        cfg.APPLY_LOAD_NUM_LEDGERS);
 }
 
 TEST_CASE("apply load benchmark custom token",
@@ -1162,6 +1193,10 @@ TEST_CASE("apply load benchmark custom token",
     auto& successCountMetric =
         app->getMetrics().NewCounter({"ledger", "apply-soroban", "success"});
     REQUIRE(successCountMetric.count() > 0);
+    // Each benchmark ledger runs at least one cold tx set validation.
+    REQUIRE(
+        app->getMetrics().NewTimer({"herder", "txset", "validate"}).count() >=
+        cfg.APPLY_LOAD_NUM_LEDGERS);
 }
 
 TEST_CASE("apply load benchmark soroswap",
@@ -1194,6 +1229,10 @@ TEST_CASE("apply load benchmark soroswap",
     auto& successCountMetric =
         app->getMetrics().NewCounter({"ledger", "apply-soroban", "success"});
     REQUIRE(successCountMetric.count() > 0);
+    // Each benchmark ledger runs at least one cold tx set validation.
+    REQUIRE(
+        app->getMetrics().NewTimer({"herder", "txset", "validate"}).count() >=
+        cfg.APPLY_LOAD_NUM_LEDGERS);
 }
 
 TEST_CASE("noisy binary search", "[applyload]")

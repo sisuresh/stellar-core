@@ -1263,79 +1263,6 @@ TEST_CASE("Soroban tx filtering", "[soroban][transactionqueue]")
         REQUIRE(app->getHerder().recvTransaction(feeBumpTx, false).code ==
                 TransactionQueue::AddResultCode::ADD_STATUS_ERROR);
     }
-
-    auto runInvalidCreateContractTest =
-        [&](HostFunctionType hostFnType, ContractIDPreimageType preimageType,
-            ContractExecutableType executableType) {
-            Operation createOp;
-            createOp.body.type(INVOKE_HOST_FUNCTION);
-            auto& createHF = createOp.body.invokeHostFunctionOp().hostFunction;
-            createHF.type(hostFnType);
-
-            auto setPreimageAndExecutable = [&](ContractIDPreimage& preimage,
-                                                ContractExecutable& exec) {
-                preimage.type(preimageType);
-                if (preimageType == CONTRACT_ID_PREIMAGE_FROM_ASSET)
-                {
-                    preimage.fromAsset() = makeNativeAsset();
-                }
-                else
-                {
-                    preimage.fromAddress().address =
-                        makeAccountAddress(a1.getPublicKey());
-                    preimage.fromAddress().salt = sha256("salt");
-                }
-                exec.type(executableType);
-                if (executableType == CONTRACT_EXECUTABLE_WASM)
-                {
-                    exec.wasm_hash() = sha256(wasm.data);
-                }
-            };
-
-            if (hostFnType == HOST_FUNCTION_TYPE_CREATE_CONTRACT)
-            {
-                setPreimageAndExecutable(
-                    createHF.createContract().contractIDPreimage,
-                    createHF.createContract().executable);
-            }
-            else
-            {
-                setPreimageAndExecutable(
-                    createHF.createContractV2().contractIDPreimage,
-                    createHF.createContractV2().executable);
-            }
-
-            auto tx = sorobanTransactionFrameFromOpsWithTotalFee(
-                app->getNetworkID(), a1, {createOp}, {}, resources,
-                uploadResourceFee + 100, uploadResourceFee);
-            auto feeBumpTx =
-                feeBump(*app, feeBumper, tx, uploadResourceFee + 200);
-
-            REQUIRE(app->getHerder().recvTransaction(tx, false).code ==
-                    TransactionQueue::AddResultCode::ADD_STATUS_ERROR);
-            REQUIRE(app->getHerder().recvTransaction(feeBumpTx, false).code ==
-                    TransactionQueue::AddResultCode::ADD_STATUS_ERROR);
-        };
-
-    SECTION("asset preimage with wasm executable")
-    {
-        runInvalidCreateContractTest(HOST_FUNCTION_TYPE_CREATE_CONTRACT,
-                                     CONTRACT_ID_PREIMAGE_FROM_ASSET,
-                                     CONTRACT_EXECUTABLE_WASM);
-        runInvalidCreateContractTest(HOST_FUNCTION_TYPE_CREATE_CONTRACT_V2,
-                                     CONTRACT_ID_PREIMAGE_FROM_ASSET,
-                                     CONTRACT_EXECUTABLE_WASM);
-    }
-
-    SECTION("address preimage with SAC executable")
-    {
-        runInvalidCreateContractTest(HOST_FUNCTION_TYPE_CREATE_CONTRACT,
-                                     CONTRACT_ID_PREIMAGE_FROM_ADDRESS,
-                                     CONTRACT_EXECUTABLE_STELLAR_ASSET);
-        runInvalidCreateContractTest(HOST_FUNCTION_TYPE_CREATE_CONTRACT_V2,
-                                     CONTRACT_ID_PREIMAGE_FROM_ADDRESS,
-                                     CONTRACT_EXECUTABLE_STELLAR_ASSET);
-    }
 }
 
 TEST_CASE("TransactionQueue Key Filtering", "[soroban][transactionqueue]")
@@ -1430,6 +1357,15 @@ TEST_CASE("TransactionQueue Key Filtering", "[soroban][transactionqueue]")
     }
     SECTION("protocol version 24")
     {
+        auto cfg = getTestConfig();
+        cfg.TESTING_UPGRADE_LEDGER_PROTOCOL_VERSION = 24;
+        if (!testutil::isTestApplicationProtocolVersionSupported(cfg))
+        {
+            SUCCEED("Skipping historical Soroban protocol test: requested "
+                    "protocol is not linked in this build");
+            return;
+        }
+
         SECTION("should filter")
         {
             for (auto const& keyToFilter : keysToFilterP24)
@@ -2399,9 +2335,9 @@ TEST_CASE("transaction queue starting sequence boundary",
     SECTION("check a single transaction")
     {
         int64_t startingSeq = static_cast<int64_t>(nextLedgerSeq) << 32;
-        REQUIRE(acc1.loadSequenceNumber() < startingSeq);
+        REQUIRE(acc1.getLastSequenceNumber() < startingSeq);
         acc1.bumpSequence(startingSeq - 1);
-        REQUIRE(acc1.loadSequenceNumber() == startingSeq - 1);
+        REQUIRE(acc1.getLastSequenceNumber() == startingSeq - 1);
 
         ClassicTransactionQueue tq(*app, 4, 10, 4);
         REQUIRE(tq.tryAdd(transaction(*app, acc1, 1, 1, 100), false).code ==
@@ -3044,7 +2980,6 @@ TEST_CASE("remove applied", "[herder][transactionqueue]")
     auto acc3 = root->create("C", lm.getLastMinBalance(2));
 
     auto tx1a = root->tx({payment(*root, 1)});
-    root->loadSequenceNumber();
     auto tx1b = root->tx({payment(*root, 2)});
     auto tx2 = acc.tx({payment(*root, 1)});
     auto tx3 = acc2.tx({payment(*root, 1)});
@@ -3058,7 +2993,6 @@ TEST_CASE("remove applied", "[herder][transactionqueue]")
         auto const& lcl = lm.getLastClosedLedgerHeader();
         auto ledgerSeq = lcl.header.ledgerSeq + 1;
 
-        root->loadSequenceNumber();
         auto [txSet, _] = makeTxSetFromTransactions({tx1b, tx2}, *app, 0, 0);
         herder.getPendingEnvelopes().putTxSet(txSet->getContentsHash(),
                                               ledgerSeq, txSet);
@@ -3382,7 +3316,6 @@ TEST_CASE("TransactionQueue reset and rebuild on upgrades",
         app->getHerder().externalizeValue(TxSetXDRFrame::makeEmpty(lclHeader),
                                           lclHeader.header.ledgerSeq + 1,
                                           closeTime, {upgrade});
-        app->getRoot()->loadSequenceNumber();
 
         // Check that the upgrade was actually applied.
         auto postUpgradeCfg = lm.getLastClosedSorobanNetworkConfig();
