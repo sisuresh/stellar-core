@@ -1,0 +1,1 @@
+Test commit to verify git author/committer environment variables.
