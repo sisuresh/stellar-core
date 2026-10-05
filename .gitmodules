@@ -59,6 +59,7 @@
 [submodule "src/rust/soroban/p30"]
 	path = src/rust/soroban/p30
 	url = https://github.com/stellar/rs-soroban-env.git
+	branch = test/soroban-env-from-internal
 [submodule "lib/gperftools"]
 	path = lib/gperftools
 	url = https://github.com/gperftools/gperftools.git
