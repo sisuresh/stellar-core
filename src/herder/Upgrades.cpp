@@ -1259,12 +1259,10 @@ Upgrades::applyVersionUpgrade(Application& app, AbstractLedgerTxn& ltx,
         SorobanNetworkConfig::updateCostTypesForV26(ltx, app);
         SorobanNetworkConfig::createLedgerEntriesForV26(ltx, app);
     }
-#ifdef CAP_0087_ML_DSA
     if (needUpgradeToVersion(ProtocolVersion::V_30, prevVersion, newVersion))
     {
         SorobanNetworkConfig::createCostTypesForV30(ltx, app);
     }
-#endif
 
     if (protocolVersionEquals(prevVersion, ProtocolVersion::V_23) &&
         protocolVersionEquals(newVersion, ProtocolVersion::V_24) &&

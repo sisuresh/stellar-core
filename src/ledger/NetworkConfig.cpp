@@ -694,7 +694,6 @@ updateCpuCostParamsEntryForV26(AbstractLedgerTxn& ltxRoot)
     ltx.commit();
 }
 
-#ifdef CAP_0087_ML_DSA
 void
 updateCpuCostParamsEntryForV30(AbstractLedgerTxn& ltxRoot)
 {
@@ -755,7 +754,6 @@ updateCpuCostParamsEntryForV30(AbstractLedgerTxn& ltxRoot)
     }
     ltx.commit();
 }
-#endif
 
 ConfigSettingEntry
 initialStateArchivalSettings(Config const& cfg)
@@ -1252,7 +1250,6 @@ updateMemCostParamsEntryForV26(AbstractLedgerTxn& ltxRoot)
     ltx.commit();
 }
 
-#ifdef CAP_0087_ML_DSA
 void
 updateMemCostParamsEntryForV30(AbstractLedgerTxn& ltxRoot)
 {
@@ -1310,7 +1307,6 @@ updateMemCostParamsEntryForV30(AbstractLedgerTxn& ltxRoot)
     }
     ltx.commit();
 }
-#endif
 
 ConfigSettingEntry
 initialParallelComputeEntry()
@@ -1811,7 +1807,6 @@ SorobanNetworkConfig::updateCostTypesForV26(AbstractLedgerTxn& ltx,
     updateMemCostParamsEntryForV26(ltx);
 }
 
-#ifdef CAP_0087_ML_DSA
 void
 SorobanNetworkConfig::createCostTypesForV30(AbstractLedgerTxn& ltx,
                                             Application& app)
@@ -1820,7 +1815,6 @@ SorobanNetworkConfig::createCostTypesForV30(AbstractLedgerTxn& ltx,
     updateCpuCostParamsEntryForV30(ltx);
     updateMemCostParamsEntryForV30(ltx);
 }
-#endif
 
 void
 SorobanNetworkConfig::createAndUpdateLedgerEntriesForV23(AbstractLedgerTxn& ltx,
@@ -1894,12 +1888,10 @@ SorobanNetworkConfig::initializeGenesisLedgerForTesting(
         SorobanNetworkConfig::updateCostTypesForV26(ltx, app);
         SorobanNetworkConfig::createLedgerEntriesForV26(ltx, app);
     }
-#ifdef CAP_0087_ML_DSA
     if (protocolVersionStartsFrom(genesisLedgerProtocol, ProtocolVersion::V_30))
     {
         SorobanNetworkConfig::createCostTypesForV30(ltx, app);
     }
-#endif
 }
 
 SorobanNetworkConfig
@@ -2976,14 +2968,12 @@ SorobanNetworkConfig::isValidCostParams(ContractCostParams const& params,
         {
             return static_cast<uint32_t>(ContractCostType::Bn254FrInv) + 1;
         }
-#ifdef CAP_0087_ML_DSA
         else if (protocolVersionStartsFrom(ledgerVersion,
                                            ProtocolVersion::V_30))
         {
             return static_cast<uint32_t>(ContractCostType::VerifyMlDsa87Sig) +
                    1;
         }
-#endif
         else
         {
             return static_cast<uint32_t>(ContractCostType::Bn254G1Msm) + 1;

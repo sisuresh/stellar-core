@@ -637,14 +637,10 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SorobanTest test(cfg);
     auto& root = test.getRoot();
 
-#ifdef CAP_0084_MUXED_CONTRACT
     // a1 makes several native transfers within a single run (100M + 300M +
     // 400M for the muxed-contract case), so it needs enough balance to stay
     // above its account reserve after all of them.
     auto a1 = root.create("a1", 2'000'000'000);
-#else
-    auto a1 = root.create("a1", 1'000'000'000);
-#endif
     auto a2 = root.create("a2", 1'000'000'000);
     Asset asset = makeAsset(root.getSecretKey(), "USDC");
     a1.changeTrust(asset, 2'000'000'000);
@@ -729,7 +725,6 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
                 a1, makeClaimableBalanceAddress(ClaimableBalanceID()), 1));
             REQUIRE(client.lastEvent() == std::nullopt);
         }
-#ifdef CAP_0084_MUXED_CONTRACT
         {
             INFO("transfer to muxed contract (CAP-0084)");
             // The destination is the SAC-transfer contract wrapped in a muxed
@@ -775,7 +770,6 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
                         SCMapEntry(makeSymbolSCVal("to_muxed_id"),
                                    makeU64(toMuxId))));
         }
-#endif
     };
 
     SECTION("native asset")
@@ -6716,7 +6710,6 @@ TEST_CASE("Soroban custom account authentication", "[tx][soroban]")
     }
 }
 
-#ifdef CAP_0087_ML_DSA
 TEST_CASE("CAP-0087 ML-DSA signature verification", "[tx][soroban]")
 {
     auto cfg = getTestConfig();
@@ -6794,7 +6787,6 @@ TEST_CASE("CAP-0087 ML-DSA signature verification", "[tx][soroban]")
         check(87, ML_DSA_87_PK, ML_DSA_87_MSG, ML_DSA_87_SIG, ML_DSA_87_CTX);
     }
 }
-#endif
 
 TEST_CASE("Soroban delegated signer authentication", "[soroban]")
 {

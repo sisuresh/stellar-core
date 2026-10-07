@@ -2865,7 +2865,6 @@ TEST_CASE("upgrade to version 26 and check cost types", "[upgrades]")
     }
 }
 
-#ifdef CAP_0087_ML_DSA
 TEST_CASE("upgrade to version 30 and check cost types", "[upgrades]")
 {
     VirtualClock clock;
@@ -2936,7 +2935,6 @@ TEST_CASE("upgrade to version 30 and check cost types", "[upgrades]")
         REQUIRE(mem(ContractCostType::VerifyMlDsa87Sig).constTerm == 0);
     }
 }
-#endif
 
 // There is a subtle inconsistency where for a ledger that upgrades from
 // protocol vN to vN+1 that also changed LedgerCloseMeta version, the ledger
