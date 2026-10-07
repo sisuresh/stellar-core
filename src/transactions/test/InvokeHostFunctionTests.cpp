@@ -637,10 +637,7 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SorobanTest test(cfg);
     auto& root = test.getRoot();
 
-    // a1 makes several native transfers within a single run (100M + 300M +
-    // 400M for the muxed-contract case), so it needs enough balance to stay
-    // above its account reserve after all of them.
-    auto a1 = root.create("a1", 2'000'000'000);
+    auto a1 = root.create("a1", 1'000'000'000);
     auto a2 = root.create("a2", 1'000'000'000);
     Asset asset = makeAsset(root.getSecretKey(), "USDC");
     a1.changeTrust(asset, 2'000'000'000);
@@ -725,51 +722,6 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
                 a1, makeClaimableBalanceAddress(ClaimableBalanceID()), 1));
             REQUIRE(client.lastEvent() == std::nullopt);
         }
-        {
-            INFO("transfer to muxed contract (CAP-0084)");
-            // The destination is the SAC-transfer contract wrapped in a muxed
-            // contract address; the SAC de-muxes to the underlying contract for
-            // the balance and surfaces the id via the `to_muxed_id` event.
-            REQUIRE(
-                client.transfer(a1,
-                                makeMuxedContractAddress(
-                                    transferContract.getAddress().contractId(),
-                                    987'654'321'987'654'321ULL),
-                                400'000'000));
-            REQUIRE(*client.lastEvent() ==
-                    client.makeTransferEvent(
-                        a1Address, transferContract.getAddress(), 400'000'000,
-                        987'654'321'987'654'321ULL));
-        }
-        if (!useNativeAsset)
-        {
-            INFO("mint to muxed contract fails (CAP-0084)");
-            // Only `transfer` accepts a muxed destination; `mint` still takes
-            // a plain Address.
-            REQUIRE(
-                !client.mint(root,
-                             makeMuxedContractAddress(
-                                 transferContract.getAddress().contractId(), 1),
-                             500'000'000));
-            REQUIRE(client.lastEvent() == std::nullopt);
-        }
-        if (!useNativeAsset)
-        {
-            INFO("issuer transfer to muxed contract emits mint (CAP-0084)");
-            uint64_t const toMuxId = 111'222'333'444'555'666ULL;
-            REQUIRE(client.transfer(
-                root,
-                makeMuxedContractAddress(
-                    transferContract.getAddress().contractId(), toMuxId),
-                500'000'000));
-            REQUIRE(*client.lastEvent() ==
-                    makeMintOrBurnEvent(
-                        /*isMint=*/true,
-                        client.getContract().getAddress().contractId(),
-                        tokenAsset, transferContract.getAddress(), 500'000'000,
-                        SCMapEntry(makeSymbolSCVal("to_muxed_id"),
-                                   makeU64(toMuxId))));
-        }
     };
 
     SECTION("native asset")
@@ -779,6 +731,72 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SECTION("custom asset")
     {
         runTest(false);
+    }
+}
+
+// Minimal CAP-0084 cases, one per leaf section so each captures its own
+// LedgerCloseMeta golden showing the muxed contract address on the wire.
+TEST_CASE("Stellar asset contract transfer to muxed contract (CAP-0084)",
+          "[tx][soroban]")
+{
+    auto cfg = getTestConfig();
+    cfg.TESTING_SOROBAN_HIGH_LIMIT_OVERRIDE = true;
+
+    SorobanTest test(cfg);
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", 1'000'000'000);
+    auto a1Address = makeAccountAddress(a1.getPublicKey());
+
+    // The SAC credits the contract underlying the muxed contract address and
+    // reports the mux id in the event's `to_muxed_id`.
+    TestContract& destContract =
+        test.deployWasmContract(rust_bridge::get_test_contract_sac_transfer(
+            test.getApp().getConfig().LEDGER_PROTOCOL_VERSION));
+    uint64_t const muxId = 987'654'321'987'654'321ULL;
+    auto muxedDest =
+        makeMuxedContractAddress(destContract.getAddress().contractId(), muxId);
+
+    SECTION("native asset transfer")
+    {
+        AssetContractTestClient client(test, txtest::makeNativeAsset());
+        REQUIRE(client.transfer(a1, muxedDest, 100'000'000));
+        REQUIRE(*client.lastEvent() ==
+                client.makeTransferEvent(a1Address, destContract.getAddress(),
+                                         100'000'000, muxId));
+    }
+    SECTION("custom asset")
+    {
+        Asset asset = makeAsset(root.getSecretKey(), "USDC");
+        a1.changeTrust(asset, 1'000'000'000);
+        root.pay(a1.getPublicKey(), asset, 1'000'000'000);
+        AssetContractTestClient client(test, asset);
+
+        SECTION("transfer")
+        {
+            REQUIRE(client.transfer(a1, muxedDest, 100'000'000));
+            REQUIRE(*client.lastEvent() ==
+                    client.makeTransferEvent(a1Address,
+                                             destContract.getAddress(),
+                                             100'000'000, muxId));
+        }
+        SECTION("issuer transfer emits mint")
+        {
+            REQUIRE(client.transfer(root, muxedDest, 500'000'000));
+            REQUIRE(*client.lastEvent() ==
+                    makeMintOrBurnEvent(
+                        /*isMint=*/true,
+                        client.getContract().getAddress().contractId(), asset,
+                        destContract.getAddress(), 500'000'000,
+                        SCMapEntry(makeSymbolSCVal("to_muxed_id"),
+                                   makeU64(muxId))));
+        }
+        SECTION("mint fails")
+        {
+            // Only `transfer` accepts a muxed destination; `mint` still takes
+            // a plain Address.
+            REQUIRE(!client.mint(root, muxedDest, 500'000'000));
+            REQUIRE(client.lastEvent() == std::nullopt);
+        }
     }
 }
 

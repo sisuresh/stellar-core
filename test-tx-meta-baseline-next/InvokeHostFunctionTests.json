@@ -3901,22 +3901,42 @@
 		"XOXH+xg3YWE=",
 		"hCf+eUlKOD8="
 	],
+	"Stellar asset contract transfer to muxed contract (CAP-0084)" : 
+	[
+		"+cR3oq2qY0I=",
+		"x0UM+tEZGfE=",
+		"+cR3oq2qY0I=",
+		"x0UM+tEZGfE=",
+		"+cR3oq2qY0I=",
+		"x0UM+tEZGfE=",
+		"+cR3oq2qY0I=",
+		"x0UM+tEZGfE="
+	],
+	"Stellar asset contract transfer to muxed contract (CAP-0084)|custom asset" : 
+	[
+		"jtE84+5q968=",
+		"r7CNRjOMpN8=",
+		"jtE84+5q968=",
+		"r7CNRjOMpN8=",
+		"jtE84+5q968=",
+		"r7CNRjOMpN8="
+	],
 	"Stellar asset contract transfer with CAP-67 address types" : 
 	[
 		"+cR3oq2qY0I=",
-		"Rk9QxmkYz30=",
-		"XdbPNWrQSGc=",
-		"+WE3Fz5pS1M=",
+		"x0UM+tEZGfE=",
+		"6ZRiG9ViThY=",
+		"NjESxGWSAbY=",
 		"bFkjDfabs9w=",
-		"hKqapGxK8Gw=",
-		"Kq3HhpikXyE=",
+		"pqtANCbaqkw=",
+		"Lfz1aPsGjBM=",
 		"+cR3oq2qY0I=",
-		"Rk9QxmkYz30=",
-		"XdbPNWrQSGc=",
-		"+WE3Fz5pS1M=",
+		"x0UM+tEZGfE=",
+		"6ZRiG9ViThY=",
+		"NjESxGWSAbY=",
 		"bFkjDfabs9w=",
-		"hKqapGxK8Gw=",
-		"Kq3HhpikXyE="
+		"pqtANCbaqkw=",
+		"Lfz1aPsGjBM="
 	],
 	"Trustline stellar asset contract|protocol version 20" : 
 	[
