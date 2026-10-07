@@ -19,6 +19,7 @@
 
 #include "bucket/BucketManager.h"
 #include "bucket/test/BucketTestUtils.h"
+#include "crypto/Hex.h"
 #include "crypto/Random.h"
 #include "crypto/SecretKey.h"
 #include "herder/Herder.h"
@@ -40,6 +41,7 @@
 #include "transactions/SignatureUtils.h"
 #include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/test/MlDsaTestVectors.h"
 #include "transactions/test/SorobanTxTestUtils.h"
 #include "transactions/test/SponsorshipTestUtils.h"
 #include "util/Decoder.h"
@@ -635,14 +637,7 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SorobanTest test(cfg);
     auto& root = test.getRoot();
 
-#ifdef CAP_0084_MUXED_CONTRACT
-    // a1 makes several native transfers within a single run (100M + 300M +
-    // 400M for the muxed-contract case), so it needs enough balance to stay
-    // above its account reserve after all of them.
-    auto a1 = root.create("a1", 2'000'000'000);
-#else
     auto a1 = root.create("a1", 1'000'000'000);
-#endif
     auto a2 = root.create("a2", 1'000'000'000);
     Asset asset = makeAsset(root.getSecretKey(), "USDC");
     a1.changeTrust(asset, 2'000'000'000);
@@ -727,53 +722,6 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
                 a1, makeClaimableBalanceAddress(ClaimableBalanceID()), 1));
             REQUIRE(client.lastEvent() == std::nullopt);
         }
-#ifdef CAP_0084_MUXED_CONTRACT
-        {
-            INFO("transfer to muxed contract (CAP-0084)");
-            // The destination is the SAC-transfer contract wrapped in a muxed
-            // contract address; the SAC de-muxes to the underlying contract for
-            // the balance and surfaces the id via the `to_muxed_id` event.
-            REQUIRE(
-                client.transfer(a1,
-                                makeMuxedContractAddress(
-                                    transferContract.getAddress().contractId(),
-                                    987'654'321'987'654'321ULL),
-                                400'000'000));
-            REQUIRE(*client.lastEvent() ==
-                    client.makeTransferEvent(
-                        a1Address, transferContract.getAddress(), 400'000'000,
-                        987'654'321'987'654'321ULL));
-        }
-        if (!useNativeAsset)
-        {
-            INFO("mint to muxed contract fails (CAP-0084)");
-            // Only `transfer` accepts a muxed destination; `mint` still takes
-            // a plain Address.
-            REQUIRE(
-                !client.mint(root,
-                             makeMuxedContractAddress(
-                                 transferContract.getAddress().contractId(), 1),
-                             500'000'000));
-            REQUIRE(client.lastEvent() == std::nullopt);
-        }
-        if (!useNativeAsset)
-        {
-            INFO("issuer transfer to muxed contract emits mint (CAP-0084)");
-            uint64_t const toMuxId = 111'222'333'444'555'666ULL;
-            REQUIRE(client.transfer(
-                root,
-                makeMuxedContractAddress(
-                    transferContract.getAddress().contractId(), toMuxId),
-                500'000'000));
-            REQUIRE(*client.lastEvent() ==
-                    makeMintOrBurnEvent(
-                        /*isMint=*/true,
-                        client.getContract().getAddress().contractId(),
-                        tokenAsset, transferContract.getAddress(), 500'000'000,
-                        SCMapEntry(makeSymbolSCVal("to_muxed_id"),
-                                   makeU64(toMuxId))));
-        }
-#endif
     };
 
     SECTION("native asset")
@@ -783,6 +731,72 @@ TEST_CASE("Stellar asset contract transfer with CAP-67 address types",
     SECTION("custom asset")
     {
         runTest(false);
+    }
+}
+
+// Minimal CAP-0084 cases, one per leaf section so each captures its own
+// LedgerCloseMeta golden showing the muxed contract address on the wire.
+TEST_CASE("Stellar asset contract transfer to muxed contract (CAP-0084)",
+          "[tx][soroban]")
+{
+    auto cfg = getTestConfig();
+    cfg.TESTING_SOROBAN_HIGH_LIMIT_OVERRIDE = true;
+
+    SorobanTest test(cfg);
+    auto& root = test.getRoot();
+    auto a1 = root.create("a1", 1'000'000'000);
+    auto a1Address = makeAccountAddress(a1.getPublicKey());
+
+    // The SAC credits the contract underlying the muxed contract address and
+    // reports the mux id in the event's `to_muxed_id`.
+    TestContract& destContract =
+        test.deployWasmContract(rust_bridge::get_test_contract_sac_transfer(
+            test.getApp().getConfig().LEDGER_PROTOCOL_VERSION));
+    uint64_t const muxId = 987'654'321'987'654'321ULL;
+    auto muxedDest =
+        makeMuxedContractAddress(destContract.getAddress().contractId(), muxId);
+
+    SECTION("native asset transfer")
+    {
+        AssetContractTestClient client(test, txtest::makeNativeAsset());
+        REQUIRE(client.transfer(a1, muxedDest, 100'000'000));
+        REQUIRE(*client.lastEvent() ==
+                client.makeTransferEvent(a1Address, destContract.getAddress(),
+                                         100'000'000, muxId));
+    }
+    SECTION("custom asset")
+    {
+        Asset asset = makeAsset(root.getSecretKey(), "USDC");
+        a1.changeTrust(asset, 1'000'000'000);
+        root.pay(a1.getPublicKey(), asset, 1'000'000'000);
+        AssetContractTestClient client(test, asset);
+
+        SECTION("transfer")
+        {
+            REQUIRE(client.transfer(a1, muxedDest, 100'000'000));
+            REQUIRE(*client.lastEvent() ==
+                    client.makeTransferEvent(a1Address,
+                                             destContract.getAddress(),
+                                             100'000'000, muxId));
+        }
+        SECTION("issuer transfer emits mint")
+        {
+            REQUIRE(client.transfer(root, muxedDest, 500'000'000));
+            REQUIRE(*client.lastEvent() ==
+                    makeMintOrBurnEvent(
+                        /*isMint=*/true,
+                        client.getContract().getAddress().contractId(), asset,
+                        destContract.getAddress(), 500'000'000,
+                        SCMapEntry(makeSymbolSCVal("to_muxed_id"),
+                                   makeU64(muxId))));
+        }
+        SECTION("mint fails")
+        {
+            // Only `transfer` accepts a muxed destination; `mint` still takes
+            // a plain Address.
+            REQUIRE(!client.mint(root, muxedDest, 500'000'000));
+            REQUIRE(client.lastEvent() == std::nullopt);
+        }
     }
 }
 
@@ -6714,6 +6728,84 @@ TEST_CASE("Soroban custom account authentication", "[tx][soroban]")
     }
 }
 
+TEST_CASE("CAP-0087 ML-DSA signature verification", "[tx][soroban]")
+{
+    auto cfg = getTestConfig();
+    cfg.ENABLE_SOROBAN_DIAGNOSTIC_EVENTS = true;
+    SorobanTest test(cfg);
+
+    auto spec = SorobanInvocationSpec()
+                    .setInstructions(test.getNetworkCfg().txMaxInstructions())
+                    .setReadBytes(test.getNetworkCfg().txMaxDiskReadBytes())
+                    .setWriteBytes(test.getNetworkCfg().txMaxWriteBytes());
+
+    auto check = [&](uint32_t paramSet, char const* pkHex, char const* msgHex,
+                     char const* sigHex, char const* ctxHex) {
+        TestContract& contract = test.deployWasmContract(
+            rust_bridge::get_ml_dsa_verify_wasm(paramSet), spec.getResources());
+
+        auto pk = hexToBin(pkHex);
+        auto msg = hexToBin(msgHex);
+        auto sig = hexToBin(sigHex);
+        auto ctx = hexToBin(ctxHex);
+
+        auto invoke = [&](std::vector<uint8_t> const& p,
+                          std::vector<uint8_t> const& s,
+                          std::vector<uint8_t> const& c) {
+            auto invocation = contract.prepareInvocation(
+                "verify",
+                {makeBytesSCVal(p), makeBytesSCVal(msg), makeBytesSCVal(s),
+                 makeBytesSCVal(c)},
+                spec);
+            bool success = invocation.invoke();
+            if (!success)
+            {
+                REQUIRE(invocation.getResultCode() ==
+                        INVOKE_HOST_FUNCTION_TRAPPED);
+            }
+            return success;
+        };
+
+        REQUIRE(invoke(pk, sig, ctx));
+
+        auto badSig = sig;
+        badSig[0] ^= 0xff;
+        REQUIRE(!invoke(pk, badSig, ctx));
+
+        auto badCtx = ctx;
+        badCtx.push_back(0);
+        REQUIRE(!invoke(pk, sig, badCtx));
+
+        auto shortPk = pk;
+        shortPk.pop_back();
+        REQUIRE(!invoke(shortPk, sig, ctx));
+
+        auto shortSig = sig;
+        shortSig.resize(sig.size() - 2);
+        REQUIRE(!invoke(pk, shortSig, ctx));
+
+        REQUIRE(!invoke(pk, sig, std::vector<uint8_t>(256, 0)));
+    };
+
+    SECTION("ML-DSA-44, empty context")
+    {
+        check(44, ML_DSA_44_NO_CTX_PK, ML_DSA_44_NO_CTX_MSG,
+              ML_DSA_44_NO_CTX_SIG, ML_DSA_44_NO_CTX_CTX);
+    }
+    SECTION("ML-DSA-44")
+    {
+        check(44, ML_DSA_44_PK, ML_DSA_44_MSG, ML_DSA_44_SIG, ML_DSA_44_CTX);
+    }
+    SECTION("ML-DSA-65")
+    {
+        check(65, ML_DSA_65_PK, ML_DSA_65_MSG, ML_DSA_65_SIG, ML_DSA_65_CTX);
+    }
+    SECTION("ML-DSA-87")
+    {
+        check(87, ML_DSA_87_PK, ML_DSA_87_MSG, ML_DSA_87_SIG, ML_DSA_87_CTX);
+    }
+}
+
 TEST_CASE("Soroban delegated signer authentication", "[soroban]")
 {
     size_t const AUTH_CONTRACT_COUNT = 2;
@@ -7848,9 +7940,7 @@ TEST_CASE("Module cache across protocol versions", "[tx][soroban][modulecache]")
     // On the other hand, sometimes vnext is configured to point to an actual
     // work-in-progress next host, in which case there _is_ a separate module
     // cache and the following line of code should be commented-out.
-    //
-    // p30 is a separate work-in-progress host with its own cache.
-    // moduleCacheProtocolCount -= 1;
+    moduleCacheProtocolCount -= 1;
 #endif
     REQUIRE(app->getLedgerManager()
                 .getSorobanMetrics()
