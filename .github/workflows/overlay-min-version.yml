@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 15 * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - overlay-min-version-test
 
 permissions:
   contents: write
@@ -19,7 +22,7 @@ concurrency:
 
 jobs:
   bump-overlay-min-version:
-    if: github.repository == 'stellar/stellar-core'
+    if: github.repository == 'sisuresh/stellar-core'
     runs-on: ubuntu-24.04
     env:
       BRANCH: bot/bump-overlay-min-version
@@ -27,6 +30,9 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Fetch upstream release tags
+      run: git fetch --tags https://github.com/stellar/stellar-core.git
 
     - name: Get pubnet ledger protocol version
       id: pubnet
