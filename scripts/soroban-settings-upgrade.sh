@@ -498,14 +498,61 @@ future_time()
 # Set by generate_and_submit for the phase in flight.
 PHASE_KEY=""
 PHASE_PROPOSAL=""
+PHASE_ADJUSTMENTS=""
+
+fit_cost_params_to_network()
+{
+    # fit_cost_params_to_network <ConfigUpgradeSet JSON>: echoes it with each
+    # cost-params list resized to the target network's number of cost types.
+    #
+    # Futurenet often runs a protocol ahead of testnet, with cost types the
+    # testnet-derived settings file doesn't have yet, and validators reject a
+    # cost-params upgrade whose length doesn't match the protocol. So when the
+    # network has more entries than the file, the file's values are kept for
+    # the cost types it has and the network's current values are appended for
+    # the rest (the values its protocol upgrade created). A file with more
+    # entries than the network has is a mistake, so that fails.
+    local json="$1" id key entry live have want
+    for id in contract_cost_params_cpu_instructions contract_cost_params_memory_bytes; do
+        have="$(printf '%s' "$json" | jq --arg id "$id" \
+            '[.updated_entry[] | select(has($id)) | .[$id] | length] | first // empty')"
+        [ -n "$have" ] || continue
+        key="$(jq -nc --arg id "$id" '{config_setting:{config_setting_id:$id}}' \
+            | stellar-xdr encode --type LedgerKey)" \
+            || die "could not encode the LedgerKey for $id"
+        entry="$(rpc getLedgerEntries "$(jq -nc --arg k "$key" '{keys:[$k]}')" \
+            | jq -r '.entries[0].xdr // empty')"
+        [ -n "$entry" ] || die "$RPC_URL returned no $id entry"
+        live="$(printf '%s' "$entry" \
+            | stellar-xdr decode --type LedgerEntryData --output json \
+            | jq -c --arg id "$id" '.config_setting[$id]')" \
+            || die "could not decode $NETWORK's $id"
+        want="$(printf '%s' "$live" | jq 'length')"
+        if [ "$have" -gt "$want" ]; then
+            die "the settings have $have $id entries but $NETWORK has only $want cost types"
+        elif [ "$have" -lt "$want" ]; then
+            log "$NETWORK has $want $id cost types, the settings have $have;"
+            log "  appending $have-$((want - 1)) from $NETWORK's current values"
+            PHASE_ADJUSTMENTS="${PHASE_ADJUSTMENTS}$id: appended cost types $have-$((want - 1)) from $NETWORK's current values. "
+            json="$(printf '%s' "$json" | jq -c --arg id "$id" --argjson live "$live" --argjson have "$have" \
+                '.updated_entry |= map(if has($id) then .[$id] += $live[$have:] else . end)')"
+        fi
+    done
+    printf '%s' "$json"
+}
 
 generate_and_submit()
 {
-    local file="$1" label="$2" xdr seq output
+    local file="$1" label="$2" xdr seq output json
     step "$label: preparing $file"
+    PHASE_ADJUSTMENTS=""
 
-    xdr="$(stellar-xdr encode --type ConfigUpgradeSet "$file")" \
+    json="$(stellar-xdr encode --type ConfigUpgradeSet "$file" \
+        | stellar-xdr decode --type ConfigUpgradeSet --output json)" \
         || die "failed to encode $file as a ConfigUpgradeSet"
+    json="$(fit_cost_params_to_network "$json")"
+    xdr="$(printf '%s' "$json" | stellar-xdr encode --type ConfigUpgradeSet)" \
+        || die "the settings from $file no longer encode after fitting them to $NETWORK"
     PHASE_PROPOSAL="$(printf '%s' "$xdr" \
         | stellar-xdr decode --type ConfigUpgradeSet --output json)"
 
@@ -682,6 +729,7 @@ for SETTINGS_JSON in $SETTINGS_FILES; do
             {
                 printf '### %s settings upgrade submitted\n\n' "$NETWORK"
                 printf 'Settings file: `%s`\n\n' "$SETTINGS_JSON"
+                [ -z "$PHASE_ADJUSTMENTS" ] || printf '%s\n\n' "$PHASE_ADJUSTMENTS"
                 printf 'ConfigUpgradeSetKey:\n```\n%s\n```\n' "$PHASE_KEY"
                 printf 'Check it on a validator, then arm it with an agreed upgrade time:\n```\n'
                 printf "curl -G 'http://localhost:11626/dumpproposedsettings' --data-urlencode 'blob=%s'\n" "$PHASE_KEY"
