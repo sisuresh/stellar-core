@@ -252,12 +252,14 @@ create_and_fund_account()
     [ -n "$SECRET_KEY" ] && [ -n "$PUBLIC_KEY" ] \
         || die "could not parse stellar-core gen-seed output"
 
-    # Run logs are public; keep the seed out of them.
-    [ "${GITHUB_ACTIONS:-}" = "true" ] && printf '::add-mask::%s\n' "$SECRET_KEY"
     log "generated source account: $PUBLIC_KEY"
-    log "  secret seed: $SECRET_KEY"
-    log "  (keep this until the upgrade lands -- if the run dies partway through,"
-    log "   re-run with --secret to reuse the account rather than starting over)"
+    # CI run logs can be public, and ::add-mask:: races with stderr output, so
+    # never print the seed there. It is only useful for a local --secret re-run.
+    if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+        log "  secret seed: $SECRET_KEY"
+        log "  (keep this until the upgrade lands -- if the run dies partway through,"
+        log "   re-run with --secret to reuse the account rather than starting over)"
+    fi
 
     http="$(curl -sS -m 60 -o /dev/null -w '%{http_code}' "$FRIENDBOT_URL/?addr=$PUBLIC_KEY")" \
         || die "friendbot request to $FRIENDBOT_URL failed"
