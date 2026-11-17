@@ -68,11 +68,12 @@ jobs:
         WORKFLOW: ${{ github.workflow }}
       run: |
         # One bot branch per base, so a run started from another branch can't
-        # force-push over the open PR against the default branch.
+        # force-push over the open PR against the default branch. A hash of the
+        # base keeps distinct bases (release/x vs release-x) apart.
         BRANCH="bot/sync-soroban-settings-testnet"
         if [ "$BASE" != "$DEFAULT_BRANCH" ]
         then
-          BRANCH="$BRANCH-${BASE//\//-}"
+          BRANCH="$BRANCH-$(printf '%s' "$BASE" | sha256sum | cut -c1-12)"
         fi
 
         # The bot's own open PR, not a fork's PR that happens to use the same
@@ -100,19 +101,24 @@ jobs:
         {
           echo "Testnet is on protocol $PROTOCOL, and its live Soroban settings differ from \`$SETTINGS_FILE\`, so this copies them over. Opened by the \`$WORKFLOW\` workflow."
           echo
-          echo "**Reviewer:** check that every change below is intended on testnet (a protocol upgrade or an approved settings upgrade), not a one-off experiment."
+          echo "**Reviewer:** check that every change below is intended on testnet (a protocol upgrade or an approved settings upgrade), not a one-off experiment. The file covers upgradeable settings only; frozen-ledger-keys and freeze-bypass lists aren't in it."
           echo
           echo '```'
           cat "$RUNNER_TEMP/sync.txt"
           echo '```'
         } > "$BODY"
 
+        # Skip the push only if the bot branch already has this file and is
+        # still one commit on top of the current base. If the base has moved
+        # (say, someone edited the file on it), merging the old bot commit
+        # could combine both edits, so the commit is rebuilt on the new base.
         gh auth setup-git
         if [ -n "$OPEN_PR" ] &&
-           git fetch --depth=1 origin "$BRANCH" 2>/dev/null &&
+           git fetch origin "$BRANCH" 2>/dev/null &&
+           [ "$(git rev-parse FETCH_HEAD^)" = "$(git rev-parse HEAD)" ] &&
            git diff --quiet FETCH_HEAD -- "$SETTINGS_FILE"
         then
-          echo "$BRANCH already has this change"
+          echo "$BRANCH already has this change on top of $BASE"
         else
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

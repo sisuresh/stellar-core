@@ -10,6 +10,10 @@
 # reset reproduces testnet's current settings. It only ever reads from testnet,
 # and refuses to run if the RPC reports a different network.
 #
+# Only settings a ConfigUpgradeSet can set are covered. Network-maintained
+# entries, and the frozen-ledger-keys and freeze-bypass lists (changed through
+# their own delta upgrades), are not, so applying the file doesn't restore them.
+#
 # The setting types come from stellar-xdr's ConfigSettingID enum, and the
 # non-upgradeable ones are read from stellar-core's own
 # SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry, so neither list is
@@ -25,7 +29,7 @@
 #
 # Prints a summary of what changed; the file is left untouched if nothing did.
 #
-# Requires: stellar-xdr (any release; the script checks it against testnet), curl, jq
+# Requires: stellar-xdr (any release; the script checks it against testnet), curl, jq, xxd
 
 set -euo pipefail
 
@@ -44,7 +48,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-for tool in curl jq stellar-xdr; do
+for tool in curl jq stellar-xdr xxd; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool not found in PATH"
 done
 [ -r "$FILE" ] || die "cannot read $FILE"
@@ -93,28 +97,38 @@ rejected_index()
 }
 
 # If testnet has a setting newer than this stellar-xdr, it would be silently
-# left out of the file. The id right after the last one stellar-xdr knows is
-# where it would be: fail if testnet has an entry there. An RPC that rejects
-# the id doesn't know it either, so testnet can't have it.
+# left out of the file, so look at the ids just past the last one stellar-xdr
+# knows and fail if testnet has an entry for any. Several are checked because
+# some ids (the *_delta ones) never have an entry, so a newer stored setting
+# can sit behind one. The first id the RPC rejects ends the search: the RPC
+# doesn't know it, so testnet can't have it or anything after it.
+#
+# A ConfigSetting LedgerKey is the CONFIG_SETTING (8) discriminant followed by
+# the ConfigSettingID, both big-endian 32-bit.
+config_key_for_id()
+{
+    printf '%08x%08x' 8 "$1" | xxd -r -p | base64
+}
 NEXT_ID="$(printf '%s' "$ALL_IDS" | jq 'length')"
-next_key="$(jq -nc --argjson id "$NEXT_ID" '[[0,0,0,8, 0,0,0,$id] | implode | @base64]')"
-resp="$(get_entries_raw "$next_key")"
-if [ -z "$(rejected_index "$resp")" ]; then
+for id in $(seq "$NEXT_ID" $((NEXT_ID + 3))); do
+    resp="$(get_entries_raw "$(jq -nc --arg k "$(config_key_for_id "$id")" '[$k]')")"
+    [ -z "$(rejected_index "$resp")" ] || break
     printf '%s' "$resp" | jq -e 'has("result")' >/dev/null \
         || die "RPC error for getLedgerEntries: $(printf '%s' "$resp" | jq -c '.error // .')"
     [ "$(printf '%s' "$resp" | jq '.result.entries // [] | length')" -eq 0 ] \
-        || die "testnet has ConfigSettingID $NEXT_ID, which stellar-xdr $XDR_VERSION doesn't know; use a newer stellar-xdr"
-fi
+        || die "testnet has ConfigSettingID $id, which stellar-xdr $XDR_VERSION doesn't know; use a newer stellar-xdr"
+done
 
 # The ids core never sets by upgrade, read from the body of
-# isNonUpgradeableConfigSettingEntry(ConfigSettingID const&). CONFIG_SETTING_FOO_BAR
-# in core is foo_bar in stellar-xdr's JSON.
+# isNonUpgradeableConfigSettingEntry(ConfigSettingID const&), ignoring //
+# comments. CONFIG_SETTING_FOO_BAR in core is foo_bar in stellar-xdr's JSON.
 SKIP="$(awk '
     /SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry\(/ { sig = 1; next }
     sig && /ConfigSettingID const/ { body = 1; sig = 0; next }
     sig { sig = 0 }
     body && /^}/ { exit }
     body' "$CORE_SRC" \
+    | sed 's://.*$::' \
     | { grep -o 'CONFIG_SETTING_[A-Z0-9_]*' || true; } \
     | sed 's/^CONFIG_SETTING_//' | tr 'A-Z' 'a-z' \
     | jq -Rsc 'split("\n") | map(select(length > 0))')"
