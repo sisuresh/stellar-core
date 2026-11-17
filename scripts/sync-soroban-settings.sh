@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
-# Rewrites a settings file with a network's live Soroban settings.
+# Rewrites a settings file with testnet's live Soroban settings.
 #
-# After a protocol upgrade, the network's settings can include new cost types,
+# After a protocol upgrade, testnet's settings can include new cost types,
 # recalibrated cost params, and new upgradeable settings, and validators reject
 # a settings upgrade that doesn't match the protocol. This reads every
-# upgradeable ConfigSetting ledger entry through the network's RPC and writes
-# them to the file in ConfigSettingID order, so applying the file after a
-# network reset reproduces the network's current settings.
+# upgradeable ConfigSetting ledger entry through testnet's RPC and writes them
+# to the file in ConfigSettingID order, so applying the file after a network
+# reset reproduces testnet's current settings. It only ever reads from testnet,
+# and refuses to run if the RPC reports a different network.
 #
 # The setting types come from stellar-xdr's ConfigSettingID enum, and the
 # non-upgradeable ones are read from stellar-core's own
@@ -18,20 +19,17 @@
 #   scripts/sync-soroban-settings.sh [options]
 #
 # Options:
-#   --network NAME    testnet (default) or futurenet
-#   --rpc URL         RPC endpoint (default: the --network's public RPC)
 #   --file PATH       Settings file (default: soroban-settings/testnet_settings_upgrade.json)
 #   --core-src PATH   stellar-core source defining isNonUpgradeableConfigSettingEntry
 #                     (default: src/ledger/NetworkConfig.cpp)
 #
 # Prints a summary of what changed; the file is left untouched if nothing did.
 #
-# Requires: stellar-xdr (at least the network's protocol version), curl, jq
+# Requires: stellar-xdr (at least testnet's protocol version), curl, jq
 
 set -euo pipefail
 
-NETWORK="testnet"
-RPC_URL=""
+RPC_URL="https://soroban-testnet.stellar.org"
 FILE="soroban-settings/testnet_settings_upgrade.json"
 CORE_SRC="src/ledger/NetworkConfig.cpp"
 
@@ -39,20 +37,12 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --network)  NETWORK="$2"; shift 2 ;;
-        --rpc)      RPC_URL="$2"; shift 2 ;;
         --file)     FILE="$2"; shift 2 ;;
         --core-src) CORE_SRC="$2"; shift 2 ;;
         -h|--help)  awk 'NR < 3 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
         *)          die "unknown argument: $1" ;;
     esac
 done
-
-case "$NETWORK" in
-    testnet)   : "${RPC_URL:=https://soroban-testnet.stellar.org}" ;;
-    futurenet) : "${RPC_URL:=https://rpc-futurenet.stellar.org}" ;;
-    *)         die "unknown --network '$NETWORK' (expected testnet or futurenet)" ;;
-esac
 
 for tool in curl jq stellar-xdr; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool not found in PATH"
@@ -71,13 +61,16 @@ rpc()
     printf '%s' "$resp" | jq -c '.result'
 }
 
-PROTOCOL="$(rpc getNetwork | jq -r '.protocolVersion')"
+NETWORK_INFO="$(rpc getNetwork)"
+[ "$(printf '%s' "$NETWORK_INFO" | jq -r '.passphrase')" = "Test SDF Network ; September 2015" ] \
+    || die "$RPC_URL is not testnet"
+PROTOCOL="$(printf '%s' "$NETWORK_INFO" | jq -r '.protocolVersion')"
 
 # stellar-xdr's major version is the protocol its XDR covers. An older one
 # wouldn't know the setting types a newer protocol added.
 XDR_VERSION="$(stellar-xdr version | awk 'NR == 1 { print $2 }')"
 [ "${XDR_VERSION%%.*}" -ge "$PROTOCOL" ] \
-    || die "$NETWORK is on protocol $PROTOCOL but stellar-xdr $XDR_VERSION only covers protocol ${XDR_VERSION%%.*}; use a newer stellar-xdr"
+    || die "testnet is on protocol $PROTOCOL but stellar-xdr $XDR_VERSION only covers protocol ${XDR_VERSION%%.*}; use a newer stellar-xdr"
 
 # Every ConfigSettingID, in id order.
 ALL_IDS="$(stellar-xdr types schema --type ConfigSettingId | jq -c '.enum')"
@@ -125,9 +118,9 @@ updated="$(jq --argjson live "$live" '.updated_entry = $live' "$FILE")"
 printf '%s' "$updated" | stellar-xdr encode --type ConfigUpgradeSet >/dev/null \
     || die "the updated file is not a valid ConfigUpgradeSet"
 
-echo "$NETWORK is on protocol $PROTOCOL ($RPC_URL)"
+echo "testnet is on protocol $PROTOCOL ($RPC_URL)"
 if [ "$(jq -c . "$FILE")" = "$(printf '%s' "$updated" | jq -c .)" ]; then
-    echo "$FILE already matches $NETWORK"
+    echo "$FILE already matches testnet"
     exit 0
 fi
 

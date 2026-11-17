@@ -94,8 +94,8 @@ in case the script has some issues, so please read through that doc before attem
 ### Sync Soroban Settings
 - Name - `sync-soroban-settings.sh`
 - Prequisites - `stellar-xdr`, `curl`, `jq`
-- Description - Rewrites a settings file with a network's live upgradeable Soroban settings, read through its RPC, so that applying the file after a network reset reproduces the network's current settings, including cost types and settings added by protocol upgrades. The setting types come from `stellar-xdr`, and the non-upgradeable ones are read from `SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry` in `src/ledger/NetworkConfig.cpp`, so it fails rather than guessing if either is out of date. The `Soroban settings sync` GitHub workflow runs it daily against testnet and opens a PR when the file changes.
-- Usage - `./scripts/sync-soroban-settings.sh --network testnet --file soroban-settings/testnet_settings_upgrade.json`
+- Description - Rewrites a settings file with testnet's live upgradeable Soroban settings, read through its RPC, so that applying the file after a network reset reproduces testnet's current settings, including cost types and settings added by protocol upgrades. The setting types come from `stellar-xdr`, and the non-upgradeable ones are read from `SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry` in `src/ledger/NetworkConfig.cpp`, so it fails rather than guessing if either is out of date. The `Soroban settings sync` GitHub workflow runs it daily against testnet and opens a PR when the file changes.
+- Usage - `./scripts/sync-soroban-settings.sh --file soroban-settings/testnet_settings_upgrade.json`. It only ever reads from testnet.
 
 ### Histogram Generator
 - Name - `HistogramGenerator.py`
