@@ -5,45 +5,46 @@
 # After a protocol upgrade, the network's settings can include new cost types,
 # recalibrated cost params, and new upgradeable settings, and validators reject
 # a settings upgrade that doesn't match the protocol. This reads every
-# ConfigSetting ledger entry through the network's RPC and writes the
-# upgradeable ones to the file in ConfigSettingID order, so applying the file
-# after a network reset reproduces the network's current settings.
+# upgradeable ConfigSetting ledger entry through the network's RPC and writes
+# them to the file in ConfigSettingID order, so applying the file after a
+# network reset reproduces the network's current settings.
+#
+# The setting types come from stellar-xdr's ConfigSettingID enum, and the
+# non-upgradeable ones are read from stellar-core's own
+# SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry, so neither list is
+# kept here.
 #
 # Usage:
 #   scripts/sync-soroban-settings.sh [options]
 #
 # Options:
-#   --network NAME   testnet (default) or futurenet
-#   --rpc URL        RPC endpoint (default: the --network's public RPC)
-#   --file PATH      Settings file (default: soroban-settings/testnet_settings_upgrade.json)
+#   --network NAME    testnet (default) or futurenet
+#   --rpc URL         RPC endpoint (default: the --network's public RPC)
+#   --file PATH       Settings file (default: soroban-settings/testnet_settings_upgrade.json)
+#   --core-src PATH   stellar-core source defining isNonUpgradeableConfigSettingEntry
+#                     (default: src/ledger/NetworkConfig.cpp)
 #
 # Prints a summary of what changed; the file is left untouched if nothing did.
 #
-# Requires: stellar-xdr, curl, jq
+# Requires: stellar-xdr (at least the network's protocol version), curl, jq
 
 set -euo pipefail
 
 NETWORK="testnet"
 RPC_URL=""
 FILE="soroban-settings/testnet_settings_upgrade.json"
-
-# Stored as ConfigSetting entries but never set by an upgrade; must match
-# SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry.
-NON_UPGRADEABLE='["live_soroban_state_size_window","eviction_iterator","frozen_ledger_keys","freeze_bypass_txs"]'
-
-# ConfigSettingIDs to look up. Ids with no ledger entry are simply not
-# returned, so this leaves room for settings added by future protocols.
-MAX_ID=63
+CORE_SRC="src/ledger/NetworkConfig.cpp"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --network) NETWORK="$2"; shift 2 ;;
-        --rpc)     RPC_URL="$2"; shift 2 ;;
-        --file)    FILE="$2"; shift 2 ;;
-        -h|--help) awk 'NR < 3 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
-        *)         die "unknown argument: $1" ;;
+        --network)  NETWORK="$2"; shift 2 ;;
+        --rpc)      RPC_URL="$2"; shift 2 ;;
+        --file)     FILE="$2"; shift 2 ;;
+        --core-src) CORE_SRC="$2"; shift 2 ;;
+        -h|--help)  awk 'NR < 3 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
+        *)          die "unknown argument: $1" ;;
     esac
 done
 
@@ -57,6 +58,7 @@ for tool in curl jq stellar-xdr; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool not found in PATH"
 done
 [ -r "$FILE" ] || die "cannot read $FILE"
+[ -r "$CORE_SRC" ] || die "cannot read $CORE_SRC"
 
 rpc()
 {
@@ -71,44 +73,54 @@ rpc()
 
 PROTOCOL="$(rpc getNetwork | jq -r '.protocolVersion')"
 
-# A ConfigSetting LedgerKey is the CONFIG_SETTING (8) discriminant followed by
-# the int32 ConfigSettingID. Building it by number rather than by name lets
-# this find settings that this stellar-xdr doesn't know the name of.
-config_keys()
-{
-    jq -nc --argjson max "$1" '[range(0; $max + 1) | [0,0,0,8, 0,0,0,.] | implode | @base64]'
-}
+# stellar-xdr's major version is the protocol its XDR covers. An older one
+# wouldn't know the setting types a newer protocol added.
+XDR_VERSION="$(stellar-xdr version | awk 'NR == 1 { print $2 }')"
+[ "${XDR_VERSION%%.*}" -ge "$PROTOCOL" ] \
+    || die "$NETWORK is on protocol $PROTOCOL but stellar-xdr $XDR_VERSION only covers protocol ${XDR_VERSION%%.*}; use a newer stellar-xdr"
 
-# The RPC rejects the whole request if it contains an id its XDR doesn't know,
-# naming the first such index, so drop the ids from there on and retry.
-max_id="$MAX_ID"
-while :; do
-    resp="$(curl -sS --retry 3 -m 30 -X POST "$RPC_URL" -H 'Content-Type: application/json' \
-        -d "$(jq -nc --argjson k "$(config_keys "$max_id")" \
-            '{jsonrpc:"2.0", id:1, method:"getLedgerEntries", params:{keys:$k}}')")" \
-        || die "RPC request failed: getLedgerEntries"
-    bad="$(printf '%s' "$resp" \
-        | jq -r '.error.message // "" | capture("cannot unmarshal key value .* at index (?<i>[0-9]+)").i // empty')"
-    [ -n "$bad" ] && [ "$bad" -gt 0 ] && [ "$bad" -le "$max_id" ] || break
-    max_id=$((bad - 1))
-done
-printf '%s' "$resp" | jq -e 'has("result")' >/dev/null \
-    || die "RPC error for getLedgerEntries: $(printf '%s' "$resp" | jq -c '.error // .')"
+# Every ConfigSettingID, in id order.
+ALL_IDS="$(stellar-xdr types schema --type ConfigSettingId | jq -c '.enum')"
+[ "$(printf '%s' "$ALL_IDS" | jq 'length')" -gt 0 ] \
+    || die "could not list ConfigSettingIDs from stellar-xdr"
 
-# One {"id": n, "entry": {...}} per live entry, sorted by id.
-live="$(printf '%s' "$resp" | jq -c '.result' \
-    | jq -c '.entries[]? | {id: (.key | @base64d | explode | .[7]), xdr}' \
-    | while read -r row; do
-        id="$(printf '%s' "$row" | jq -r '.id')"
-        entry="$(printf '%s' "$row" | jq -r '.xdr' \
-            | stellar-xdr decode --type LedgerEntryData --output json 2>/dev/null)" \
-            || die "cannot decode ConfigSettingID $id; use a stellar-xdr that supports protocol $PROTOCOL"
-        printf '%s' "$entry" | jq -c --argjson id "$id" '{id: $id, entry: .config_setting}'
-      done | jq -sc 'sort_by(.id)')"
+# The ids core never sets by upgrade, read from the body of
+# isNonUpgradeableConfigSettingEntry(ConfigSettingID const&). CONFIG_SETTING_FOO_BAR
+# in core is foo_bar in stellar-xdr's JSON.
+SKIP="$(awk '
+    /SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry\(/ { sig = 1; next }
+    sig && /ConfigSettingID const/ { body = 1; sig = 0; next }
+    sig { sig = 0 }
+    body && /^}/ { exit }
+    body' "$CORE_SRC" \
+    | { grep -o 'CONFIG_SETTING_[A-Z0-9_]*' || true; } \
+    | sed 's/^CONFIG_SETTING_//' | tr 'A-Z' 'a-z' \
+    | jq -Rsc 'split("\n") | map(select(length > 0))')"
+[ "$(printf '%s' "$SKIP" | jq 'length')" -gt 0 ] \
+    || die "found no non-upgradeable settings in isNonUpgradeableConfigSettingEntry in $CORE_SRC; has it moved?"
+unknown="$(jq -nr --argjson s "$SKIP" --argjson a "$ALL_IDS" '$s - $a | join(", ")')"
+[ -z "$unknown" ] \
+    || die "$CORE_SRC lists settings stellar-xdr $XDR_VERSION doesn't know: $unknown"
+
+WANT="$(jq -nc --argjson s "$SKIP" --argjson a "$ALL_IDS" '$a - $s')"
+
+keys="$(printf '%s' "$WANT" | jq -r '.[]' | while read -r id; do
+    jq -nc --arg id "$id" '{config_setting:{config_setting_id:$id}}' | stellar-xdr encode --type LedgerKey
+    printf '\n'
+done | jq -Rsc 'split("\n") | map(select(length > 0))')"
+
+# Upgradeable settings with a ledger entry (the *_delta ids only exist inside
+# upgrades and have none), in id order.
+live="$(rpc getLedgerEntries "$(jq -nc --argjson k "$keys" '{keys:$k}')" \
+    | jq -r '.entries[]?.xdr' \
+    | while read -r xdr; do
+        printf '%s' "$xdr" | stellar-xdr decode --type LedgerEntryData --output json
+        printf '\n'
+      done | jq -sc --argjson a "$ALL_IDS" \
+        'map(.config_setting) | sort_by(keys[0] as $k | $a | index($k))')"
 [ "$(printf '%s' "$live" | jq 'length')" -gt 0 ] || die "$RPC_URL returned no ConfigSetting entries"
 
-updated="$(jq --argjson live "$live" --argjson skip "$NON_UPGRADEABLE" '
-    .updated_entry = [$live[].entry | select((keys[0] | IN($skip[])) | not)]' "$FILE")"
+updated="$(jq --argjson live "$live" '.updated_entry = $live' "$FILE")"
 # Encoding the result checks it is still a valid ConfigUpgradeSet.
 printf '%s' "$updated" | stellar-xdr encode --type ConfigUpgradeSet >/dev/null \
     || die "the updated file is not a valid ConfigUpgradeSet"
