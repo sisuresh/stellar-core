@@ -91,6 +91,12 @@ in case the script has some issues, so please read through that doc before attem
 - Description - Automates the Soroban settings upgrade after a futurenet or testnet reset. It funds a fresh source account from friendbot, builds the upgrade transactions with `get-settings-upgrade-txs` and submits them to the network's RPC. On futurenet it then verifies and arms the upgrade on each validator over `kubectl exec` and waits for it to take effect, applying multiple settings files in order. With `--no-schedule` (required for testnet) it stops after submitting and prints the `ConfigUpgradeSetKey` to arm. The `Soroban settings upgrade` GitHub workflow runs this submit-only mode. See `--help` for the other options.
 - Usage - After a futurenet reset, from the stellar-core root: `./scripts/soroban-settings-upgrade.sh soroban-settings/testnet_settings_enable_upgrades.json soroban-settings/testnet_settings_upgrade.json --core-bin src/stellar-core`. Submit only: `./scripts/soroban-settings-upgrade.sh --network testnet --no-schedule soroban-settings/testnet_settings_upgrade.json --core-bin src/stellar-core`
 
+### Sync Soroban Settings Cost Params
+- Name - `sync-soroban-settings-cost-params.sh`
+- Prequisites - `stellar-xdr`, `curl`, `jq`
+- Description - Copies a network's live `contract_cost_params_cpu_instructions` and `contract_cost_params_memory_bytes` into a settings file, so it has the cost types a protocol upgrade added or recalibrated. Other settings are left alone. The `Soroban settings sync` GitHub workflow runs it daily against testnet and opens a PR when the file changes.
+- Usage - `./scripts/sync-soroban-settings-cost-params.sh --network testnet --file soroban-settings/testnet_settings_upgrade.json`
+
 ### Histogram Generator
 - Name - `HistogramGenerator.py`
 - Description - A Python script that takes Hubble transaction data as input and outputs histograms containing information about the resource usage of those transactions. This script enables easy updating of transaction resource distributions in [Supercluster](https://github.com/stellar/supercluster), but some may find it more broadly helpful for understanding real-world usage of the Stellar network.
