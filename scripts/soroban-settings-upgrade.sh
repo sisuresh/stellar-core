@@ -504,6 +504,7 @@ future_time()
 PHASE_KEY=""
 PHASE_PROPOSAL=""
 PHASE_ADJUSTMENTS=""
+PHASE_JSON=""
 
 record_result()
 {
@@ -522,8 +523,10 @@ record_result()
 
 fit_cost_params_to_network()
 {
-    # fit_cost_params_to_network <ConfigUpgradeSet JSON>: echoes it with each
-    # cost-params list resized to the target network's number of cost types.
+    # Resizes each cost-params list in PHASE_JSON (a ConfigUpgradeSet as JSON)
+    # to the target network's number of cost types, noting any change in
+    # PHASE_ADJUSTMENTS. It updates the globals in place rather than echoing,
+    # since a $(...) subshell would lose PHASE_ADJUSTMENTS.
     #
     # Futurenet often runs a protocol ahead of testnet, with cost types the
     # testnet-derived settings file doesn't have yet, and validators reject a
@@ -532,7 +535,7 @@ fit_cost_params_to_network()
     # the cost types it has and the network's current values are appended for
     # the rest (the values its protocol upgrade created). A file with more
     # entries than the network has is a mistake, so that fails.
-    local json="$1" id key entry live have want
+    local json="$PHASE_JSON" id key entry live have want
     for id in contract_cost_params_cpu_instructions contract_cost_params_memory_bytes; do
         have="$(printf '%s' "$json" | jq --arg id "$id" \
             '[.updated_entry[] | select(has($id)) | .[$id] | length] | first // empty')"
@@ -558,7 +561,7 @@ fit_cost_params_to_network()
                 '.updated_entry |= map(if has($id) then .[$id] += $live[$have:] else . end)')"
         fi
     done
-    printf '%s' "$json"
+    PHASE_JSON="$json"
 }
 
 generate_and_submit()
@@ -570,7 +573,9 @@ generate_and_submit()
     json="$(stellar-xdr encode --type ConfigUpgradeSet "$file" \
         | stellar-xdr decode --type ConfigUpgradeSet --output json)" \
         || die "failed to encode $file as a ConfigUpgradeSet"
-    json="$(fit_cost_params_to_network "$json")"
+    PHASE_JSON="$json"
+    fit_cost_params_to_network
+    json="$PHASE_JSON"
     xdr="$(printf '%s' "$json" | stellar-xdr encode --type ConfigUpgradeSet)" \
         || die "the settings from $file no longer encode after fitting them to $NETWORK"
     PHASE_PROPOSAL="$(printf '%s' "$xdr" \
