@@ -1,9 +1,9 @@
 name: Soroban settings sync
 
-# After a protocol upgrade on testnet, opens a PR copying testnet's live Soroban
-# cost parameters into soroban-settings/testnet_settings_upgrade.json (see
-# scripts/sync-soroban-settings-cost-params.sh), so the file matches the
-# protocol's cost types the next time it is applied after a network reset.
+# Opens a PR rewriting soroban-settings/testnet_settings_upgrade.json with
+# testnet's live Soroban settings (see scripts/sync-soroban-settings.sh), so
+# that after a protocol upgrade or settings change on testnet, applying the
+# file after a network reset reproduces testnet's current settings.
 
 on:
   schedule:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       network:
-        description: Network to copy the cost params from
+        description: Network to copy the settings from
         type: choice
         options:
           - testnet
@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync-cost-params:
+  sync-settings:
     # Scheduled runs only upstream; forks can still dispatch it by hand.
     if: github.repository == 'stellar/stellar-core' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -52,10 +52,10 @@ jobs:
         chmod +x "$HOME/.local/bin/stellar-xdr"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-    - name: Copy live cost params into the settings file
+    - name: Copy live settings into the settings file
       run: |
         set -o pipefail
-        ./scripts/sync-soroban-settings-cost-params.sh \
+        ./scripts/sync-soroban-settings.sh \
           --network "$NETWORK" --file "$SETTINGS_FILE" | tee "$RUNNER_TEMP/sync.txt"
 
     - name: Open or update PR
@@ -70,7 +70,7 @@ jobs:
         fi
         BRANCH="bot/sync-soroban-settings-$NETWORK"
         PROTOCOL=$(sed -n 's/^.* is on protocol \([0-9][0-9]*\) .*$/\1/p' "$RUNNER_TEMP/sync.txt")
-        TITLE="Sync $(basename "$SETTINGS_FILE") cost params with $NETWORK protocol $PROTOCOL"
+        TITLE="Sync $(basename "$SETTINGS_FILE") with $NETWORK (protocol $PROTOCOL)"
 
         # Leave an open PR alone if it already makes the same change.
         OPEN_PR=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[].number')
@@ -86,14 +86,14 @@ jobs:
         git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
         git checkout -B "$BRANCH"
         git commit -qam "$TITLE" \
-          -m "Copies $NETWORK's live contract_cost_params_* entries so the file matches protocol $PROTOCOL's cost types."
+          -m "Copies $NETWORK's live upgradeable Soroban settings into the file."
         git push -f origin "$BRANCH"
 
         BODY="$RUNNER_TEMP/body.md"
         {
-          echo "$NETWORK is on protocol $PROTOCOL, and its live Soroban cost parameters differ from \`$SETTINGS_FILE\`, so this copies them over. Only the two \`contract_cost_params_*\` entries change. Opened by the \`${{ github.workflow }}\` workflow."
+          echo "$NETWORK is on protocol $PROTOCOL, and its live Soroban settings differ from \`$SETTINGS_FILE\`, so this copies them over. Opened by the \`${{ github.workflow }}\` workflow."
           echo
-          echo "**Reviewer:** check that the changed and added cost types match the calibration expected for protocol $PROTOCOL, and that no other upgradeable setting introduced by this protocol also needs to be added to the file."
+          echo "**Reviewer:** check that every change below is intended on $NETWORK (a protocol upgrade or an approved settings upgrade), not a one-off experiment. Any *added* setting must be upgradeable, i.e. not excluded by \`SorobanNetworkConfig::isNonUpgradeableConfigSettingEntry\`."
           echo
           echo '```'
           cat "$RUNNER_TEMP/sync.txt"
