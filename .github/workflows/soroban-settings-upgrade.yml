@@ -1,9 +1,9 @@
 # Submits the transactions for a Soroban settings upgrade to futurenet or
 # testnet, using scripts/soroban-settings-upgrade.sh with a fresh
-# friendbot-funded account. It does not arm the upgrade: the run summary has
-# the ConfigUpgradeSetKey and the commands to check and schedule it on the
-# validators. Run one settings file at a time, and wait for each to be applied
-# before submitting the next.
+# friendbot-funded account. It does not arm anything: each phase's
+# ConfigUpgradeSetKey is posted as an annotation on the run. With several
+# settings files, the run waits (polling the RPC) for each phase to be armed
+# and applied on the validators before submitting the next.
 
 name: Soroban settings upgrade
 
@@ -17,10 +17,14 @@ on:
           - futurenet
           - testnet
         default: futurenet
-      settings_file:
-        description: Settings JSON, relative to the repo root
+      settings_files:
+        description: Space-separated settings JSON files, relative to the repo root, applied in order
         type: string
-        default: soroban-settings/testnet_settings_upgrade.json
+        default: soroban-settings/testnet_settings_enable_upgrades.json soroban-settings/testnet_settings_upgrade.json
+      apply_timeout_minutes:
+        description: How long to wait for each phase but the last to be armed and applied
+        type: string
+        default: "60"
       core_image:
         description: stellar-core image used to build the transactions; must understand the settings file's XDR
         type: string
@@ -44,6 +48,7 @@ concurrency:
 jobs:
   submit:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -74,11 +79,14 @@ jobs:
       - name: Submit settings upgrade
         env:
           NETWORK: ${{ inputs.network }}
-          SETTINGS_FILE: ${{ inputs.settings_file }}
+          SETTINGS_FILES: ${{ inputs.settings_files }}
+          APPLY_TIMEOUT_MINUTES: ${{ inputs.apply_timeout_minutes }}
           RESOURCE_FEE: ${{ inputs.resource_fee }}
         run: |
-          ./scripts/soroban-settings-upgrade.sh "$SETTINGS_FILE" \
+          # SETTINGS_FILES is split on spaces into one argument per file.
+          ./scripts/soroban-settings-upgrade.sh $SETTINGS_FILES \
             --network "$NETWORK" \
             --no-schedule \
+            --apply-timeout "$((APPLY_TIMEOUT_MINUTES * 60))" \
             --resource-fee "$RESOURCE_FEE" \
             --core-bin "$RUNNER_TEMP/stellar-core"

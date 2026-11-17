@@ -17,7 +17,8 @@
 # Several settings files can be given when scheduling. Each is run to
 # completion -- submitted, armed, and confirmed live on every validator --
 # before the next one starts, so a phase that depends on the previous one's
-# limits is built against them. Without scheduling, give one file per run.
+# limits is built against them. With --no-schedule, each phase but the last
+# waits (polling the RPC) for someone else to arm it and for it to take effect.
 #
 # Usage:
 #   scripts/soroban-settings-upgrade.sh <settings.json> [more.json ...] [options]
@@ -100,6 +101,8 @@ Options:
   --core-bin PATH         stellar-core binary (default: ./stellar-core, src/stellar-core, or $PATH)
   --rpc URL               RPC endpoint (default: the --network's public RPC)
   --passphrase STR        Network passphrase (default: the --network's)
+  --apply-timeout SECS    How long to wait for a phase to take effect before
+                          giving up (default: 300)
   --dry-run               Print what would happen; submit nothing, schedule nothing.
                           Still creates and funds the source account, since the
                           transactions cannot be built without one.
@@ -140,6 +143,7 @@ while [ $# -gt 0 ]; do
         --core-bin)       CORE_BIN="$2"; shift 2 ;;
         --rpc)            RPC_URL="$2"; shift 2 ;;
         --passphrase)     PASSPHRASE="$2"; shift 2 ;;
+        --apply-timeout)  APPLY_WAIT_SECONDS="$2"; shift 2 ;;
         --dry-run)        DRY_RUN="true"; shift ;;
         --yes|-y)         ASSUME_YES="true"; shift ;;
         -h|--help)        usage; exit 0 ;;
@@ -429,6 +433,45 @@ wait_for_applied()
     die "upgrade did not take effect within ${APPLY_WAIT_SECONDS}s; still pending on:$pending"
 }
 
+settings_live_via_rpc()
+{
+    # True when every entry of the proposal matches the network's current
+    # ConfigSetting ledger entries, read through the RPC. Each proposal entry's
+    # union arm name is also its ConfigSettingID, which keys the ledger entry.
+    local proposal="$1" keys live
+    keys="$(printf '%s' "$proposal" | jq -r '.updated_entry[] | keys[0]' \
+        | while read -r id; do
+            jq -nc --arg id "$id" '{config_setting:{config_setting_id:$id}}' \
+                | stellar-xdr encode --type LedgerKey
+            printf '\n'
+          done | jq -Rsc 'split("\n") | map(select(length > 0))')" || return 1
+    live="$(rpc getLedgerEntries "$(jq -nc --argjson k "$keys" '{keys:$k}')" \
+        | jq -r '.entries[]?.xdr' \
+        | while read -r xdr; do
+            printf '%s' "$xdr" | stellar-xdr decode --type LedgerEntryData --output json
+            printf '\n'
+          done | jq -sc 'map(.config_setting)')" || return 1
+    jq -e -n --argjson p "$proposal" --argjson l "$live" \
+        '[$p.updated_entry[] | IN($l[])] | all' >/dev/null
+}
+
+wait_for_live_via_rpc()
+{
+    # Block until someone else has armed the upgrade and it has taken effect.
+    local proposal="$1" label="$2" waited=0
+    step "$label: waiting up to ${APPLY_WAIT_SECONDS}s for the upgrade to be armed and applied"
+    log "arm the ConfigUpgradeSetKey above on the validators; the next phase starts once it is live"
+    while [ "$waited" -lt "$APPLY_WAIT_SECONDS" ]; do
+        if settings_live_via_rpc "$proposal"; then
+            log "  $label is live on $RPC_URL"
+            return 0
+        fi
+        sleep 10
+        waited=$((waited + 10))
+    done
+    die "$label was not applied within ${APPLY_WAIT_SECONDS}s; arm it, then re-run with only the remaining settings files"
+}
+
 to_seconds()
 {
     # Accepts "90s", "10m", or a bare number of minutes.
@@ -592,12 +635,6 @@ if [ "$TOTAL" -gt 1 ] && [ -n "$UPGRADE_TIME" ]; then
     die "--upgrade-time is a single absolute timestamp and cannot apply to $TOTAL settings files; use --upgrade-in"
 fi
 
-# Without scheduling, nothing waits for a phase to take effect, so a later file
-# would be built against limits that aren't live yet.
-if [ "$TOTAL" -gt 1 ] && [ "$NO_SCHEDULE" = "true" ] && [ "$DRY_RUN" = "false" ]; then
-    die "--no-schedule takes one settings file per run; arm and apply each before submitting the next"
-fi
-
 setup_account()
 {
     step "Source account"
@@ -651,6 +688,16 @@ for SETTINGS_JSON in $SETTINGS_FILES; do
                 printf "curl -G 'http://localhost:11626/upgrades?mode=set&upgradetime=YYYY-MM-DDTHH:MM:SSZ' --data-urlencode 'configupgradesetkey=%s'\n" "$PHASE_KEY"
                 printf '```\n'
             } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        # The step summary only renders once the step ends; an annotation
+        # shows up on the run page while a later phase is waiting on this one.
+        if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+            printf '::notice title=Arm %s (%s)::%s\n' "$LABEL" "$SETTINGS_JSON" "$PHASE_KEY"
+        fi
+        # Nobody here arms the upgrade, so wait for someone else to before
+        # building the next phase, which may need the limits this one raises.
+        if [ "$INDEX" -lt "$TOTAL" ]; then
+            wait_for_live_via_rpc "$PHASE_PROPOSAL" "$LABEL"
         fi
         continue
     fi
