@@ -47,8 +47,9 @@ jobs:
     - name: Copy live settings into the settings file
       run: |
         set -o pipefail
+        # stderr also goes to a file so a failure notice can quote the error.
         ./scripts/sync-soroban-settings.sh \
-          --file "$SETTINGS_FILE" | tee "$RUNNER_TEMP/sync.txt"
+          --file "$SETTINGS_FILE" 2> >(tee "$RUNNER_TEMP/errors.txt" >&2) | tee "$RUNNER_TEMP/sync.txt"
 
     - name: Open or update PR
       env:
@@ -97,3 +98,61 @@ jobs:
         else
           gh pr edit "$OPEN_PR" --title "$TITLE" --body-file "$BODY"
         fi
+
+    # Covers anything that stops a scheduled sync: the script refusing to guess
+    # (e.g. isNonUpgradeableConfigSettingEntry moved, or testnet on a newer
+    # protocol than STELLAR_XDR_VERSION), RPC or download failures, or the PR
+    # step. Modeled on stellar/quickstart's notify job: hand-started runs are
+    # watched by whoever started them, and a cache entry keyed on the error
+    # posts each distinct failure once rather than every day until it's fixed.
+    - name: Key the failure notice by its error
+      id: notify_key
+      if: failure() && github.event_name == 'schedule'
+      continue-on-error: true
+      run: |
+        ERROR=$({ grep '^error: ' "$RUNNER_TEMP/errors.txt" 2>/dev/null || true; } | tail -1 | sed 's/^error: //')
+        {
+          echo "error<<EOF"
+          echo "$ERROR"
+          echo "EOF"
+          echo "key=soroban-settings-sync-notify-$(printf '%s' "${ERROR:-unknown}" | sha256sum | cut -c1-16)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Check whether this failure was already reported
+      id: notify_cache
+      if: failure() && github.event_name == 'schedule'
+      continue-on-error: true
+      uses: actions/cache/restore@v4
+      with:
+        path: .notify_cache
+        key: ${{ steps.notify_key.outputs.key }}
+
+    - name: Notify Slack on failure
+      if: failure() && github.event_name == 'schedule' && steps.notify_cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      env:
+        slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        error: ${{ steps.notify_key.outputs.error }}
+        run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        if [ -z "$slack_webhook_url" ]
+        then
+          echo "SLACK_WEBHOOK_URL is not set; not notifying Slack"
+          exit 0
+        fi
+        payload="$(jq -n --arg error "$error" --arg run_url "$run_url" \
+          '{text: (":red_circle: Soroban settings sync failed; testnet_settings_upgrade.json may be out of date with testnet. <\($run_url)|run>"
+                   + (if $error != "" then "\n> \($error)" else "" end))}')"
+        curl -fsS --retry 3 -X POST "$slack_webhook_url" \
+          -H 'Content-Type: application/json' \
+          -d "$payload"
+        mkdir -p .notify_cache
+        date -u +%Y-%m-%dT%H:%M:%SZ > .notify_cache/timestamp
+
+    - name: Remember that this failure was reported
+      if: failure() && github.event_name == 'schedule' && steps.notify_cache.outputs.cache-hit != 'true' && hashFiles('.notify_cache/timestamp') != ''
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: .notify_cache
+        key: ${{ steps.notify_key.outputs.key }}
