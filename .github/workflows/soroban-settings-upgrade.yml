@@ -1,0 +1,84 @@
+# Submits the transactions for a Soroban settings upgrade to futurenet or
+# testnet, using scripts/soroban-settings-upgrade.sh with a fresh
+# friendbot-funded account. It does not arm the upgrade: the run summary has
+# the ConfigUpgradeSetKey and the commands to check and schedule it on the
+# validators. Run one settings file at a time, and wait for each to be applied
+# before submitting the next.
+
+name: Soroban settings upgrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: Network to submit to
+        type: choice
+        options:
+          - futurenet
+          - testnet
+        default: futurenet
+      settings_file:
+        description: Settings JSON, relative to the repo root
+        type: string
+        default: soroban-settings/testnet_settings_upgrade.json
+      core_image:
+        description: stellar-core image used to build the transactions; must understand the settings file's XDR
+        type: string
+        default: stellar/stellar-core:latest
+      stellar_xdr_version:
+        description: stellar-xdr CLI release used to encode the settings file
+        type: string
+        default: 30.0.0
+      resource_fee:
+        description: Additional resource fee added to each transaction
+        type: string
+        default: "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soroban-settings-upgrade-${{ inputs.network }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install stellar-xdr
+        env:
+          VERSION: ${{ inputs.stellar_xdr_version }}
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl --retry 5 --retry-all-errors -fsSL -o "$HOME/.local/bin/stellar-xdr" \
+            "https://github.com/stellar/rs-stellar-xdr/releases/download/v${VERSION}/stellar-xdr-${VERSION}-x86_64-unknown-linux-gnu"
+          chmod +x "$HOME/.local/bin/stellar-xdr"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up stellar-core
+        env:
+          IMAGE: ${{ inputs.core_image }}
+        run: |
+          docker pull "$IMAGE"
+          # The image's entrypoint is stellar-core; -i passes through the
+          # secret seed that get-settings-upgrade-txs reads from stdin.
+          cat > "$RUNNER_TEMP/stellar-core" <<EOF
+          #!/bin/sh
+          exec docker run --rm -i "$IMAGE" "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/stellar-core"
+          "$RUNNER_TEMP/stellar-core" version
+
+      - name: Submit settings upgrade
+        env:
+          NETWORK: ${{ inputs.network }}
+          SETTINGS_FILE: ${{ inputs.settings_file }}
+          RESOURCE_FEE: ${{ inputs.resource_fee }}
+        run: |
+          ./scripts/soroban-settings-upgrade.sh "$SETTINGS_FILE" \
+            --network "$NETWORK" \
+            --no-schedule \
+            --resource-fee "$RESOURCE_FEE" \
+            --core-bin "$RUNNER_TEMP/stellar-core"
