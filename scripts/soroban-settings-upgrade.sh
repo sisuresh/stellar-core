@@ -55,6 +55,7 @@ KUBE_CONTEXT="${KUBE_CONTEXT:-}"
 KUBE_TIMEOUT="20s"
 
 RESOURCE_FEE="100"
+RESULT_FILE=""
 UPGRADE_IN="90s"
 UPGRADE_TIME=""
 CORE_BIN=""
@@ -87,6 +88,9 @@ Options:
   --secret SK            Use this source account instead of generating and
                           funding a fresh one
   --resource-fee N        Additional resource fee added to every tx (default: 100)
+  --result-file PATH      Write a JSON array with one object per submitted phase
+                          (network, settings file, ConfigUpgradeSetKey, any
+                          cost-type padding), for tooling that arms the upgrade
   --upgrade-in DURATION   Schedule this far out, as 90s / 5m / a bare number of
                           minutes (default: 90s). The clock starts when you
                           answer the confirmation prompt, not before it.
@@ -132,6 +136,7 @@ while [ $# -gt 0 ]; do
         --network)        NETWORK="$2"; shift 2 ;;
         --secret)         SECRET_KEY="$2"; shift 2 ;;
         --resource-fee)   RESOURCE_FEE="$2"; shift 2 ;;
+        --result-file)    RESULT_FILE="$2"; shift 2 ;;
         --upgrade-in)     UPGRADE_IN="$2"; shift 2 ;;
         --upgrade-time)   UPGRADE_TIME="$2"; shift 2 ;;
         --schedule-only)  SCHEDULE_ONLY_KEY="$2"; shift 2 ;;
@@ -500,6 +505,21 @@ PHASE_KEY=""
 PHASE_PROPOSAL=""
 PHASE_ADJUSTMENTS=""
 
+record_result()
+{
+    # record_result <settings file>: appends the phase just submitted to
+    # RESULT_FILE, if one was asked for.
+    [ -n "$RESULT_FILE" ] || return 0
+    local entry
+    entry="$(jq -nc --arg network "$NETWORK" --arg passphrase "$PASSPHRASE" --arg rpc "$RPC_URL" \
+        --arg file "$1" --arg key "$PHASE_KEY" --arg adjustments "$PHASE_ADJUSTMENTS" \
+        '{network: $network, passphrase: $passphrase, rpc: $rpc, settings_file: $file,
+          config_upgrade_set_key: $key, adjustments: $adjustments}')"
+    jq -c --argjson e "$entry" '. + [$e]' "$RESULT_FILE" > "$RESULT_FILE.tmp" \
+        && mv "$RESULT_FILE.tmp" "$RESULT_FILE" \
+        || die "could not write $RESULT_FILE"
+}
+
 fit_cost_params_to_network()
 {
     # fit_cost_params_to_network <ConfigUpgradeSet JSON>: echoes it with each
@@ -700,6 +720,10 @@ setup_account()
 # One account funds every phase; each phase re-reads its sequence number.
 setup_account
 
+if [ -n "$RESULT_FILE" ]; then
+    printf '[]\n' > "$RESULT_FILE" || die "cannot write $RESULT_FILE"
+fi
+
 INDEX=0
 for SETTINGS_JSON in $SETTINGS_FILES; do
     INDEX=$((INDEX + 1))
@@ -716,6 +740,7 @@ for SETTINGS_JSON in $SETTINGS_FILES; do
         fi
         continue
     fi
+    record_result "$SETTINGS_JSON"
 
     if [ "$NO_SCHEDULE" = "true" ]; then
         log ""
