@@ -1,9 +1,11 @@
-# Submits the transactions for a Soroban settings upgrade to futurenet or
+# Submits the transactions for one Soroban settings upgrade to futurenet or
 # testnet, using scripts/soroban-settings-upgrade.sh with a fresh
-# friendbot-funded account. It does not arm anything: each phase's
-# ConfigUpgradeSetKey is posted as an annotation on the run. With several
-# settings files, the run waits (polling the RPC) for each phase to be armed
-# and applied on the validators before submitting the next.
+# friendbot-funded account, and exits. It does not arm anything. The
+# ConfigUpgradeSetKey to arm is published for tooling as the job output
+# `config_upgrade_set_key` and as the `config-upgrade-set` artifact
+# (config-upgrade-set.json), and for people as an annotation and in the run
+# summary. A multi-phase upgrade is one run per settings file, each armed and
+# applied before the next is started.
 
 name: Soroban settings upgrade
 
@@ -17,14 +19,10 @@ on:
           - futurenet
           - testnet
         default: futurenet
-      settings_files:
-        description: Space-separated settings JSON files, relative to the repo root, applied in order
+      settings_file:
+        description: Settings JSON to submit, relative to the repo root
         type: string
-        default: soroban-settings/testnet_settings_enable_upgrades.json soroban-settings/testnet_settings_upgrade.json
-      apply_timeout_minutes:
-        description: How long to wait for each phase but the last to be armed and applied
-        type: string
-        default: "60"
+        required: true
       core_image:
         description: stellar-core image used to build the transactions; must understand the settings file's XDR
         type: string
@@ -48,9 +46,13 @@ concurrency:
 jobs:
   submit:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 30
+    outputs:
+      config_upgrade_set_key: ${{ steps.submit.outputs.config_upgrade_set_key }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Install stellar-xdr
         env:
@@ -77,16 +79,31 @@ jobs:
           "$RUNNER_TEMP/stellar-core" version
 
       - name: Submit settings upgrade
+        id: submit
         env:
           NETWORK: ${{ inputs.network }}
-          SETTINGS_FILES: ${{ inputs.settings_files }}
-          APPLY_TIMEOUT_MINUTES: ${{ inputs.apply_timeout_minutes }}
+          SETTINGS_FILE: ${{ inputs.settings_file }}
           RESOURCE_FEE: ${{ inputs.resource_fee }}
+          COMMIT: ${{ github.sha }}
         run: |
-          # SETTINGS_FILES is split on spaces into one argument per file.
-          ./scripts/soroban-settings-upgrade.sh $SETTINGS_FILES \
+          RESULT="$RUNNER_TEMP/result.json"
+          ./scripts/soroban-settings-upgrade.sh "$SETTINGS_FILE" \
             --network "$NETWORK" \
             --no-schedule \
-            --apply-timeout "$((APPLY_TIMEOUT_MINUTES * 60))" \
             --resource-fee "$RESOURCE_FEE" \
-            --core-bin "$RUNNER_TEMP/stellar-core"
+            --core-bin "$RUNNER_TEMP/stellar-core" \
+            --result-file "$RESULT"
+          # One run submits one file, so the result has exactly one entry.
+          [ "$(jq length "$RESULT")" -eq 1 ] || { echo "error: expected one submitted phase in $RESULT"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out"
+          jq --arg commit "$COMMIT" --arg run_id "$GITHUB_RUN_ID" \
+            '.[0] + {commit: $commit, run_id: $run_id}' "$RESULT" > "$RUNNER_TEMP/out/config-upgrade-set.json"
+          cat "$RUNNER_TEMP/out/config-upgrade-set.json"
+          echo "config_upgrade_set_key=$(jq -r .config_upgrade_set_key "$RUNNER_TEMP/out/config-upgrade-set.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the ConfigUpgradeSetKey
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: config-upgrade-set
+          path: ${{ runner.temp }}/out/config-upgrade-set.json
+          if-no-files-found: error
