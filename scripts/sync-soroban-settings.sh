@@ -126,10 +126,15 @@ unknown="$(jq -nr --argjson s "$SKIP" --argjson a "$ALL_IDS" '$s - $a | join(", 
 
 WANT="$(jq -nc --argjson s "$SKIP" --argjson a "$ALL_IDS" '$a - $s')"
 
-keys="$(printf '%s' "$WANT" | jq -r '.[]' | while read -r id; do
-    jq -nc --arg id "$id" '{config_setting:{config_setting_id:$id}}' | stellar-xdr encode --type LedgerKey
-    printf '\n'
-done | jq -Rsc 'split("\n") | map(select(length > 0))')"
+# Built in a plain loop rather than a pipeline so that a failed encode stops the
+# script instead of silently dropping that setting.
+keys='[]'
+for id in $(printf '%s' "$WANT" | jq -r '.[]'); do
+    key="$(jq -nc --arg id "$id" '{config_setting:{config_setting_id:$id}}' \
+        | stellar-xdr encode --type LedgerKey)" \
+        || die "stellar-xdr could not encode the LedgerKey for $id"
+    keys="$(printf '%s' "$keys" | jq -c --arg k "$key" '. + [$k]')"
+done
 
 # Settings this stellar-xdr knows but testnet's RPC doesn't can't exist on
 # testnet yet, so drop each one the RPC rejects and ask again.
@@ -147,15 +152,35 @@ printf '%s' "$resp" | jq -e 'has("result")' >/dev/null \
     || die "RPC error for getLedgerEntries: $(printf '%s' "$resp" | jq -c '.error // .')"
 
 # Upgradeable settings with a ledger entry (the *_delta ids only exist inside
-# upgrades and have none), in id order.
-live="$(printf '%s' "$resp" | jq -c '.result' \
-    | jq -r '.entries[]?.xdr' \
-    | while read -r xdr; do
-        printf '%s' "$xdr" | stellar-xdr decode --type LedgerEntryData --output json
-        printf '\n'
-      done | jq -sc --argjson a "$ALL_IDS" \
-        'map(.config_setting) | sort_by(keys[0] as $k | $a | index($k))')"
-[ "$(printf '%s' "$live" | jq 'length')" -gt 0 ] || die "$RPC_URL returned no ConfigSetting entries"
+# upgrades and have none). Decoded in a plain loop, like the keys above, so a
+# failed decode stops the script; each must be a setting that was asked for,
+# at most once.
+entries="$(printf '%s' "$resp" | jq -c '.result.entries // []')"
+live='[]'
+count="$(printf '%s' "$entries" | jq 'length')"
+i=0
+while [ "$i" -lt "$count" ]; do
+    xdr="$(printf '%s' "$entries" | jq -r --argjson i "$i" '.[$i].xdr')"
+    setting="$(printf '%s' "$xdr" | stellar-xdr decode --type LedgerEntryData --output json \
+        | jq -c '.config_setting // empty')" \
+        || die "stellar-xdr could not decode ledger entry $i returned by $RPC_URL"
+    [ -n "$setting" ] || die "$RPC_URL returned a ledger entry that isn't a config setting"
+    id="$(printf '%s' "$setting" | jq -r 'keys[0]')"
+    printf '%s' "$WANT" | jq -e --arg id "$id" 'index($id) != null' >/dev/null \
+        || die "$RPC_URL returned $id, which wasn't requested"
+    printf '%s' "$live" | jq -e --arg id "$id" 'map(keys[0]) | index($id) == null' >/dev/null \
+        || die "$RPC_URL returned $id more than once"
+    live="$(printf '%s' "$live" | jq -c --argjson s "$setting" '. + [$s]')"
+    i=$((i + 1))
+done
+live="$(printf '%s' "$live" | jq -c --argjson a "$ALL_IDS" 'sort_by(keys[0] as $k | $a | index($k))')"
+
+# A setting never disappears from a network, so one the file has but testnet
+# didn't return means the lookup went wrong (a partial response, or an RPC that
+# doesn't know that setting). Fail rather than propose deleting it.
+missing="$(jq -r --argjson live "$live" \
+    '[.updated_entry[] | keys[0]] - [$live[] | keys[0]] | join(", ")' "$FILE")"
+[ -z "$missing" ] || die "testnet returned no $missing, which $FILE has; refusing to remove it"
 
 updated="$(jq --argjson live "$live" '.updated_entry = $live' "$FILE")"
 # Encoding the result checks it is still a valid ConfigUpgradeSet.

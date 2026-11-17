@@ -3,17 +3,13 @@ name: Soroban settings sync
 # Opens a PR rewriting soroban-settings/testnet_settings_upgrade.json with
 # testnet's live Soroban settings (see scripts/sync-soroban-settings.sh), so
 # that after a protocol upgrade or settings change on testnet, applying the
-# file after a network reset reproduces testnet's current settings.
+# file after a network reset reproduces testnet's current settings. Closes
+# that PR again if testnet goes back to matching the file before it's merged.
 
 on:
   schedule:
     - cron: '30 15 * * *'
   workflow_dispatch:
-    inputs:
-      settings_file:
-        description: Settings file to update, relative to the repo root
-        type: string
-        default: soroban-settings/testnet_settings_upgrade.json
 
 permissions:
   contents: write
@@ -29,14 +25,19 @@ jobs:
     if: github.repository == 'stellar/stellar-core' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
-      SETTINGS_FILE: ${{ inputs.settings_file || 'soroban-settings/testnet_settings_upgrade.json' }}
+      SETTINGS_FILE: soroban-settings/testnet_settings_upgrade.json
     steps:
+    # No credentials are left in .git/config: the only step that writes to the
+    # repo sets them up for itself, so the downloaded stellar-xdr never runs
+    # where it could use them.
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     # The latest release rather than a pinned one; the sync script checks it
     # against testnet and fails if it's too old to know testnet's settings.
+    # The token is only for gh's API calls; the binary isn't run here.
     - name: Install the latest stellar-xdr
       env:
         GH_TOKEN: ${{ github.token }}
@@ -50,49 +51,54 @@ jobs:
           || fail "could not download stellar-xdr $TAG for x86_64 Linux"
         chmod +x "$HOME/.local/bin/stellar-xdr"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-        "$HOME/.local/bin/stellar-xdr" version
 
     - name: Copy live settings into the settings file
       run: |
         set -o pipefail
+        stellar-xdr version
         # stderr also goes to a file so a failure notice can quote the error.
         ./scripts/sync-soroban-settings.sh \
           --file "$SETTINGS_FILE" 2> >(tee "$RUNNER_TEMP/errors.txt" >&2) | tee "$RUNNER_TEMP/sync.txt"
 
-    - name: Open or update PR
+    - name: Open, update or close the PR
       env:
         GH_TOKEN: ${{ github.token }}
         BASE: ${{ github.ref_name }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        WORKFLOW: ${{ github.workflow }}
       run: |
-        if git diff --quiet
+        # One bot branch per base, so a run started from another branch can't
+        # force-push over the open PR against the default branch.
+        BRANCH="bot/sync-soroban-settings-testnet"
+        if [ "$BASE" != "$DEFAULT_BRANCH" ]
+        then
+          BRANCH="$BRANCH-${BASE//\//-}"
+        fi
+
+        # The bot's own open PR, not a fork's PR that happens to use the same
+        # branch name.
+        OPEN_PR=$(gh pr list --head "$BRANCH" --base "$BASE" --state open \
+          --json number,isCrossRepository \
+          --jq '[.[] | select(.isCrossRepository | not) | .number] | first // empty')
+
+        if git diff --quiet -- "$SETTINGS_FILE"
         then
           echo "$SETTINGS_FILE is up to date"
+          # Testnet went back to matching the file, so an open PR would now
+          # propose settings testnet no longer has.
+          if [ -n "$OPEN_PR" ]
+          then
+            gh pr close "$OPEN_PR" --delete-branch --comment \
+              "Testnet's settings match \`$SETTINGS_FILE\` on \`$BASE\` again, so this is no longer needed. Closed by the \`$WORKFLOW\` workflow."
+          fi
           exit 0
         fi
-        BRANCH="bot/sync-soroban-settings-testnet"
+
         PROTOCOL=$(sed -n 's/^.* is on protocol \([0-9][0-9]*\) .*$/\1/p' "$RUNNER_TEMP/sync.txt")
         TITLE="Sync $(basename "$SETTINGS_FILE") with testnet (protocol $PROTOCOL)"
-
-        # Leave an open PR alone if it already makes the same change.
-        OPEN_PR=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[].number')
-        if [ -n "$OPEN_PR" ] &&
-           git fetch --depth=1 origin "$BRANCH" 2>/dev/null &&
-           git diff --quiet FETCH_HEAD -- "$SETTINGS_FILE"
-        then
-          echo "$BRANCH already has this change"
-          exit 0
-        fi
-
-        git config user.name 'github-actions[bot]'
-        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-        git checkout -B "$BRANCH"
-        git commit -qam "$TITLE" \
-          -m "Copies testnet's live upgradeable Soroban settings into the file."
-        git push -f origin "$BRANCH"
-
         BODY="$RUNNER_TEMP/body.md"
         {
-          echo "Testnet is on protocol $PROTOCOL, and its live Soroban settings differ from \`$SETTINGS_FILE\`, so this copies them over. Opened by the \`${{ github.workflow }}\` workflow."
+          echo "Testnet is on protocol $PROTOCOL, and its live Soroban settings differ from \`$SETTINGS_FILE\`, so this copies them over. Opened by the \`$WORKFLOW\` workflow."
           echo
           echo "**Reviewer:** check that every change below is intended on testnet (a protocol upgrade or an approved settings upgrade), not a one-off experiment."
           echo
@@ -100,6 +106,25 @@ jobs:
           cat "$RUNNER_TEMP/sync.txt"
           echo '```'
         } > "$BODY"
+
+        gh auth setup-git
+        if [ -n "$OPEN_PR" ] &&
+           git fetch --depth=1 origin "$BRANCH" 2>/dev/null &&
+           git diff --quiet FETCH_HEAD -- "$SETTINGS_FILE"
+        then
+          echo "$BRANCH already has this change"
+        else
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add -- "$SETTINGS_FILE"
+          git commit -q -m "$TITLE" \
+            -m "Copies testnet's live upgradeable Soroban settings into the file."
+          git push -f origin "$BRANCH"
+        fi
+
+        # Updated even when nothing was pushed, so a description left stale by
+        # an earlier failed edit gets fixed.
         if [ -z "$OPEN_PR" ]
         then
           gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file "$BODY"
@@ -130,7 +155,7 @@ jobs:
       id: notify_cache
       if: failure() && github.event_name == 'schedule'
       continue-on-error: true
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .notify_cache
         key: ${{ steps.notify_key.outputs.key }}
@@ -160,7 +185,7 @@ jobs:
     - name: Remember that this failure was reported
       if: failure() && github.event_name == 'schedule' && steps.notify_cache.outputs.cache-hit != 'true' && hashFiles('.notify_cache/timestamp') != ''
       continue-on-error: true
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .notify_cache
         key: ${{ steps.notify_key.outputs.key }}
