@@ -30,19 +30,27 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       SETTINGS_FILE: ${{ inputs.settings_file || 'soroban-settings/testnet_settings_upgrade.json' }}
-      STELLAR_XDR_VERSION: 30.0.0
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
 
-    - name: Install stellar-xdr
+    # The latest release rather than a pinned one; the sync script checks it
+    # against testnet and fails if it's too old to know testnet's settings.
+    - name: Install the latest stellar-xdr
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
+        fail() { echo "error: $*" | tee -a "$RUNNER_TEMP/errors.txt" >&2; exit 1; }
+        TAG=$(gh release view -R stellar/rs-stellar-xdr --json tagName --jq .tagName) \
+          || fail "could not find the latest stellar/rs-stellar-xdr release"
         mkdir -p "$HOME/.local/bin"
-        curl --retry 5 --retry-all-errors -fsSL -o "$HOME/.local/bin/stellar-xdr" \
-          "https://github.com/stellar/rs-stellar-xdr/releases/download/v${STELLAR_XDR_VERSION}/stellar-xdr-${STELLAR_XDR_VERSION}-x86_64-unknown-linux-gnu"
+        gh release download "$TAG" -R stellar/rs-stellar-xdr \
+          -p "stellar-xdr-${TAG#v}-x86_64-unknown-linux-gnu" -O "$HOME/.local/bin/stellar-xdr" \
+          || fail "could not download stellar-xdr $TAG for x86_64 Linux"
         chmod +x "$HOME/.local/bin/stellar-xdr"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        "$HOME/.local/bin/stellar-xdr" version
 
     - name: Copy live settings into the settings file
       run: |
@@ -100,8 +108,8 @@ jobs:
         fi
 
     # Covers anything that stops a scheduled sync: the script refusing to guess
-    # (e.g. isNonUpgradeableConfigSettingEntry moved, or testnet on a newer
-    # protocol than STELLAR_XDR_VERSION), RPC or download failures, or the PR
+    # (e.g. isNonUpgradeableConfigSettingEntry moved, or testnet having a setting
+    # the latest stellar-xdr doesn't know), RPC or download failures, or the PR
     # step. Modeled on stellar/quickstart's notify job: hand-started runs are
     # watched by whoever started them, and a cache entry keyed on the error
     # posts each distinct failure once rather than every day until it's fixed.

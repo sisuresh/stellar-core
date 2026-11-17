@@ -25,7 +25,7 @@
 #
 # Prints a summary of what changed; the file is left untouched if nothing did.
 #
-# Requires: stellar-xdr (at least testnet's protocol version), curl, jq
+# Requires: stellar-xdr (any release; the script checks it against testnet), curl, jq
 
 set -euo pipefail
 
@@ -66,16 +66,45 @@ NETWORK_INFO="$(rpc getNetwork)"
     || die "$RPC_URL is not testnet"
 PROTOCOL="$(printf '%s' "$NETWORK_INFO" | jq -r '.protocolVersion')"
 
-# stellar-xdr's major version is the protocol its XDR covers. An older one
-# wouldn't know the setting types a newer protocol added.
+# stellar-xdr release numbers don't track protocols one-to-one (there is no
+# 29.x), so instead of comparing versions, this checks the setting types it
+# knows against what testnet's RPC accepts and has.
 XDR_VERSION="$(stellar-xdr version | awk 'NR == 1 { print $2 }')"
-[ "${XDR_VERSION%%.*}" -ge "$PROTOCOL" ] \
-    || die "testnet is on protocol $PROTOCOL but stellar-xdr $XDR_VERSION only covers protocol ${XDR_VERSION%%.*}; use a newer stellar-xdr"
 
 # Every ConfigSettingID, in id order.
 ALL_IDS="$(stellar-xdr types schema --type ConfigSettingId | jq -c '.enum')"
 [ "$(printf '%s' "$ALL_IDS" | jq 'length')" -gt 0 ] \
     || die "could not list ConfigSettingIDs from stellar-xdr"
+
+# getLedgerEntries, but returns the raw response instead of dying on an error.
+get_entries_raw()
+{
+    curl -sS --retry 3 -m 30 -X POST "$RPC_URL" -H 'Content-Type: application/json' \
+        -d "$(jq -nc --argjson k "$1" '{jsonrpc:"2.0", id:1, method:"getLedgerEntries", params:{keys:$k}}')" \
+        || die "RPC request failed: getLedgerEntries"
+}
+
+# The index of the key the RPC rejected because its XDR doesn't know that
+# ConfigSettingID, or nothing.
+rejected_index()
+{
+    printf '%s' "$1" | jq -r '.error.message // ""
+        | capture("cannot unmarshal key value .* at index (?<i>[0-9]+)").i // empty'
+}
+
+# If testnet has a setting newer than this stellar-xdr, it would be silently
+# left out of the file. The id right after the last one stellar-xdr knows is
+# where it would be: fail if testnet has an entry there. An RPC that rejects
+# the id doesn't know it either, so testnet can't have it.
+NEXT_ID="$(printf '%s' "$ALL_IDS" | jq 'length')"
+next_key="$(jq -nc --argjson id "$NEXT_ID" '[[0,0,0,8, 0,0,0,$id] | implode | @base64]')"
+resp="$(get_entries_raw "$next_key")"
+if [ -z "$(rejected_index "$resp")" ]; then
+    printf '%s' "$resp" | jq -e 'has("result")' >/dev/null \
+        || die "RPC error for getLedgerEntries: $(printf '%s' "$resp" | jq -c '.error // .')"
+    [ "$(printf '%s' "$resp" | jq '.result.entries // [] | length')" -eq 0 ] \
+        || die "testnet has ConfigSettingID $NEXT_ID, which stellar-xdr $XDR_VERSION doesn't know; use a newer stellar-xdr"
+fi
 
 # The ids core never sets by upgrade, read from the body of
 # isNonUpgradeableConfigSettingEntry(ConfigSettingID const&). CONFIG_SETTING_FOO_BAR
@@ -102,9 +131,24 @@ keys="$(printf '%s' "$WANT" | jq -r '.[]' | while read -r id; do
     printf '\n'
 done | jq -Rsc 'split("\n") | map(select(length > 0))')"
 
+# Settings this stellar-xdr knows but testnet's RPC doesn't can't exist on
+# testnet yet, so drop each one the RPC rejects and ask again.
+while :; do
+    resp="$(get_entries_raw "$keys")"
+    bad="$(rejected_index "$resp")"
+    [ -n "$bad" ] || break
+    [ "$bad" -lt "$(printf '%s' "$keys" | jq 'length')" ] \
+        || die "RPC rejected key $bad of $(printf '%s' "$keys" | jq 'length')"
+    echo "testnet's RPC doesn't know $(printf '%s' "$WANT" | jq -r --argjson i "$bad" '.[$i]'); skipping it" >&2
+    keys="$(printf '%s' "$keys" | jq -c --argjson i "$bad" 'del(.[$i])')"
+    WANT="$(printf '%s' "$WANT" | jq -c --argjson i "$bad" 'del(.[$i])')"
+done
+printf '%s' "$resp" | jq -e 'has("result")' >/dev/null \
+    || die "RPC error for getLedgerEntries: $(printf '%s' "$resp" | jq -c '.error // .')"
+
 # Upgradeable settings with a ledger entry (the *_delta ids only exist inside
 # upgrades and have none), in id order.
-live="$(rpc getLedgerEntries "$(jq -nc --argjson k "$keys" '{keys:$k}')" \
+live="$(printf '%s' "$resp" | jq -c '.result' \
     | jq -r '.entries[]?.xdr' \
     | while read -r xdr; do
         printf '%s' "$xdr" | stellar-xdr decode --type LedgerEntryData --output json
